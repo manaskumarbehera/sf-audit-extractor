@@ -2,6 +2,8 @@
 
 A Chrome extension that extracts and analyzes Salesforce Setup Audit Trail data directly from your browser.
 
+![Extension UI](screenshots/mockup-ui.png)
+
 ## Features
 
 - **Quick Access**: Extract audit trail data directly from a toolbar popup without opening Salesforce Setup
