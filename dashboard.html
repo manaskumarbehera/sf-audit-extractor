@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salesforce Audit Trail Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="dashboard-container">
+    <header class="dashboard-header">
+      <h1>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="header-icon">
+          <path d="M9 2h6a1 1 0 011 1v1h3a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1h3V3a1 1 0 011-1zm0 2v2h6V4H9zm-3 3v12h12V7H6zm2 2h8v2H8V9zm0 3h8v2H8v-2zm0 3h5v2H8v-2z"/>
+        </svg>
+        Setup Audit Trail Dashboard
+      </h1>
+      <div class="header-actions">
+        <button id="exportCsvBtn" class="btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 10h5l-6 6-6-6h5V3h2v7zm-9 9h16v-7h2v8a1 1 0 01-1 1H3a1 1 0 01-1-1v-8h2v7z"/>
+          </svg>
+          Export CSV
+        </button>
+      </div>
+    </header>
+
+    <div class="controls-section">
+      <div class="search-bar">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search across all columns..."
+          autocomplete="off"
+        />
+      </div>
+
+      <div class="filters-section">
+        <div class="filter-label">Categories:</div>
+        <div class="filter-chips" id="filterChips">
+          <button class="chip" data-category="all">All (<span class="count">0</span>)</button>
+          <button class="chip" data-category="user_management">User Management (<span class="count">0</span>)</button>
+          <button class="chip" data-category="security">Security (<span class="count">0</span>)</button>
+          <button class="chip" data-category="object_field">Object/Field (<span class="count">0</span>)</button>
+          <button class="chip" data-category="email">Email (<span class="count">0</span>)</button>
+          <button class="chip" data-category="other">Other (<span class="count">0</span>)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-section" id="statusSection">
+      <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+        <span>Loading audit trail data...</span>
+      </div>
+      <div class="error-message" id="errorMessage" style="display: none;"></div>
+      <div class="info-message" id="infoMessage" style="display: none;"></div>
+    </div>
+
+    <div class="table-container">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Section</th>
+            <th>Display</th>
+            <th>Delegate User</th>
+            <th>Category</th>
+          </tr>
+        </thead>
+        <tbody id="auditTableBody">
+          <!-- Data will be populated here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

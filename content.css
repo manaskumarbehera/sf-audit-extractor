@@ -1,0 +1,35 @@
+/* Floating button for Salesforce Audit Trail Extractor */
+.sf-audit-extractor-floating-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0176d3 0%, #0b5cab 100%);
+  box-shadow: 0 4px 12px rgba(1, 118, 211, 0.4), 
+              0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 999999;
+  color: white;
+}
+
+.sf-audit-extractor-floating-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(1, 118, 211, 0.5), 
+              0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.sf-audit-extractor-floating-btn:active {
+  transform: scale(0.95);
+}
+
+.sf-audit-extractor-floating-btn svg {
+  width: 28px;
+  height: 28px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
