@@ -72,47 +72,45 @@
     return new Promise((resolve, reject) => {
       chrome.scripting.executeScript({
         target: { tabId: tabId },
+        world: 'MAIN',
         func: (soqlQuery) => {
-          return new Promise((resolve, reject) => {
-            // Get Salesforce session ID and instance URL
-            const sessionId = window.sessionStorage?.getItem('sid') || 
-                             window.localStorage?.getItem('sid');
-            
-            if (!sessionId) {
-              reject('Could not find Salesforce session ID');
-              return;
-            }
+          return new Promise(async (resolve, reject) => {
+            try {
+              // Get instance URL from current page
+              const instanceUrl = window.location.origin;
 
-            // Get instance URL from current page
-            const instanceUrl = window.location.origin;
+              // Execute SOQL query using Salesforce's REST API
+              // The browser already has the session cookie, so we don't need to pass it
+              const fetchRecords = async (url) => {
+                const response = await fetch(url, {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                  },
+                  credentials: 'include'
+                });
 
-            // Execute SOQL query
-            const fetchRecords = async (url) => {
-              const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                  'Authorization': `Bearer ${sessionId}`,
-                  'Content-Type': 'application/json'
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  throw new Error(`HTTP ${response.status}: ${errorText}`);
                 }
-              });
 
-              if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-              }
+                return response.json();
+              };
 
-              return response.json();
-            };
+              const queryUrl = `${instanceUrl}/services/data/v59.0/query?q=${encodeURIComponent(soqlQuery)}`;
+              
+              // Fetch all records with pagination
+              const allRecords = [];
+              let nextUrl = queryUrl;
 
-            const queryUrl = `${instanceUrl}/services/data/v59.0/query?q=${encodeURIComponent(soqlQuery)}`;
-            
-            // Fetch all records with pagination
-            const allRecords = [];
-            let nextUrl = queryUrl;
-
-            const fetchAll = async () => {
               while (nextUrl) {
                 const result = await fetchRecords(nextUrl);
-                allRecords.push(...result.records);
+                
+                if (result.records) {
+                  allRecords.push(...result.records);
+                }
                 
                 if (result.nextRecordsUrl) {
                   nextUrl = `${instanceUrl}${result.nextRecordsUrl}`;
@@ -120,12 +118,11 @@
                   nextUrl = null;
                 }
               }
-              return allRecords;
-            };
-
-            fetchAll()
-              .then(resolve)
-              .catch(reject);
+              
+              resolve(allRecords);
+            } catch (error) {
+              reject(error.message || error.toString());
+            }
           });
         },
         args: [query]
@@ -135,8 +132,10 @@
           return;
         }
 
-        if (results && results[0] && results[0].result) {
-          if (results[0].result instanceof Error || typeof results[0].result === 'string') {
+        if (results && results[0]) {
+          if (results[0].result instanceof Error) {
+            reject(results[0].result.message);
+          } else if (typeof results[0].result === 'string' && results[0].result.includes('Error')) {
             reject(results[0].result);
           } else {
             resolve(results[0].result);
