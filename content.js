@@ -5,9 +5,13 @@
   // Check if we're on a Salesforce page
   const isSalesforcePage = () => {
     const hostname = window.location.hostname;
-    return hostname.includes('salesforce.com') || 
-           hostname.includes('lightning.force.com') || 
-           hostname.includes('my.salesforce.com');
+    // Properly validate Salesforce domain suffixes to prevent bypassing
+    return hostname.endsWith('.salesforce.com') || 
+           hostname.endsWith('.lightning.force.com') || 
+           hostname.endsWith('.my.salesforce.com') ||
+           hostname === 'salesforce.com' ||
+           hostname === 'lightning.force.com' ||
+           hostname === 'my.salesforce.com';
   };
 
   // Create and inject the floating button

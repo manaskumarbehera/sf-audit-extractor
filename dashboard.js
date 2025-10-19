@@ -78,11 +78,16 @@
         func: (soqlQuery) => {
           return new Promise(async (resolve, reject) => {
             try {
-              // Validate we're on a Salesforce domain
+              // Validate we're on a Salesforce domain (proper suffix check to prevent bypassing)
               const hostname = window.location.hostname;
-              if (!hostname.includes('salesforce.com') && 
-                  !hostname.includes('lightning.force.com') && 
-                  !hostname.includes('my.salesforce.com')) {
+              const isValidSalesforceDomain = hostname.endsWith('.salesforce.com') || 
+                                              hostname.endsWith('.lightning.force.com') || 
+                                              hostname.endsWith('.my.salesforce.com') ||
+                                              hostname === 'salesforce.com' ||
+                                              hostname === 'lightning.force.com' ||
+                                              hostname === 'my.salesforce.com';
+              
+              if (!isValidSalesforceDomain) {
                 throw new Error('Not on a valid Salesforce domain');
               }
 
