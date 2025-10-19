@@ -89,6 +89,15 @@ WHERE CreatedDate = LAST_180_DAYS
 ORDER BY CreatedDate DESC
 ```
 
+**API Version**: Currently uses Salesforce REST API v59.0. To update to a newer version, modify the `apiVersion` constant in `dashboard.js`.
+
+### Security Considerations
+
+- **Session Access**: The extension uses Chrome's `scripting` API with `MAIN` world injection to access Salesforce session cookies. This is necessary for authenticating REST API calls but is restricted to validated Salesforce domains only.
+- **URL Validation**: All API requests are validated to ensure they originate from the same Salesforce instance domain.
+- **No Data Storage**: The extension does not store any Salesforce data persistently; all data is processed in-memory during the session.
+- **Minimal Permissions**: Only requests permissions necessary for core functionality.
+
 ### Browser Compatibility
 
 - **Chrome**: Fully supported (Manifest V3)

@@ -68,6 +68,8 @@
   }
 
   // Execute SOQL query in Salesforce context
+  // Note: Uses 'MAIN' world to access Salesforce session cookies for API authentication
+  // This is necessary because the Salesforce REST API requires authenticated requests
   async function executeSoqlInSalesforce(tabId, query) {
     return new Promise((resolve, reject) => {
       chrome.scripting.executeScript({
@@ -76,19 +78,37 @@
         func: (soqlQuery) => {
           return new Promise(async (resolve, reject) => {
             try {
+              // Validate we're on a Salesforce domain
+              const hostname = window.location.hostname;
+              if (!hostname.includes('salesforce.com') && 
+                  !hostname.includes('lightning.force.com') && 
+                  !hostname.includes('my.salesforce.com')) {
+                throw new Error('Not on a valid Salesforce domain');
+              }
+
               // Get instance URL from current page
               const instanceUrl = window.location.origin;
 
+              // Validate instance URL format
+              if (!instanceUrl.startsWith('https://')) {
+                throw new Error('Invalid instance URL protocol');
+              }
+
               // Execute SOQL query using Salesforce's REST API
-              // The browser already has the session cookie, so we don't need to pass it
+              // credentials: 'include' is required to send the Salesforce session cookie
               const fetchRecords = async (url) => {
+                // Validate URL is from the same origin
+                if (!url.startsWith(instanceUrl)) {
+                  throw new Error('URL does not match instance origin');
+                }
+
                 const response = await fetch(url, {
                   method: 'GET',
                   headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                   },
-                  credentials: 'include'
+                  credentials: 'include'  // Required for Salesforce session cookie
                 });
 
                 if (!response.ok) {
@@ -99,7 +119,9 @@
                 return response.json();
               };
 
-              const queryUrl = `${instanceUrl}/services/data/v59.0/query?q=${encodeURIComponent(soqlQuery)}`;
+              // Use latest stable API version (update periodically)
+              const apiVersion = 'v59.0';
+              const queryUrl = `${instanceUrl}/services/data/${apiVersion}/query?q=${encodeURIComponent(soqlQuery)}`;
               
               // Fetch all records with pagination
               const allRecords = [];
