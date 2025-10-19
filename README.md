@@ -18,6 +18,10 @@ A Chrome extension that extracts and analyzes Salesforce Setup Audit Trail data 
 - **Simple UI**: Clean, intuitive interface with real-time statistics
 - **No OAuth Required**: Uses your active Salesforce session
 
+## Quick Start
+
+**New users**: See the [Quick Start Guide](QUICKSTART.md) for a 5-minute setup!
+
 ## Installation
 
 1. Download or clone this repository
@@ -25,6 +29,8 @@ A Chrome extension that extracts and analyzes Salesforce Setup Audit Trail data 
 3. Enable "Developer mode" (toggle in top right)
 4. Click "Load unpacked"
 5. Select the `sf-audit-extractor` directory
+
+For detailed instructions, see [INSTALLATION.md](INSTALLATION.md)
 
 ## Usage
 
