@@ -41,8 +41,20 @@
         return;
       }
 
-      // Check if it's a Salesforce URL
-      const isSalesforce = tab.url.includes('salesforce.com') || tab.url.includes('force.com');
+      // Check if it's a Salesforce URL using proper URL parsing
+      let isSalesforce = false;
+      try {
+        const url = new URL(tab.url);
+        const hostname = url.hostname.toLowerCase();
+        // Check if hostname ends with salesforce.com or force.com
+        isSalesforce = hostname.endsWith('.salesforce.com') || 
+                       hostname.endsWith('.force.com') ||
+                       hostname === 'salesforce.com' ||
+                       hostname === 'force.com';
+      } catch (e) {
+        // Invalid URL
+        isSalesforce = false;
+      }
       
       if (!isSalesforce) {
         updateStatus(false, 'Not on Salesforce');
