@@ -1,18 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Salesforce Audit Trail Extractor",
-  "version": "1.0.0",
-  "description": "Extract and analyze Salesforce Setup Audit Trail data directly from your browser",
-  "permissions": [
-    "activeTab",
-    "cookies",
-    "storage"
-  ],
-  "host_permissions": [
-    "https://*.salesforce.com/*",
-    "https://*.force.com/*"
-  ],
+  "name": "SF Audit Extractor",
+  "version": "1.0.1",
   "action": {
+    "default_title": "SF Audit Extractor",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -27,6 +18,21 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "permissions": [
+    "tabs",
+    "cookies",
+    "storage",
+    "scripting",
+    "declarativeContent"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -34,10 +40,8 @@
         "https://*.force.com/*"
       ],
       "js": ["content.js"],
+      "all_frames": true,
       "run_at": "document_idle"
     }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  }
+  ]
 }

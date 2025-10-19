@@ -1,88 +1,104 @@
-// Content script to extract Salesforce session information
-// This runs in the context of Salesforce pages
+// Detect Salesforce pages, notify background, and serve session info requests from the popup.
+// Runs in all frames but only the top frame sends the ready event.
 
-(function() {
-  'use strict';
+(() => {
+    'use strict';
 
-  // Listen for messages from the popup
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'getSessionInfo') {
-      const sessionInfo = extractSessionInfo();
-      sendResponse(sessionInfo);
-      return true;
-    }
-  });
+    const isSalesforceHost = (hostname) =>
+        /(^|\.)salesforce\.com$/i.test(hostname) || /(^|\.)force\.com$/i.test(hostname);
 
-  function extractSessionInfo() {
-    try {
-      // Try to extract session ID from various sources
-      const sessionId = extractSessionId();
-      const instanceUrl = extractInstanceUrl();
-      
-      return {
-        success: true,
-        sessionId: sessionId,
-        instanceUrl: instanceUrl,
-        isLoggedIn: !!(sessionId && instanceUrl)
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        isLoggedIn: false
-      };
-    }
-  }
+    const isTop = window === window.top;
+    const host = location.hostname;
+    const onSF = isSalesforceHost(host);
 
-  function extractSessionId() {
-    // Method 1: Try to get from global variables
-    if (typeof window !== 'undefined') {
-      // Check for common Salesforce session variables
-      if (window.__sfdcSessionId) {
-        return window.__sfdcSessionId;
-      }
-      
-      // Check for session in embedded scripts
-      const scripts = document.getElementsByTagName('script');
-      for (let script of scripts) {
-        const content = script.textContent || script.innerText;
-        const sessionMatch = content.match(/['"](00D[a-zA-Z0-9]{12,15})![\w.]+['"]/);
-        if (sessionMatch) {
-          return sessionMatch[1] + sessionMatch[0].split('!')[1].replace(/['"]/g, '');
+    // Message handler from popup: return session info (delegates to background to read cookies).
+    chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
+        if (req && req.action === 'getSessionInfo') {
+            getSessionInfoFromBackground().then(sendResponse).catch((e) => {
+                sendResponse({ success: false, error: String(e), isLoggedIn: false });
+            });
+            return true; // async
         }
-      }
-    }
-
-    // Method 2: Try to extract from meta tags
-    const metaTags = document.getElementsByTagName('meta');
-    for (let meta of metaTags) {
-      if (meta.name === '_session_id' || meta.name === 'sessionId') {
-        return meta.content;
-      }
-    }
-
-    return null;
-  }
-
-  function extractInstanceUrl() {
-    // Get the instance URL from current location
-    const url = window.location.href;
-    const match = url.match(/(https:\/\/[^\/]+)/);
-    return match ? match[1] : null;
-  }
-
-  // Send initial status to background
-  if (document.readyState === 'complete') {
-    notifyReady();
-  } else {
-    window.addEventListener('load', notifyReady);
-  }
-
-  function notifyReady() {
-    const sessionInfo = extractSessionInfo();
-    chrome.runtime.sendMessage({
-      action: 'contentReady',
-      sessionInfo: sessionInfo
     });
-  }
+
+    // Notify background when ready (top frame only) so it can update state/UI.
+    if (onSF && isTop) {
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            notifyReady();
+        } else {
+            window.addEventListener('DOMContentLoaded', notifyReady, { once: true });
+            window.addEventListener('load', notifyReady, { once: true });
+        }
+    }
+
+    function notifyReady() {
+        getSessionInfoFromBackground()
+            .then((sessionInfo) => {
+                chrome.runtime.sendMessage({
+                    action: 'contentReady',
+                    url: location.href,
+                    sessionInfo
+                });
+            })
+            .catch(() => {
+                chrome.runtime.sendMessage({
+                    action: 'contentReady',
+                    url: location.href,
+                    sessionInfo: {
+                        success: true,
+                        isSalesforce: onSF,
+                        isLoggedIn: false,
+                        instanceUrl: getInstanceOrigin(),
+                        sessionId: null
+                    }
+                });
+            });
+    }
+
+    function getInstanceOrigin() {
+        try {
+            return location.origin;
+        } catch {
+            const m = String(location.href).match(/^(https:\/\/[^/]+)/i);
+            return m ? m[1] : null;
+        }
+    }
+
+    // Ask background to read cookies and assemble session info.
+    function getSessionInfoFromBackground() {
+        const instanceUrl = getInstanceOrigin();
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage(
+                {
+                    action: 'GET_SESSION_INFO',
+                    url: instanceUrl,
+                    hostname: host
+                },
+                (resp) => {
+                    if (chrome.runtime.lastError) {
+                        resolve({
+                            success: true,
+                            isSalesforce: onSF,
+                            isLoggedIn: false,
+                            instanceUrl,
+                            sessionId: null,
+                            warning: chrome.runtime.lastError.message
+                        });
+                        return;
+                    }
+                    if (!resp) {
+                        resolve({
+                            success: true,
+                            isSalesforce: onSF,
+                            isLoggedIn: false,
+                            instanceUrl,
+                            sessionId: null
+                        });
+                        return;
+                    }
+                    resolve(resp);
+                }
+            );
+        });
+    }
 })();
