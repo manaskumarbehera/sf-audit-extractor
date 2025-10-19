@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salesforce Audit Trail Extractor</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>SF Audit Trail</h1>
+      <div class="status" id="status">
+        <span class="status-dot"></span>
+        <span class="status-text">Not connected</span>
+      </div>
+    </header>
+
+    <div class="controls">
+      <button id="fetch-btn" class="btn btn-primary">
+        <span class="btn-icon">↻</span>
+        Fetch Data
+      </button>
+      <button id="export-btn" class="btn btn-secondary" disabled>
+        <span class="btn-icon">↓</span>
+        Export CSV
+      </button>
+    </div>
+
+    <div class="search-box">
+      <input type="text" id="search-input" placeholder="Search audit logs..." disabled>
+    </div>
+
+    <div class="filters">
+      <label class="filter-label">Category:</label>
+      <select id="category-filter" disabled>
+        <option value="all">All Categories</option>
+        <option value="User Management">User Management</option>
+        <option value="Security">Security</option>
+        <option value="Object Changes">Object Changes</option>
+      </select>
+    </div>
+
+    <div class="stats" id="stats" style="display: none;">
+      <div class="stat-item">
+        <span class="stat-label">Total:</span>
+        <span class="stat-value" id="total-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">User Mgmt:</span>
+        <span class="stat-value" id="user-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Security:</span>
+        <span class="stat-value" id="security-count">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Objects:</span>
+        <span class="stat-value" id="object-count">0</span>
+      </div>
+    </div>
+
+    <div class="logs-container" id="logs-container">
+      <div class="placeholder">
+        <p>Click "Fetch Data" to load audit trail logs</p>
+        <p class="placeholder-note">Make sure you're logged into Salesforce</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
