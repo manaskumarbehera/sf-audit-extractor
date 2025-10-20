@@ -1,9 +1,12 @@
 // JavaScript
 // file: background.js
-// MV3 service worker: Salesforce detection, session reading, and Tooling API fetch for SetupAuditTrail.
+// MV3 service worker: Salesforce detection, session reading, Tooling API fetch, and Platform Events pinning window support.
 
 const SALESFORCE_SUFFIXES = ['salesforce.com', 'force.com'];
 const API_VERSION = 'v65.0';
+
+// Track Platform Events pinned window
+let platformWindowId = null;
 
 chrome.runtime.onInstalled.addListener(() => {
     if (!chrome.declarativeContent?.onPageChanged) return;
@@ -18,6 +21,23 @@ chrome.runtime.onInstalled.addListener(() => {
             { conditions, actions: [new chrome.declarativeContent.ShowAction()] }
         ]);
     });
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+    try {
+        const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
+        if (platformPinned) {
+            await openPlatformWindow();
+        }
+    } catch (e) {
+        console.warn('onStartup pin restore failed', e);
+    }
+});
+
+chrome.windows.onRemoved.addListener((winId) => {
+    if (platformWindowId && winId === platformWindowId) {
+        platformWindowId = null;
+    }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -52,13 +72,45 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 });
 
-// Always reply and keep worker alive for async.
+// Handle general actions and Platform Events pinning
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
         try {
             const raw = msg?.action ?? '';
             const upper = typeof raw === 'string' ? raw.toUpperCase() : '';
             const is = (v) => upper === v || raw === v || raw === v.toLowerCase();
+
+            if (is('PLATFORM_PIN_GET')) {
+                const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
+                return { success: true, pinned: !!platformPinned, windowId: platformWindowId };
+            }
+            if (is('PLATFORM_PIN_SET')) {
+                const pinned = !!msg?.pinned;
+                await chrome.storage.local.set({ platformPinned: pinned });
+                if (pinned) {
+                    await openPlatformWindow();
+                } else {
+                    if (platformWindowId) {
+                        try { await chrome.windows.remove(platformWindowId); } catch {}
+                        platformWindowId = null;
+                    }
+                }
+                return { success: true, pinned, windowId: platformWindowId };
+            }
+            if (is('PLATFORM_PIN_TOGGLE')) {
+                const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
+                const next = !platformPinned;
+                await chrome.storage.local.set({ platformPinned: next });
+                if (next) {
+                    await openPlatformWindow();
+                } else {
+                    if (platformWindowId) {
+                        try { await chrome.windows.remove(platformWindowId); } catch {}
+                        platformWindowId = null;
+                    }
+                }
+                return { success: true, pinned: next, windowId: platformWindowId };
+            }
 
             if (is('CONTENT_PING') || is('CONTENT_READY') || upper === 'CONTENTREADY') {
                 return { ok: true };
@@ -100,8 +152,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
 });
 
-// Helpers
+async function openPlatformWindow() {
+    try {
+        if (platformWindowId) {
+            // if exists, try focus
+            await chrome.windows.update(platformWindowId, { focused: true });
+            return platformWindowId;
+        }
+    } catch {
+        platformWindowId = null;
+    }
 
+    const url = chrome.runtime.getURL('popup.html#platform');
+    try {
+        const win = await chrome.windows.create({ url, type: 'popup', width: 740, height: 760, focused: true });
+        platformWindowId = win?.id || null;
+        return platformWindowId;
+    } catch (e) {
+        console.warn('Failed to open Platform window', e);
+        platformWindowId = null;
+        return null;
+    }
+}
+
+// Helpers
 function isSalesforceUrl(url) {
     try {
         const u = new URL(url);
@@ -131,7 +205,6 @@ function sanitizeUrl(url) {
     }
 }
 
-// Map Lightning/VF/other force.com hosts to API base host that accepts REST session cookie.
 function normalizeApiBase(url) {
     const o = sanitizeUrl(url);
     if (!o) return null;
@@ -148,24 +221,13 @@ function normalizeApiBase(url) {
     return u.origin;
 }
 
-// Promise wrappers for cookies API
 const cookies = {
-    get: (details) =>
-        new Promise((resolve) => {
-            try {
-                chrome.cookies.get(details, (c) => resolve(c || null));
-            } catch {
-                resolve(null);
-            }
-        }),
-    getAll: (details) =>
-        new Promise((resolve) => {
-            try {
-                chrome.cookies.getAll(details, (arr) => resolve(arr || []));
-            } catch {
-                resolve([]);
-            }
-        })
+    get: (details) => new Promise((resolve) => {
+        try { chrome.cookies.get(details, (c) => resolve(c || null)); } catch { resolve(null); }
+    }),
+    getAll: (details) => new Promise((resolve) => {
+        try { chrome.cookies.getAll(details, (arr) => resolve(arr || [])); } catch { resolve([]); }
+    })
 };
 
 async function getSalesforceSession(url) {
@@ -177,24 +239,16 @@ async function getSalesforceSession(url) {
         return { success: true, isSalesforce: false, isLoggedIn: false, instanceUrl: instanceUrl || null, sessionId: null };
     }
 
-    // Try direct host first
     let sid = await cookies.get({ url: instanceUrl + '/', name: 'sid' });
 
-    // Fallback: scan all cookies for best sid candidate
     if (!sid) {
         const all = await cookies.getAll({});
         const candidates = (all || []).filter(
-            (c) =>
-                (c.name === 'sid' || /^sid[_-]/i.test(c.name)) &&
-                (c.domain.endsWith('salesforce.com') || c.domain.endsWith('force.com')) &&
-                c.value
+            (c) => (c.name === 'sid' || /^sid[_-]/i.test(c.name)) && (c.domain.endsWith('salesforce.com') || c.domain.endsWith('force.com')) && c.value
         );
 
         candidates.sort((a, b) => {
-            const rank = (c) =>
-                (c.domain.endsWith('.my.salesforce.com') ? 3 :
-                    c.domain.endsWith('salesforce.com') ? 2 :
-                        c.domain.endsWith('force.com') ? 1 : 0);
+            const rank = (c) => (c.domain.endsWith('.my.salesforce.com') ? 3 : c.domain.endsWith('salesforce.com') ? 2 : c.domain.endsWith('force.com') ? 1 : 0);
             const rdiff = rank(b) - rank(a);
             return rdiff !== 0 ? rdiff : (b.value.length - a.value.length);
         });
@@ -214,51 +268,6 @@ async function getSalesforceSession(url) {
     };
 }
 
-// Tooling API query for SetupAuditTrail
-async function fetchAuditTrailTooling(instanceUrl, sessionId, opts = {}) {
-    const days = Number.isFinite(opts.days) ? opts.days : 180;
-    const max = Number.isFinite(opts.limit) ? opts.limit : 2000;
-
-    const base = String(instanceUrl || '').replace(/\/+$/, '');
-    if (!base || !/^https:\/\//i.test(base)) throw new Error('Invalid instance URL');
-
-    const soql = [
-        'SELECT Id, Action, Section, CreatedDate, CreatedById, CreatedBy.Name',
-        'FROM SetupAuditTrail',
-        `WHERE CreatedDate = LAST_N_DAYS:${days}`,
-        'ORDER BY CreatedDate DESC'
-    ].join(' ');
-
-    const headers = {
-        Authorization: `Bearer ${sessionId}`,
-        Accept: 'application/json'
-    };
-
-    const records = [];
-    let url = `${base}/services/data/${API_VERSION}/query?q=${encodeURIComponent(soql)}`;
-    let guard = 0;
-
-    while (url && records.length < max && guard < 50) {
-        guard++;
-        const res = await fetch(url, { method: 'GET', headers, credentials: 'omit' });
-        if (!res.ok) {
-            const text = await res.text().catch(() => '');
-            throw new Error(`Tooling query failed (${res.status}): ${text || res.statusText}`);
-        }
-        const data = await res.json();
-        if (Array.isArray(data.records)) {
-            for (const r of data.records) {
-                records.push(r);
-                if (records.length >= max) break;
-            }
-        }
-        url = data.nextRecordsUrl && records.length < max ? `${base}${data.nextRecordsUrl}` : null;
-    }
-
-    return { totalSize: records.length, records };
-}
-
-
 async function fetchAuditTrail(instanceUrl, sessionId, opts = {}) {
     const days = Number.isFinite(opts.days) ? opts.days : 180;
     const max = Number.isFinite(opts.limit) ? opts.limit : 2000;
@@ -273,10 +282,7 @@ async function fetchAuditTrail(instanceUrl, sessionId, opts = {}) {
         'ORDER BY CreatedDate DESC'
     ].join(' ');
 
-    const headers = {
-        Authorization: `Bearer ${sessionId}`,
-        Accept: 'application/json'
-    };
+    const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
 
     const records = [];
     let url = `${base}/services/data/${API_VERSION}/query?q=${encodeURIComponent(soql)}`;

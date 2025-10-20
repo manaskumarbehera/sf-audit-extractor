@@ -14,43 +14,44 @@ File: `popup.html` (replace body content with this)
     <header class="tabs-header">
         <div class="tabs-left">
             <nav class="tabs" role="tablist" aria-label="Views">
-                <button class="tab-button active" role="tab" aria-selected="true" data-tab="sf">SF Audit Trail</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="event">Event Monitor</button>
+                <button class="tab-button active" role="tab" aria-selected="true" data-tab="sf">Audit Trails</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="platform">Platform Events</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="lms">Lightning Message Service</button>
-
             </nav>
         </div>
 
         <div class="tabs-right">
-            <h1 id="header-title">SF Audit Trail</h1>
+            <h1 id="header-title">Audit Trails</h1>
             <div class="status" id="status">
                 <span class="status-dot"></span>
                 <span class="status-text">Not connected</span>
             </div>
+            <button id="pe-pin" class="header-icon-btn" aria-label="Pin Platform Events window" title="Pin Platform Events window"></button>
         </div>
     </header>
 
     <section class="tab-contents">
         <div id="tab-sf" class="tab-pane" data-tab="sf" style="display: block;">
-            <!-- existing controls (preserve IDs for popup.js) -->
-            <div class="controls">
-                <button id="fetch-btn" class="btn btn-primary">
-                    <span class="btn-icon">↻</span>
-                    Fetch Data
-                </button>
-                <button id="export-btn" class="btn btn-secondary" disabled>
-                    <span class="btn-icon">↓</span>
-                    Export CSV
-                </button>
+            <div class="audit-header">
+                <div class="audit-left">
+                    <div class="audit-controls">
+                        <button id="fetch-btn" class="icon-btn" aria-label="Fetch Audit Logs" title="Fetch Audit Logs">
+                            <span aria-hidden="true">↻</span>
+                        </button>
+                        <button id="export-btn" class="icon-btn" aria-label="Export CSV" title="Export CSV" disabled>
+                            <span aria-hidden="true">↓</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="audit-right"></div>
             </div>
 
             <div class="search-box">
-                <input type="text" id="search-input" placeholder="Search audit logs..." disabled />
+                <input type="text" id="search-input" placeholder="Search audit logs..." aria-label="Search audit logs" disabled />
             </div>
 
             <div class="filters">
-                <label class="filter-label">Category:</label>
+                <label class="filter-label" for="category-filter">Category:</label>
                 <select id="category-filter" disabled>
                     <option value="all">All Categories</option>
                     <option value="User Management">User Management</option>
@@ -80,23 +81,64 @@ File: `popup.html` (replace body content with this)
 
             <div class="logs-container" id="logs-container">
                 <div class="placeholder">
-                    <p>Click "Fetch Data" to load audit trail logs</p>
-                    <p class="placeholder-note">Make sure you're logged into Salesforce</p>
+                    <p>Audit logs are not loaded yet</p>
+                    <p class="placeholder-note">Use the refresh icon to fetch audit logs</p>
                 </div>
             </div>
         </div>
 
-        <div id="tab-event" class="tab-pane" data-tab="event" style="display: none;">
-            <div class="placeholder">
-                <p>Event Monitor view. Fetch or stream event logs here.</p>
+        <div id="tab-platform" class="tab-pane" data-tab="platform" style="display: none;">
+            <div class="platform-header">
+                <div class="platform-left">
+                    <div class="platform-controls">
+                        <button id="pe-refresh" class="icon-btn" aria-label="Fetch Platform Events" title="Fetch Platform Events">
+                            <span aria-hidden="true">↻</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="platform-right">
+                    <div class="status" id="cometd-status" title="Disconnected">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Disconnected</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="platform-content">
+                <div class="platform-events">
+                    <h2 class="section-title">Platform Events</h2>
+                    <div id="platform-events-list" class="list">
+                        <div class="placeholder">
+                            <p>No events loaded</p>
+                            <p class="placeholder-note">Click the refresh icon to load Platform Events</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="platform-log">
+                    <h2 class="section-title">Event Messages</h2>
+                    <div class="log-toolbar">
+                        <div class="toolbar-left">
+                            <button id="pe-log-clear" class="icon-btn btn-sm" aria-label="Clear log" title="Clear log"><span aria-hidden="true">🗑</span></button>
+                            <button id="pe-log-pause" class="icon-btn btn-sm" aria-pressed="false" aria-label="Pause logging" title="Pause logging"><span aria-hidden="true">⏸</span></button>
+                        </div>
+                        <div class="toolbar-right">
+                            <button id="pe-log-autoscroll-btn" class="icon-btn btn-sm" aria-pressed="true" aria-label="Toggle auto-scroll" title="Auto-scroll: on"><span aria-hidden="true">⤓</span></button>
+                            <select id="pe-log-filter" class="log-filter compact" aria-label="Filter">
+                                <option value="all" selected>All</option>
+                                <option value="event">Events</option>
+                                <option value="system">System</option>
+                                <option value="subscribe">Subscribe</option>
+                                <option value="error">Errors</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="platform-event-log" class="logs-container">
+                        <div class="placeholder-note">No messages yet</div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div id="tab-platform" class="tab-pane" data-tab="platform" style="display: none;">
-            <div class="placeholder">
-                <p>Platform Events / Lightning Message Channel view.</p>
-            </div>
-        </div>
         <div id="tab-lms" class="tab-pane" data-tab="lms" style="display: none;">
             <div class="placeholder">
                 <p>Lightning Message Service view. Inspect Publish/Subscribe messages, LWC channels, and test messages here.</p>
