@@ -22,37 +22,35 @@ Follow these steps to install and use the Salesforce Audit Trail Extractor:
 
 ### Step 3: Verify Installation
 
-You should see the Salesforce Audit Trail Extractor appear in your extensions list with:
-- Extension name and version
+You should see the extension appear in your extensions list with:
+- Name and version (from the manifest)
 - Blue document icon
 - Status showing it's enabled
 
 ### Step 4: Use the Extension
 
-1. **Log in to Salesforce**: Open any Salesforce org in Chrome and log in
-2. **Click the extension icon**: Find the extension icon in your Chrome toolbar (you may need to click the puzzle icon to pin it)
-3. **Fetch data**: Click the "Fetch Data" button
-4. **Wait for data**: The extension will retrieve the last 6 months of audit trail data
-5. **Explore and filter**: Use the search box and category filter to find specific entries
-6. **Export if needed**: Click "Export CSV" to download the data
+1. Log in to Salesforce in a browser tab
+2. Click the extension icon in the toolbar (pin it if needed via the puzzle icon)
+3. In the Audit Trails tab, click the refresh icon to fetch data (auto-fetch on first open when connected)
+4. Use search and category filters; export CSV as needed
+5. Explore other tabs: Platform Events, LMS, SOQL Builder, GraphQL, Current Record
 
 ## Visual Walkthrough
 
 ### Extension Icon Location
-The extension icon appears in your Chrome toolbar. If you don't see it:
+If you don't see the icon:
 - Click the puzzle piece icon (Extensions)
-- Find "Salesforce Audit Trail Extractor"
+- Find the extension
 - Click the pin icon to keep it visible
 
 ### Popup Interface
-When you click the icon, you'll see:
-- **Status indicator**: Shows if you're connected to Salesforce
-- **Fetch Data button**: Retrieves audit trail data
-- **Export CSV button**: Downloads filtered data (enabled after fetching)
-- **Search box**: Filter by keywords
-- **Category dropdown**: Filter by category
-- **Statistics panel**: Shows counts by category
-- **Logs list**: Displays all matching audit entries
+When you click the icon, you'll see tabs for:
+- **Audit Trails**: Status, refresh, export, search, category filter, statistics, logs
+- **Platform Events**: List events, subscribe/unsubscribe, event log with controls
+- **LMS**: Load channels, sample payload + copy
+- **SOQL Builder**: Editor, LIMIT, Tooling, exports, schema sidebar
+- **GraphQL**: Query + variables editors, results
+- **Current Record**: Detect from URL, fetch by Id
 
 ## Troubleshooting
 
@@ -61,40 +59,34 @@ When you click the icon, you'll see:
 - Check that you selected the correct folder (containing manifest.json)
 - Try removing and re-adding the extension
 
-### "Not on Salesforce" Error
+### "Not connected" Status
 - Navigate to a Salesforce page (*.salesforce.com or *.force.com)
-- Make sure you're on an actual Salesforce tab when clicking the icon
+- Ensure you're on a Salesforce tab when opening the popup
 
-### "Not logged in" Error
-- Log in to your Salesforce org first
-- Refresh the page after logging in
-- Try closing and reopening the popup
-
-### No Data Returned
+### No Audit Data Returned
 - Verify you have "View Setup and Configuration" permission
 - Check that your profile allows API access
-- Some orgs may have API restrictions
 
 ### API Errors
-- The extension uses the Tooling API which requires API Enabled permission
-- Contact your Salesforce administrator if you don't have access
-- Try refreshing your Salesforce session by logging out and back in
+- The extension uses REST/Tooling APIs that require API Enabled permission
+- Refresh your Salesforce session (log out/in)
+- Inspect the background service worker console for details
 
 ## Permissions Explained
 
-The extension requests these permissions:
-- **activeTab**: To detect when you're on a Salesforce page
-- **cookies**: To access your Salesforce session (read-only)
-- **storage**: To cache preferences (optional, not currently used)
-- **host_permissions**: To communicate with Salesforce APIs
+The extension requests these permissions (as defined in `manifest.json`):
+- **tabs**: To query/find a Salesforce tab for messaging
+- **cookies**: To read your Salesforce session cookie (read-only) from the background
+- **storage**: To persist small preferences (e.g., pin state)
+- **declarativeContent**: To show the action when matching Salesforce pages
+- **host_permissions**: `https://*.salesforce.com/*`, `https://*.force.com/*` for API access
 
 ## Privacy & Security
 
 - All data processing happens locally in your browser
 - No data is sent to external servers
 - Session tokens are used only for API calls to Salesforce
-- The extension only reads data; it doesn't modify anything
-- All API calls are made directly to your Salesforce instance
+- The extension performs read-only operations
 
 ## System Requirements
 
@@ -108,7 +100,7 @@ The extension requests these permissions:
 If you encounter issues:
 1. Check this troubleshooting guide
 2. Verify your Salesforce permissions
-3. Check the browser console for errors (F12 > Console)
+3. Check the browser console for errors (F12 > Console) and the service worker console
 4. Open an issue on GitHub with error details
 
 ## Updates
@@ -124,7 +116,7 @@ To update the extension:
 
 To remove the extension:
 1. Go to `chrome://extensions/`
-2. Find "Salesforce Audit Trail Extractor"
+2. Find the extension
 3. Click "Remove"
 4. Confirm the removal
 

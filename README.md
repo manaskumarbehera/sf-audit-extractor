@@ -17,6 +17,11 @@ A Chrome extension that extracts and analyzes Salesforce Setup Audit Trail data 
 - **CSV Export**: Export filtered data to CSV for further analysis
 - **Simple UI**: Clean, intuitive interface with real-time statistics
 - **No OAuth Required**: Uses your active Salesforce session
+- **Platform Events Viewer**: Discover Platform Events and subscribe/unsubscribe with a built-in CometD client, structured event log, pause/clear, filter and auto-scroll controls, plus a pin-able window
+- **Lightning Message Service (LMS)**: Browse LMS channels and auto-generate a sample payload you can copy
+- **SOQL Builder**: Run SOQL (with Tooling toggle), set LIMIT, and export results to CSV/JSON/Excel; schema sidebar and basic suggestions
+- **GraphQL Runner**: Execute GraphQL queries (e.g., UI API) and view results
+- **Current Record Utility**: Detect record Id from the current tab URL and fetch details
 
 ## Quick Start
 
@@ -34,40 +39,50 @@ For detailed instructions, see [INSTALLATION.md](INSTALLATION.md)
 
 ## Usage
 
-1. Log in to any Salesforce org
-2. Click the extension icon in your Chrome toolbar
-3. Click "Fetch Data" to retrieve audit trail logs
-4. Use the search box to find specific entries
-5. Filter by category using the dropdown
-6. Click "Export CSV" to download the data
+- Audit Trails tab:
+  1. Log in to any Salesforce org and open the extension
+  2. Use the refresh icon to fetch audit trail logs (auto-fetch on first open when connected)
+  3. Search and filter by category; export CSV if needed
+- Platform Events tab:
+  - Click refresh to list events, then Subscribe/Unsubscribe per event; watch the structured event log; use pause/clear/filter/auto-scroll; optionally pin this view into a separate window
+- LMS tab:
+  - Refresh to load channels; select one to see a generated sample payload you can copy
+- SOQL Builder tab:
+  - Enter a query and Run (Cmd/Ctrl+Enter); set LIMIT; toggle Tooling; export results to CSV/JSON/Excel
+- GraphQL tab:
+  - Paste a GraphQL query (and optional variables) and Run to view results
+- Current Record tab:
+  - Detect record Id from the current Salesforce URL or paste an Id, then fetch details
 
 ## How It Works
 
 The extension:
-1. Detects when you're on a Salesforce page
-2. Extracts your session information from the active tab
-3. Uses the Salesforce Tooling API to query SetupAuditTrail records
-4. Processes and categorizes the data
-5. Displays results in an easy-to-navigate interface
+1. Detects when you're on a Salesforce page and reads your active session (via cookies) in the background
+2. Uses Salesforce REST API for queries and Tooling API where required (e.g., LMS metadata)
+3. Provides specialized tools for audit trails, Platform Events (CometD), SOQL, GraphQL, and record utilities
+4. Processes and displays results in a clean, multi-tab interface
 
 ## Technical Details
 
 - **Manifest Version**: 3
-- **API Used**: Salesforce Tooling API v58.0
-- **Permissions**: activeTab, cookies, storage
-- **Supported Domains**: *.salesforce.com, *.force.com
+- **APIs Used**:
+  - Salesforce REST API v65.0 for general queries
+  - Salesforce Tooling API v65.0 for LMS metadata and Tooling queries
+  - Bayeux/CometD protocol for Platform Events streaming
+- **Permissions**: tabs, cookies, storage, declarativeContent
+- **Host Permissions**: `https://*.salesforce.com/*`, `https://*.force.com/*`
 
 ## Files Structure
 
 ```
 sf-audit-extractor/
 ├── manifest.json       # Extension configuration
-├── popup.html          # Main UI
-├── popup.css          # Styles
-├── popup.js           # Main logic
-├── content.js         # Content script for session extraction
-├── background.js      # Service worker for API calls
-├── icons/             # Extension icons
+├── popup.html          # Main UI (multi-tab)
+├── popup.css           # Styles
+├── popup.js            # Main logic (Audit Trails, Platform Events, LMS, SOQL, GraphQL, Record)
+├── content.js          # Content script for signaling & session info bridge
+├── background.js       # Service worker (API access, session cookies, pin window)
+├── icons/              # Extension icons
 │   ├── icon16.png
 │   ├── icon32.png
 │   ├── icon48.png
@@ -87,16 +102,14 @@ sf-audit-extractor/
 - Google Chrome (or Chromium-based browser)
 - Active Salesforce session
 - Appropriate permissions to view Setup Audit Trail in Salesforce
+- API access enabled (for REST/Tooling queries)
 
 ## Troubleshooting
 
-**"Not on Salesforce" error**: Make sure you're on a Salesforce page before using the extension.
-
-**"Not logged in" error**: Ensure you're logged into your Salesforce org.
-
-**No data returned**: Check that you have permission to view Setup Audit Trail in Salesforce.
-
-**API errors**: The extension uses the Tooling API which requires API access. Check your profile permissions.
+- "Not on Salesforce" error: Make sure you're on a Salesforce page before using the extension.
+- "Not logged in" error: Ensure you're logged into your Salesforce org.
+- No data returned: Check that you have permission to view Setup Audit Trail in Salesforce.
+- API errors: Ensure API access is enabled on your profile; check the background/service worker console.
 
 ## License
 

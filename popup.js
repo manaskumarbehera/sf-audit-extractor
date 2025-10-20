@@ -2351,6 +2351,22 @@
 
         function formatCell(v) {
             if (v == null) return '';
+            // Relationship object rendering: { attributes: { type, url }, Name?, Id? }
+            if (typeof v === 'object' && v && v.attributes && typeof v.attributes.url === 'string') {
+                const idFromObj = typeof v.Id === 'string' && isSalesforceId(v.Id) ? v.Id : '';
+                let idFromUrl = '';
+                try {
+                    const m = String(v.attributes.url).match(/\/([A-Za-z0-9]{15,18})(?:[\/?#]|$)/);
+                    idFromUrl = m ? m[1] : '';
+                } catch { /* ignore */ }
+                const rid = idFromObj || idFromUrl;
+                if (rid) {
+                    const label = String(v.Name || rid);
+                    return `<span class="sf-id" data-id="${escapeHtml(rid)}" role="button" tabindex="0" title="Open or copy">${escapeHtml(label)}</span>`;
+                }
+                // Fallback: show compact JSON
+                try { return `<pre class="cell-json">${escapeHtml(JSON.stringify(v))}</pre>`; } catch { return String(v); }
+            }
             if (typeof v === 'object') {
                 try { return `<pre class="cell-json">${escapeHtml(JSON.stringify(v))}</pre>`; } catch { return String(v); }
             }
