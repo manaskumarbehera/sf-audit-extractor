@@ -125,21 +125,22 @@ h1 {
   border-bottom: 1px solid #e9ecef;
 }
 
-.search-box input {
+.search-box input, .search-box textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #ced4da;
   border-radius: 6px;
   font-size: 14px;
   transition: border-color 0.2s;
+  resize: vertical;
 }
 
-.search-box input:focus {
+.search-box input:focus, .search-box textarea:focus {
   outline: none;
   border-color: #0176d3;
 }
 
-.search-box input:disabled {
+.search-box input:disabled, .search-box textarea:disabled {
   background: #f8f9fa;
   cursor: not-allowed;
 }
@@ -354,3 +355,9 @@ h1 {
 /* Audit Trail compact header to mirror Platform Events */
 .audit-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid #e9ecef; }
 .audit-controls { display: flex; align-items: center; gap: 6px; }
+
+/* LMS sample payload copy overlay */
+.sample-payload-wrap { position: relative; }
+.sample-payload-wrap textarea { padding-right: 42px; }
+.copy-overlay-btn { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; }
+.copy-overlay-btn.copied { background: #e6fcf5; border-color: #c3fae8; color: #0ca678; }

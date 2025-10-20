@@ -22,7 +22,6 @@
     "tabs",
     "cookies",
     "storage",
-    "scripting",
     "declarativeContent"
   ],
   "host_permissions": [

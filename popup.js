@@ -32,6 +32,10 @@
     const peSubscriptions = new Set(); // channel names like /event/MyEvent__e
     const pePendingOps = new Set(); // channels currently being (un)subscribed
 
+    // LMS state
+    let lmsChannels = [];
+    let lmsLoaded = false;
+
     // Audit Trail state
     let auditFetched = false; // prevent repeated auto-fetch
 
@@ -244,6 +248,10 @@
                 // Auto-fetch audit logs first time
                 autoFetchAuditIfPossible();
             }
+            // Trigger LMS channels load when LMS tab is shown
+            if (name === 'lms') {
+                try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
+            }
         }
 
         buttons.forEach(btn => {
@@ -252,7 +260,7 @@
 
         // Choose initial tab: prefer location hash if present
         const hash = (location.hash || '').toLowerCase();
-        const initial = hash.includes('platform') ? 'platform' : (document.querySelector('.tab-button.active')?.dataset.tab || 'sf');
+        const initial = hash.includes('platform') ? 'platform' : hash.includes('lms') ? 'lms' : (document.querySelector('.tab-button.active')?.dataset.tab || 'sf');
         showTab(initial);
     }
 
@@ -274,28 +282,177 @@
     }
 
     function attachLmsHandlers() {
-        // Simple UI-only handlers for LMS pane; real publish/subscribe requires content/background integration
+        // Real handlers for LMS pane
         const lmsRefresh = document.getElementById('lms-refresh');
-        const lmsPublish = document.getElementById('lms-test-publish');
         const lmsLog = document.getElementById('lms-log');
+        const lmsChannelSel = document.getElementById('lms-channel');
+        const lmsPayloadTa = document.getElementById('lms-payload');
+        const lmsPayloadCopy = document.getElementById('lms-payload-copy');
+
+        function updateCopyEnabled() {
+            if (!lmsPayloadCopy) return;
+            const hasText = !!(lmsPayloadTa && String(lmsPayloadTa.value || '').trim());
+            lmsPayloadCopy.disabled = !hasText;
+            lmsPayloadCopy.title = hasText ? 'Copy sample payload' : 'Nothing to copy';
+        }
+
+        async function loadChannels(force = false) {
+            try {
+                if (!force && lmsLoaded && Array.isArray(lmsChannels) && lmsChannels.length) return;
+                // Ensure session
+                if (!sessionInfo || !sessionInfo.isLoggedIn) {
+                    const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                    if (fresh && fresh.success) sessionInfo = fresh;
+                }
+                if (!sessionInfo || !sessionInfo.isLoggedIn) {
+                    appendLmsLog('Not connected to Salesforce. Open a Salesforce tab and log in.');
+                    return;
+                }
+                const resp = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ action: 'LMS_FETCH_CHANNELS', instanceUrl: sessionInfo.instanceUrl }, (r) => resolve(r));
+                });
+                if (!resp || !resp.success) {
+                    appendLmsLog('Failed to fetch LMS channels: ' + (resp?.error || 'Unknown error'));
+                    return;
+                }
+                lmsChannels = Array.isArray(resp.channels) ? resp.channels : [];
+                populateChannelSelect(lmsChannels);
+                lmsLoaded = true;
+                appendLmsLog(`Loaded ${lmsChannels.length} LMS channel(s).`);
+            } catch (e) {
+                appendLmsLog('Error loading channels: ' + String(e));
+            }
+        }
+
+        function populateChannelSelect(channels) {
+            if (!lmsChannelSel) return;
+            const opts = ['<option value="">Select a message channel</option>'];
+            for (let i = 0; i < channels.length; i++) {
+                const c = channels[i];
+                const label = `${escapeHtml(c.masterLabel || c.fullName || c.developerName)} (${escapeHtml(c.fullName || c.developerName)})`;
+                opts.push(`<option value="${i}">${label}</option>`);
+            }
+            lmsChannelSel.innerHTML = opts.join('');
+            lmsChannelSel.disabled = channels.length === 0;
+            // Clear the sample area until a channel is selected
+            if (lmsPayloadTa) lmsPayloadTa.value = '';
+            updateCopyEnabled();
+        }
+
+        function appendLmsLog(message) {
+            if (!lmsLog) return;
+            const p = document.createElement('p');
+            p.className = 'log-line';
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            // Remove placeholder note if present
+            const ph = lmsLog.querySelector('.placeholder, .placeholder-note');
+            if (ph) ph.remove();
+            lmsLog.appendChild(p);
+            lmsLog.scrollTop = lmsLog.scrollHeight;
+        }
+
+        // Generate a simple sample payload based on channel metadata
+        function generateSamplePayload(channel) {
+            try {
+                const fields = Array.isArray(channel?.fields) ? channel.fields : [];
+                if (!fields.length) {
+                    return { text: 'Hello from LMS' };
+                }
+                const obj = {};
+                for (const f of fields) {
+                    const key = String(f.name || '').trim();
+                    if (!key) continue;
+                    if (/count|number|qty/i.test(key)) obj[key] = 1;
+                    else if (/id$/i.test(key)) obj[key] = 'a0123456789ABCDE';
+                    else if (/date/i.test(key)) obj[key] = new Date().toISOString();
+                    else if (/url/i.test(key)) obj[key] = 'https://example.com';
+                    else obj[key] = 'Sample';
+                }
+                return Object.keys(obj).length ? obj : { text: 'Hello from LMS' };
+            } catch {
+                return { text: 'Hello from LMS' };
+            }
+        }
+
+        function handleChannelChange() {
+            if (!lmsChannelSel || !lmsPayloadTa) return;
+            const idx = parseInt(String(lmsChannelSel.value || '-1'), 10);
+            if (!Number.isFinite(idx) || idx < 0 || idx >= lmsChannels.length) {
+                lmsPayloadTa.value = '';
+                updateCopyEnabled();
+                return;
+            }
+            const channel = lmsChannels[idx];
+            const sample = generateSamplePayload(channel);
+            try {
+                lmsPayloadTa.value = JSON.stringify(sample, null, 2);
+                appendLmsLog(`Sample payload generated for ${channel.fullName || channel.developerName}`);
+            } catch {
+                lmsPayloadTa.value = '{ "text": "Hello from LMS" }';
+            }
+            updateCopyEnabled();
+        }
+
+        // Copy button behavior with tooltip/state feedback
+        if (lmsPayloadCopy) {
+            lmsPayloadCopy.addEventListener('click', async () => {
+                if (!lmsPayloadTa) return;
+                const text = String(lmsPayloadTa.value || '');
+                if (!text.trim()) return;
+                try {
+                    await navigator.clipboard.writeText(text);
+                    const prevTitle = lmsPayloadCopy.title;
+                    lmsPayloadCopy.title = 'Copied!';
+                    lmsPayloadCopy.classList.add('copied');
+                    // brief visual feedback
+                    setTimeout(() => {
+                        lmsPayloadCopy.classList.remove('copied');
+                        lmsPayloadCopy.title = prevTitle || 'Copy sample payload';
+                    }, 900);
+                } catch {
+                    // Fallback: select and execCommand if clipboard API fails
+                    try {
+                        lmsPayloadTa.select();
+                        document.execCommand('copy');
+                        const prevTitle = lmsPayloadCopy.title;
+                        lmsPayloadCopy.title = 'Copied!';
+                        lmsPayloadCopy.classList.add('copied');
+                        setTimeout(() => {
+                            lmsPayloadCopy.classList.remove('copied');
+                            lmsPayloadCopy.title = prevTitle || 'Copy sample payload';
+                        }, 900);
+                    } catch { /* ignore */ }
+                }
+            });
+        }
+
+        // Keep copy button enabled state in sync with manual edits
+        if (lmsPayloadTa) {
+            lmsPayloadTa.addEventListener('input', updateCopyEnabled);
+        }
 
         if (lmsRefresh) {
-            lmsRefresh.addEventListener('click', () => {
-                if (lmsLog) lmsLog.innerHTML = '<div class="loading"><p>Refreshing LMS activity...</p></div>';
-                setTimeout(() => {
-                    if (lmsLog) lmsLog.innerHTML = '<div class="placeholder-note">No LMS activity detected (UI-only)</div>';
-                }, 800);
+            lmsRefresh.addEventListener('click', async () => {
+                if (lmsRefresh.disabled) return;
+                const orig = lmsRefresh.innerHTML; lmsRefresh.disabled = true; lmsRefresh.innerHTML = '<span aria-hidden="true">⏳</span>';
+                try { await loadChannels(true); } finally { lmsRefresh.innerHTML = orig; lmsRefresh.disabled = false; }
             });
+        }
+        if (lmsChannelSel) {
+            lmsChannelSel.addEventListener('change', handleChannelChange);
         }
 
-        if (lmsPublish) {
-            lmsPublish.addEventListener('click', async () => {
-                if (lmsLog) lmsLog.innerHTML = '<div class="loading"><p>Publishing test message (UI-only)...</p></div>';
-                setTimeout(() => {
-                    if (lmsLog) lmsLog.innerHTML = '<div class="placeholder-note">Published test message (UI-only)</div>';
-                }, 600);
-            });
+        // Listen for tab switch requests to load LMS channels lazily
+        try { document.addEventListener('lms-load', () => { loadChannels(false); }); } catch {}
+
+        // Lazy load once when the LMS tab is first shown
+        // If tab is already active, trigger load now
+        if (document.querySelector('.tab-button.active')?.dataset.tab === 'lms') {
+            loadChannels(false);
         }
+
+        // Initialize copy state on load
+        updateCopyEnabled();
     }
 
     // Inline SVG icons for crisp rendering
@@ -1066,96 +1223,41 @@
             });
 
             return `
-        <div class="log-item">
-          <div class="log-header">
-            <div class="log-action">${escapeHtml(log.action)}</div>
-            <span class="log-category ${categoryClass}">${log.category}</span>
-          </div>
-          <div class="log-details">
-            <span class="log-detail-label">Section:</span>
-            <span>${escapeHtml(log.section)}</span>
-            <span class="log-detail-label">User:</span>
-            <span>${escapeHtml(log.user)}</span>
-            ${log.display ? `
-              <span class="log-detail-label">Details:</span>
-              <span>${escapeHtml(log.display)}</span>
-            ` : ''}
-            ${log.delegateUser ? `
-              <span class="log-detail-label">Delegate:</span>
-              <span>${escapeHtml(log.delegateUser)}</span>
-            ` : ''}
-          </div>
-          <div class="log-date">${formattedDate}</div>
-        </div>
-      `;
+                <div class="log-item ${categoryClass}">
+                    <div class="log-header">
+                        <span class="log-category">${log.category}</span>
+                        <span class="log-date">${formattedDate}</span>
+                    </div>
+                    <div class="log-body">
+                        <div class="log-action">${escapeHtml(log.action)}</div>
+                        <div class="log-section">${escapeHtml(log.section)}</div>
+                        <div class="log-user">${escapeHtml(log.user)}</div>
+                    </div>
+                </div>
+            `;
         }).join('');
 
         logsContainer.innerHTML = logsHTML;
     }
 
-    function handleSearch(e) {
-        const term = String(e?.target?.value || '').trim().toLowerCase();
-        applyFilters(term, categoryFilter ? categoryFilter.value : 'all');
-    }
-
-    function handleFilter(e) {
-        const category = String(e?.target?.value || 'all');
-        const term = searchInput ? String(searchInput.value || '').trim().toLowerCase() : '';
-        applyFilters(term, category);
-    }
-
-    function applyFilters(searchTerm, category) {
-        const tokens = String(searchTerm || '').split(/\s+/).filter(Boolean);
-
-        filteredLogs = allLogs.filter(log => {
-            const action = String(log.action || '').toLowerCase();
-            const section = String(log.section || '').toLowerCase();
-            const user = String(log.user || '').toLowerCase();
-            const display = String(log.display || '').toLowerCase();
-
-            if (category && category !== 'all' && String(log.category) !== String(category)) return false;
-
-            if (tokens.length === 0) return true;
-
-            const haystack = `${action} ${section} ${user} ${display}`;
-
-            return tokens.every(t => haystack.includes(t));
-        });
-
+    function handleSearch() {
+        const term = (searchInput && searchInput.value || '').toLowerCase();
+        filteredLogs = allLogs.filter(log =>
+            log.action.toLowerCase().includes(term) ||
+            log.section.toLowerCase().includes(term) ||
+            log.user.toLowerCase().includes(term)
+        );
         renderLogs();
     }
 
-    function handleExport() {
-        if (allLogs.length === 0) return;
-        const csv = convertToCSV(filteredLogs);
-        downloadCSV(csv, 'salesforce-audit-trail.csv');
-    }
-
-    function convertToCSV(logs) {
-        const headers = ['Date', 'Action', 'Section', 'Category', 'User', 'Details', 'Delegate User'];
-        const rows = logs.map(log => {
-            const date = new Date(log.date).toISOString();
-            return [date, log.action, log.section, log.category, log.user, log.display, log.delegateUser];
-        });
-
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-        ].join('\n');
-
-        return csvContent;
-    }
-
-    function downloadCSV(csvContent, filename) {
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', filename);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    function handleFilter() {
+        const category = categoryFilter ? categoryFilter.value : 'all';
+        if (category === 'all') {
+            filteredLogs = [...allLogs];
+        } else {
+            filteredLogs = allLogs.filter(log => log.category === category);
+        }
+        renderLogs();
     }
 
     function enableControls() {
@@ -1164,17 +1266,93 @@
         if (exportBtn) exportBtn.disabled = false;
     }
 
-    function showError(message) {
-        if (logsContainer) logsContainer.innerHTML = `<div class="error">${escapeHtml(message)}</div>`;
-    }
-
     function showEmpty() {
-        if (logsContainer) logsContainer.innerHTML = '<div class="empty-state"><p>No audit trail records found for the last 6 months</p></div>';
+        if (!logsContainer) return;
+        logsContainer.innerHTML = '<div class="empty-state"><p>No audit logs found</p></div>';
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    function showError(message) {
+        if (!logsContainer) return;
+        logsContainer.innerHTML = `<div class="error">${escapeHtml(message)}</div>`;
     }
+
+    function escapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // Export currently filtered logs to CSV
+    function handleExport() {
+        try {
+            const rows = Array.isArray(filteredLogs) ? filteredLogs : [];
+            if (!rows.length) {
+                // No data to export; provide subtle feedback by disabling briefly
+                if (exportBtn) {
+                    const oldTitle = exportBtn.title;
+                    exportBtn.title = 'No data to export';
+                    exportBtn.disabled = true;
+                    setTimeout(() => { exportBtn.disabled = false; exportBtn.title = oldTitle || 'Export CSV'; }, 800);
+                }
+                return;
+            }
+
+            const headers = [
+                'Date',
+                'User',
+                'Section',
+                'Action',
+                'Category',
+                'Display',
+                'Delegate User',
+                'Id'
+            ];
+
+            function toCsvValue(v) {
+                const s = String(v == null ? '' : v);
+                return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+            }
+
+            const lines = [];
+            lines.push(headers.join(','));
+            for (const log of rows) {
+                const d = new Date(log.date);
+                const dateStr = isNaN(d.getTime()) ? String(log.date || '') : d.toISOString();
+                lines.push([
+                    toCsvValue(dateStr),
+                    toCsvValue(log.user),
+                    toCsvValue(log.section),
+                    toCsvValue(log.action),
+                    toCsvValue(log.category),
+                    toCsvValue(log.display || ''),
+                    toCsvValue(log.delegateUser || ''),
+                    toCsvValue(log.id || '')
+                ].join(','));
+            }
+
+            const csv = lines.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const fileName = `audit-trail-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.csv`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            // Append to ensure click works in all contexts
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+            // Best-effort feedback without disrupting UI layout
+            if (logsContainer) logsContainer.insertAdjacentHTML('afterbegin', `<div class="error">${escapeHtml('Export failed: ' + String(e))}</div>`);
+        }
+    }
+
 })();

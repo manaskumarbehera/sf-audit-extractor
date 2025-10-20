@@ -141,6 +141,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, totalSize: result.totalSize, data: result.records };
             }
 
+            if (is('LMS_FETCH_CHANNELS')) {
+                const rawUrl =
+                    sanitizeUrl(msg.instanceUrl) ||
+                    sanitizeUrl(msg.url) ||
+                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+                const sess = await getSalesforceSession(instanceUrl);
+                const sessionId = sess.sessionId || null;
+                if (!sessionId) return { success: false, error: 'Salesforce session not found. Log in and retry.' };
+
+                const channels = await fetchLmsChannels(instanceUrl, sessionId);
+                return { success: true, channels };
+            }
+
             return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL'] };
         } catch (e) {
             return { success: false, error: String(e) };
@@ -306,4 +321,76 @@ async function fetchAuditTrail(instanceUrl, sessionId, opts = {}) {
     }
 
     return { totalSize: records.length, records };
+}
+
+
+async function fetchLmsChannels(instanceUrl, sessionId) {
+    const base = String(instanceUrl || '').replace(/\/+$/, '');
+    if (!base || !/^https:\/\//i.test(base)) throw new Error('Invalid instance URL');
+    const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
+
+    // Do NOT select Metadata in a multi-row query (it causes MALFORMED_QUERY)
+    const soql = 'SELECT Id, DeveloperName, MasterLabel, NamespacePrefix FROM LightningMessageChannel ORDER BY DeveloperName';
+    const url = `${base}/services/data/${API_VERSION}/tooling/query?q=${encodeURIComponent(soql)}`;
+    const res = await fetch(url, { method: 'GET', headers, credentials: 'omit' });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Tooling query failed (${res.status}): ${text || res.statusText}`);
+    }
+    const data = await res.json();
+    const items = Array.isArray(data.records) ? data.records : [];
+
+    // Fetch per-channel Metadata with limited concurrency
+    const metas = await fetchChannelMetas(base, headers, items, 5);
+
+    return items.map((r, idx) => {
+        const meta = metas[idx] || {};
+        const lmfs = Array.isArray(meta.lightningMessageFields) ? meta.lightningMessageFields : [];
+        const fields = lmfs
+            .map((f) => ({
+                name: f.name || f.fieldName || f.fullName || '',
+                description: f.description || ''
+            }))
+            .filter((f) => !!f.name);
+
+        return {
+            id: r.Id,
+            developerName: r.DeveloperName,
+            masterLabel: r.MasterLabel,
+            namespacePrefix: r.NamespacePrefix || null,
+            fullName: (r.NamespacePrefix ? r.NamespacePrefix + '__' : '') + r.DeveloperName,
+            fields
+        };
+    });
+
+    async function fetchChannelMetas(baseUrl, hdrs, channels, concurrency = 5) {
+        const out = new Array(channels.length).fill(null);
+        let i = 0;
+
+        async function worker() {
+            while (true) {
+                const idx = i++;
+                if (idx >= channels.length) break;
+                const id = channels[idx].Id;
+                try {
+                    const resp = await fetch(
+                        `${baseUrl}/services/data/${API_VERSION}/tooling/sobjects/LightningMessageChannel/${encodeURIComponent(id)}`,
+                        { method: 'GET', headers: hdrs, credentials: 'omit' }
+                    );
+                    if (resp.ok) {
+                        const json = await resp.json();
+                        out[idx] = json?.Metadata || null;
+                    } else {
+                        out[idx] = null;
+                    }
+                } catch {
+                    out[idx] = null;
+                }
+            }
+        }
+
+        const workers = Array.from({ length: Math.min(concurrency, channels.length) }, () => worker());
+        await Promise.all(workers);
+        return out;
+    }
 }

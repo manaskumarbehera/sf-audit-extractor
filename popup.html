@@ -140,15 +140,35 @@ File: `popup.html` (replace body content with this)
         </div>
 
         <div id="tab-lms" class="tab-pane" data-tab="lms" style="display: none;">
-            <div class="placeholder">
-                <p>Lightning Message Service view. Inspect Publish/Subscribe messages, LWC channels, and test messages here.</p>
-                <div class="lms-controls">
-                    <button id="lms-refresh" class="btn btn-secondary">Refresh</button>
-                    <button id="lms-test-publish" class="btn btn-primary">Publish Test Message</button>
+            <div class="audit-header">
+                <div class="audit-left">
+                    <div class="audit-controls">
+                        <button id="lms-refresh" class="icon-btn" aria-label="Fetch LMS Channels" title="Fetch LMS Channels">
+                            <span aria-hidden="true">↻</span>
+                        </button>
+                        <!-- No publish button: sample payload only -->
+                    </div>
                 </div>
-                <div id="lms-log" class="logs-container">
-                    <div class="placeholder-note">No LMS activity yet</div>
+                <div class="audit-right"></div>
+            </div>
+
+            <div class="filters" style="gap: 8px;">
+                <label class="filter-label" for="lms-channel">Channel:</label>
+                <select id="lms-channel" disabled>
+                    <option value="">Select a message channel</option>
+                </select>
+            </div>
+
+            <!-- Sample payload view (no publish) -->
+            <div class="search-box">
+                <div class="sample-payload-wrap">
+                    <textarea id="lms-payload" rows="6" placeholder='Sample payload will appear here after selecting a channel' aria-label="Sample LMS payload"></textarea>
+                    <button id="lms-payload-copy" class="icon-btn copy-overlay-btn" aria-label="Copy sample payload" title="Copy sample payload">📋</button>
                 </div>
+            </div>
+
+            <div id="lms-log" class="logs-container">
+                <div class="placeholder-note">No LMS activity yet</div>
             </div>
         </div>
 
