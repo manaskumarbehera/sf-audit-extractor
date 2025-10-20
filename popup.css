@@ -15,7 +15,7 @@ html, body { width: 100%; height: 100%; background: #ffffff; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* Use min-size for default popup while allowing larger pinned window to expand */
-  min-width: 600px;
+  min-width: 760px;
   min-height: 600px;
   width: 100%;
   height: 100%;
@@ -123,6 +123,7 @@ h1 {
 .search-box {
   padding: 12px 20px;
   border-bottom: 1px solid #e9ecef;
+  position: relative;
 }
 
 .search-box input, .search-box textarea {
@@ -144,6 +145,40 @@ h1 {
   background: #f8f9fa;
   cursor: not-allowed;
 }
+
+.suggestions {
+  margin-top: 6px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  max-height: 180px;
+  overflow-y: auto;
+  /* Ensure the dropdown appears above overlays and surrounding elements */
+  position: relative;
+  z-index: 1000;
+}
+
+.suggestion-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #212529;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #f1f3f5;
+  cursor: pointer;
+}
+
+.suggestion-item:last-child { border-bottom: none; }
+
+.suggestion-item:hover { background: #f8f9fa; }
+.suggestion-item.active { background: #e7f5ff; color: #0b7285; }
+/* Improve keyboard focus visibility */
+.suggestion-item:focus, .suggestion-item:focus-visible { outline: 2px solid #a5d8ff; background: #e7f5ff; color: #0b7285; }
+.suggestion-item .sub { float: right; color: #868e96; font-size: 11px; }
 
 .filters {
   padding: 12px 20px;
@@ -361,3 +396,105 @@ h1 {
 .sample-payload-wrap textarea { padding-right: 42px; }
 .copy-overlay-btn { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; }
 .copy-overlay-btn.copied { background: #e6fcf5; border-color: #c3fae8; color: #0ca678; }
+
+/* SOQL Builder layout */
+.soql-split { display: grid; grid-template-columns: 320px 6px 1fr; height: calc(100% - 52px); gap: 0; }
+.soql-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #e9ecef; background: #fff; }
+/* Revert to vertical stack: editor on top, results below */
+.soql-right { display: flex; flex-direction: column; min-width: 0; height: 100%; gap: 8px; padding: 0 8px; }
+/* Resizer between schema and editor */
+.soql-resizer { cursor: col-resize; background: #f1f3f5; }
+.soql-resizer:hover { background: #e9ecef; }
+/* Make editor, results, and metrics full width */
+.editor-box,
+#soql-results,
+#soql-metrics { width: 100%; margin-left: 0; margin-right: 0; }
+/* Ensure results panel styling remains tidy */
+#soql-results.logs-container { padding: 8px 12px; background: #fff; border: 1px solid #e9ecef; border-radius: 8px; }
+/* Responsive: collapse sidebar on very narrow screens */
+@media (max-width: 900px) {
+  .soql-split { grid-template-columns: 0 0 1fr; }
+  .soql-left, .soql-resizer { display: none; }
+}
+
+.schema-toolbar { display: flex; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #e9ecef; }
+.schema-meta { padding: 6px 10px; font-size: 12px; color: #6c757d; border-bottom: 1px solid #f1f3f5; display: flex; justify-content: space-between; }
+.schema-list { flex: 1; overflow-y: auto; padding: 6px 10px; display: grid; gap: 4px; }
+.schema-field { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 6px; padding: 6px; border: 1px solid #f1f3f5; border-radius: 6px; background: #fff; }
+.schema-field .name { font-weight: 600; font-size: 12px; color: #212529; }
+.schema-field .label { font-size: 11px; color: #6c757d; }
+.schema-field .type { font-size: 11px; color: #868e96; }
+.schema-children { border-top: 1px solid #e9ecef; padding: 8px 10px; }
+
+.editor-box { padding: 10px 12px; border-bottom: 1px solid #e9ecef; }
+.editor-wrap { position: relative; }
+#soql-input::placeholder { color: #adb5bd; opacity: 1; }
+
+/* Syntax highlight tokens for overlay */
+.editor-highlight .kw { color: #0b7285; font-weight: inherit; }
+.editor-highlight .fn { color: #9c36b5; font-weight: inherit; }
+.editor-highlight .str { color: #d9480f; }
+.editor-highlight .num { color: #d6336c; }
+
+/* Support the grid table used by SOQL renderer */
+.table-wrap table.grid, .table-wrap table.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.table-wrap table.grid th, .table-wrap table.grid td, .table-wrap table.data-table th, .table-wrap table.data-table td { padding: 6px 8px; border-bottom: 1px solid #f1f3f5; text-align: left; vertical-align: top; }
+.table-wrap table.grid th, .table-wrap table.data-table th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; cursor: pointer; user-select: none; }
+.table-wrap table.grid th .sort, .table-wrap table.data-table th .sort { margin-left: 6px; color: #adb5bd; font-size: 10px; }
+.table-wrap table.grid tr:hover td, .table-wrap table.data-table tr:hover td { background: #fcfcfd; }
+
+/* Filter inputs in header */
+input.grid-filter { width: 100%; padding: 4px 6px; border: 1px solid #e9ecef; border-radius: 4px; font-size: 11px; }
+
+/* Simple badge for relationship display */
+.badge { display: inline-block; padding: 2px 6px; margin-left: 6px; border-radius: 999px; font-size: 10px; color: #364fc7; background: #edf2ff; }
+
+.editor-highlight, #soql-input { tab-size: 4; -moz-tab-size: 4; font-variant-ligatures: none; }
+
+/* Make text selection visible in the transparent SOQL textarea and the overlay highlight */
+#soql-input::selection { background: rgba(1, 118, 211, 0.25); }
+.editor-highlight ::selection { background: rgba(1, 118, 211, 0.25); color: inherit; }
+/* Also ensure selection contrast across the app */
+::selection { background: rgba(1, 118, 211, 0.25); }
+
+.editor-highlight { position: absolute; inset: 0; pointer-events: none; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.5; padding: 10px 12px; /* align with textarea padding */ color: #212529; }
+#soql-input { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.5; background: transparent; position: relative; z-index: 1; /* let highlight show through */ color: transparent; caret-color: #111; }
+
+/* Clickable Salesforce Id in SOQL results */
+.sf-id {
+  color: #0b7285;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sf-id:hover {
+  color: #087f5b;
+}
+
+/* Floating context menu for Id actions */
+.id-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  padding: 6px;
+}
+.id-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #212529;
+  cursor: pointer;
+  text-align: left;
+}
+.id-menu .menu-item:hover,
+.id-menu .menu-item:focus { background: #f8f9fa; outline: none; }
+.id-menu .menu-sep { height: 1px; background: #f1f3f5; margin: 4px 6px; }

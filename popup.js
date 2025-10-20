@@ -1,6 +1,6 @@
 (function() {
     'use strict';
-    const API_VERSION = '56.0';
+    const API_VERSION = '65.0';
 
     let allLogs = [];
     let filteredLogs = [];
@@ -51,6 +51,26 @@
     let peLogPaused = false;
     let peLogAutoScrollEnabled = true;
 
+    // Add state for new features
+    let sobjectPrefixMap = null; // keyPrefix -> sObject API name
+    let sobjectApiNames = []; // list of sObject API names for suggestions
+    const sobjectFieldsCache = {}; // { [sObject]: string[] }
+    const sobjectDescribeCache = {}; // { [sObject]: full describe }
+    const relationshipTargetCache = {}; // { [sObject]: { [relName]: targetSObject } }
+
+    // Keyword/function sets for highlight and suggestions
+    const SOQL_KEYWORDS = ['SELECT','FROM','WHERE','GROUP BY','HAVING','ORDER BY','LIMIT','OFFSET','ASC','DESC','NULLS FIRST','NULLS LAST'];
+    const SOQL_FUNCTIONS = ['COUNT','SUM','AVG','MIN','MAX'];
+
+    // State for results grid
+    const soqlViewState = {
+        columns: [],
+        rows: [],
+        filteredRows: [],
+        sort: { key: null, dir: 1 },
+        filters: {}
+    };
+
     init();
 
     async function init() {
@@ -58,6 +78,10 @@
         attachLmsHandlers();
         attachPlatformHandlers();
         attachPinHandlers();
+        // New handlers
+        attachSoqlHandlers();
+        attachGraphqlHandlers();
+        attachRecordHandlers();
         await checkSalesforceConnection();
 
         // Try to refresh sessionInfo from a real Salesforce tab safely
@@ -236,7 +260,10 @@
             const label = {
                 sf: 'Audit Trails',
                 platform: 'Platform Events',
-                lms: 'Lightning Message Service'
+                lms: 'Lightning Message Service',
+                soql: 'SOQL Builder',
+                graphql: 'GraphQL',
+                record: 'Current Record'
             }[name] || 'Audit Trails';
             if (headerTitle) headerTitle.textContent = label;
 
@@ -252,6 +279,15 @@
             if (name === 'lms') {
                 try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
             }
+            if (name === 'record') {
+                // Try to auto-detect record Id when opening the tab if empty
+                try {
+                    const input = document.getElementById('record-id');
+                    if (input && !String(input.value || '').trim()) {
+                        autoDetectRecordIdToInput();
+                    }
+                } catch {}
+            }
         }
 
         buttons.forEach(btn => {
@@ -260,7 +296,7 @@
 
         // Choose initial tab: prefer location hash if present
         const hash = (location.hash || '').toLowerCase();
-        const initial = hash.includes('platform') ? 'platform' : hash.includes('lms') ? 'lms' : (document.querySelector('.tab-button.active')?.dataset.tab || 'sf');
+        const initial = hash.includes('platform') ? 'platform' : hash.includes('lms') ? 'lms' : hash.includes('soql') ? 'soql' : hash.includes('graphql') ? 'graphql' : hash.includes('record') ? 'record' : (document.querySelector('.tab-button.active')?.dataset.tab || 'sf');
         showTab(initial);
     }
 
@@ -1355,4 +1391,1181 @@
         }
     }
 
+    // SOQL Builder
+    function attachSoqlHandlers() {
+        const runBtn = document.getElementById('soql-run');
+        const input = document.getElementById('soql-input');
+        const results = document.getElementById('soql-results');
+        const suggestBox = document.getElementById('soql-suggestions');
+        const highlightEl = document.getElementById('soql-highlight');
+        const limitEl = document.getElementById('soql-limit');
+        const toolingEl = document.getElementById('soql-tooling');
+        const exportJsonBtn = document.getElementById('soql-export-json');
+        const exportXlsBtn = document.getElementById('soql-export-xls');
+        const metricsEl = document.getElementById('soql-metrics');
+        const schemaFieldsEl = document.getElementById('schema-fields');
+        const schemaChildrenEl = document.getElementById('schema-children-list');
+        const schemaObjectEl = document.getElementById('schema-object');
+        const schemaFieldCountEl = document.getElementById('schema-field-count');
+        const schemaSearchEl = document.getElementById('schema-search');
+        const schemaTypeFilterEl = document.getElementById('schema-type-filter');
+        const recentSel = document.getElementById('soql-recent-objects');
+        const resizer = document.getElementById('soql-resizer');
+        const split = document.querySelector('.soql-split');
+
+        let currentBaseObject = '';
+        let currentFields = [];
+        let currentChildren = [];
+
+        // If user focuses the editor and it is empty, start with SELECT
+        if (input) {
+            input.addEventListener('focus', () => {
+                if (!String(input.value || '').trim()) {
+                    input.value = 'SELECT ';
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+        }
+
+        // Lightweight validation and Run button gating
+        function validateSoql(q) {
+            const txt = String(q || '');
+            if (!/\bSELECT\b/i.test(txt)) return false;
+            const mFrom = txt.match(/\bFROM\s+([A-Za-z0-9_]+)/i);
+            return !!mFrom;
+        }
+        function updateRunState() {
+            const q = String(input?.value || '');
+            const valid = validateSoql(q);
+            if (runBtn) {
+                runBtn.disabled = !valid;
+                runBtn.title = valid ? 'Run SOQL (Ctrl/Cmd+Enter)' : 'Complete your query: SELECT ... FROM <Object>';
+            }
+            if (metricsEl) {
+                metricsEl.textContent = valid || !q.trim() ? '' : 'Incomplete query: add FROM <Object>';
+            }
+        }
+        // Initialize Run state once
+        updateRunState();
+        // Keep Run state in sync as user types
+        if (input) input.addEventListener('input', updateRunState);
+
+        // Restore persisted settings
+        (async () => {
+            try {
+                const { soqlSplitW, soqlRecent = [] } = await chrome.storage.local.get({ soqlSplitW: 320, soqlRecent: [] });
+                if (split && Number.isFinite(soqlSplitW)) split.style.gridTemplateColumns = `${soqlSplitW}px 6px 1fr`;
+                populateSelect(recentSel, soqlRecent, 'Recent objects');
+            } catch {}
+        })();
+
+        // Prefill default query template on load when possible and place cursor before LIMIT for easy WHERE typing
+        (async () => {
+            try {
+                if (!input) return;
+                if (String(input.value || '').trim()) return;
+                const baseObj = await detectSObjectFromActiveUrl();
+                if (!baseObj) return; // no fallback: behave like before
+                const lim = parseInt(String(limitEl?.value || '200'), 10) || 200;
+                const limitStr = ` LIMIT ${lim}`;
+                // Try to detect current record Id and prefill WHERE if available
+                const rid = await detectRecordIdFromActiveTab();
+                const whereStr = rid ? ` WHERE Id = '${rid}'` : '';
+                const template = `SELECT Id FROM ${baseObj}${whereStr}${limitStr}`;
+                input.value = template;
+                // place cursor: if WHERE present, put caret just before LIMIT; otherwise before LIMIT
+                const pos = template.indexOf(limitStr);
+                const caret = pos >= 0 ? pos : template.length;
+                input.setSelectionRange(caret, caret);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch { /* ignore prefill issues */ }
+        })();
+
+        // Editor: highlight/mirror
+        if (input && highlightEl) {
+            const syncHighlight = () => { highlightEl.innerHTML = highlightSoql(String(input.value || '')); highlightEl.scrollTop = input.scrollTop; highlightEl.scrollLeft = input.scrollLeft; };
+            input.addEventListener('input', syncHighlight);
+            input.addEventListener('scroll', () => { highlightEl.scrollTop = input.scrollTop; highlightEl.scrollLeft = input.scrollLeft; });
+            // Activate overlay mode so text is visible via the highlighter
+            const wrap = highlightEl.parentElement;
+            if (wrap && wrap.classList && wrap.classList.contains('editor-wrap')) {
+                wrap.classList.add('has-overlay');
+            }
+            // initial
+            setTimeout(syncHighlight, 0);
+        }
+
+        // ===== Schema sidebar: fetch, render, filter =====
+        function setSchemaHeader(name, count) {
+            if (schemaObjectEl) schemaObjectEl.textContent = name ? `Object: ${name}` : 'Object: —';
+            if (schemaFieldCountEl) schemaFieldCountEl.textContent = String(Number.isFinite(count) ? count : 0);
+        }
+
+        async function fetchSObjectDescribeCached(objName) {
+            if (!objName) return null;
+            if (sobjectDescribeCache[objName]) return sobjectDescribeCache[objName];
+            if (!sessionInfo || !sessionInfo.instanceUrl) return null;
+            try {
+                const base = sessionInfo.instanceUrl.replace(/\/+$/, '');
+                const url = `${base}/services/data/v${API_VERSION}/sobjects/${encodeURIComponent(objName)}/describe`;
+                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${getAccessToken()}`, 'Accept': 'application/json' } });
+                if (!res.ok) return null;
+                const data = await res.json();
+                sobjectDescribeCache[objName] = data;
+                // cache fields list
+                if (Array.isArray(data?.fields)) sobjectFieldsCache[objName] = data.fields;
+                // cache child relationship targets
+                if (Array.isArray(data?.childRelationships)) {
+                    const map = relationshipTargetCache[objName] || (relationshipTargetCache[objName] = {});
+                    for (const cr of data.childRelationships) {
+                        if (cr.relationshipName && cr.childSObject) map[cr.relationshipName] = cr.childSObject;
+                    }
+                }
+                return data;
+            } catch { return null; }
+        }
+
+        function renderSchemaFields(list, filterText, typeFilter) {
+            if (!schemaFieldsEl) return;
+            const term = String(filterText || '').toLowerCase();
+            const typeSel = String(typeFilter || '').toLowerCase();
+            const items = (Array.isArray(list) ? list : []).filter(f => {
+                const matchesText = !term || (String(f.name || '').toLowerCase().includes(term) || String(f.label || '').toLowerCase().includes(term));
+                const matchesType = !typeSel || String(f.type || '').toLowerCase() === typeSel;
+                return matchesText && matchesType;
+            });
+            const html = items.map(f => {
+                const type = String(f.type || '').toLowerCase();
+                const label = escapeHtml(f.label || f.name);
+                const isRef = type === 'reference';
+                const relToken = isRef ? getRelationshipTokenFromField(f) : '';
+                // Display name: for reference fields, show relationship token to guide users (Account. or Custom__r.)
+                const displayName = isRef && relToken ? escapeHtml(relToken + '.') : escapeHtml(f.name || '');
+                const dataVal = isRef && relToken ? `${relToken}.` : String(f.name || '');
+                return `<button class="schema-field${isRef ? ' is-ref' : ''}" type="button" data-field="${escapeHtml(dataVal)}" data-type="${escapeHtml(type)}">
+                    <span class="type">${escapeHtml(type)}</span>
+                    <span class="name">${displayName}</span>
+                    <span class="label">${label !== (f.name || '') ? label : ''}</span>
+                </button>`;
+            }).join('');
+            schemaFieldsEl.innerHTML = html || '<div class="empty-state">No matching fields</div>';
+            // clicks
+            schemaFieldsEl.querySelectorAll('.schema-field').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const fld = btn.getAttribute('data-field') || '';
+                    const q = String(input?.value || '');
+                    const cur = input?.selectionStart || 0;
+                    const ctx = parseSoqlContext(q, cur);
+                    applySuggestionToQueryField(input, ctx, fld);
+                });
+            });
+        }
+
+        function renderSchemaChildren(list) {
+            if (!schemaChildrenEl) return;
+            const items = (Array.isArray(list) ? list : []).filter(cr => cr.relationshipName);
+            if (!items.length) { schemaChildrenEl.innerHTML = ''; return; }
+            const html = `<div class="section-title" style="margin:8px 0;">Child Relationships</div>` +
+                items.map(cr => {
+                    const rel = escapeHtml(cr.relationshipName);
+                    const child = escapeHtml(cr.childSObject || '');
+                    return `<button type="button" class="schema-field" data-rel="${rel}">
+                        <span class="type">rel</span>
+                        <span class="name">${rel}</span>
+                        <span class="label">${child}</span>
+                    </button>`;
+                }).join('');
+            schemaChildrenEl.innerHTML = html;
+            schemaChildrenEl.querySelectorAll('.schema-field').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const rel = btn.getAttribute('data-rel');
+                    const q = String(input?.value || '');
+                    const cur = input?.selectionStart || 0;
+                    const ctx = parseSoqlContext(q, cur);
+                    insertSubqueryIntoSelect(input, ctx, rel);
+                });
+            });
+        }
+
+        function updateTypeFilterOptions(fields) {
+            if (!schemaTypeFilterEl) return;
+            const types = new Set();
+            (Array.isArray(fields) ? fields : []).forEach(f => { if (f.type) types.add(String(f.type)); });
+            const opts = ['<option value="">All types</option>'].concat(Array.from(types).sort().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`));
+            schemaTypeFilterEl.innerHTML = opts.join('');
+        }
+
+        // Compute the relationship token for a reference field: standard => RelationshipName; custom => Custom__r
+        function getRelationshipTokenFromField(field) {
+            try {
+                if (!field || String(field.type || '').toLowerCase() !== 'reference') return '';
+                // Prefer relationshipName from describe. It is already correct (standard or Custom__r)
+                if (field.relationshipName) return String(field.relationshipName);
+                const name = String(field.name || '');
+                const isCustom = !!field.custom;
+                if (/Id$/i.test(name)) {
+                    return name.replace(/Id$/i, '') + (isCustom && !/__r$/i.test(name) ? '' : '');
+                }
+                if (isCustom && /__c$/i.test(name)) {
+                    return name.replace(/__c$/i, '__r');
+                }
+                // Fallback: return name without trailing Id
+                return name.replace(/Id$/i, '');
+            } catch { return ''; }
+        }
+
+        async function updateSchemaForBaseObject(objName) {
+            currentBaseObject = objName || '';
+            if (!currentBaseObject) {
+                setSchemaHeader('', 0);
+                if (schemaFieldsEl) schemaFieldsEl.innerHTML = '';
+                if (schemaChildrenEl) schemaChildrenEl.innerHTML = '';
+                return;
+            }
+            const desc = await fetchSObjectDescribeCached(currentBaseObject);
+            const fields = Array.isArray(desc?.fields) ? desc.fields : [];
+            const children = Array.isArray(desc?.childRelationships) ? desc.childRelationships : [];
+            currentFields = fields;
+            currentChildren = children;
+            setSchemaHeader(currentBaseObject, fields.length);
+            updateTypeFilterOptions(fields);
+            renderSchemaFields(fields, schemaSearchEl?.value || '', schemaTypeFilterEl?.value || '');
+            renderSchemaChildren(children);
+        }
+
+        if (schemaSearchEl) schemaSearchEl.addEventListener('input', () => {
+            renderSchemaFields(currentFields, schemaSearchEl.value, schemaTypeFilterEl?.value || '');
+        });
+        if (schemaTypeFilterEl) schemaTypeFilterEl.addEventListener('change', () => {
+            renderSchemaFields(currentFields, schemaSearchEl?.value || '', schemaTypeFilterEl.value);
+        });
+
+        // ===== Suggestions: context-aware (keywords, objects, fields) =====
+        function getFromAreaInfo(q, cursor) {
+            const text = String(q || '');
+            const up = text.toUpperCase();
+            const cur = Number.isFinite(cursor) ? cursor : text.length;
+            const idxFrom = up.lastIndexOf('FROM', cur);
+            if (idxFrom < 0 || idxFrom > cur) return { inFrom: false };
+            const afterFrom = idxFrom + 4;
+            // find next clause
+            const rest = up.slice(afterFrom);
+            const m = rest.match(/\b(USING\s+SCOPE|WHERE|WITH\s+SECURITY_ENFORCED|WITH\s+DATA\s+CATEGORY|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|FOR\s+(VIEW|REFERENCE|UPDATE)|ALL\s+ROWS)\b/);
+            const end = m ? (afterFrom + m.index) : text.length;
+            const inFrom = cur >= afterFrom && cur <= end;
+            return { inFrom, start: afterFrom, end };
+        }
+
+        function filterAndMap(items, needle, subFmt) {
+            const n = String(needle || '').toLowerCase();
+            const list = (Array.isArray(items) ? items : []).filter(v => String(v).toLowerCase().includes(n));
+            return list.slice(0, 50).map(v => ({ label: String(v), value: String(v), sub: subFmt ? subFmt(v) : '' }));
+        }
+
+        async function updateSuggestions() {
+            if (!input || !suggestBox) return;
+            const q = String(input.value || '');
+            const cur = input.selectionStart || 0;
+            const ctx = parseSoqlContext(q, cur);
+            const tokenObj = ctx.selectToken || ctx.generalToken;
+            const token = tokenObj?.text || '';
+
+            // Helper: dot-walk suggestions for reference relationships like Account.Name or Owner.Name
+            async function suggestDotWalk(baseObject, dottedToken, onPick) {
+                const parts = String(dottedToken || '').split('.');
+                if (parts.length < 2) return false;
+                const first = parts[0];
+                const partial = parts.slice(1).join('.') || '';
+                // resolve targets for first segment
+                const targets = await resolveReferenceTargets(baseObject, first);
+                if (!targets.length) return false;
+                // gather suggestions from target object fields
+                let items = [];
+                for (const t of targets) {
+                    const fieldsMeta = await getFieldsForObject(t.targetSObject);
+                    const fieldNames = (fieldsMeta || []).map(f => f.name);
+                    const filtered = fieldNames.filter(n => !partial || n.toLowerCase().includes(partial.toLowerCase()));
+                    const mapped = filtered.map(n => ({ label: `${first}.${n}`, value: `${first}.${n}`, sub: t.targetSObject }));
+                    items = items.concat(mapped);
+                }
+                if (!items.length) return false;
+                // de-dupe by value and cap at 50
+                const seen = new Set();
+                const unique = [];
+                for (const it of items) { if (!seen.has(it.value)) { seen.add(it.value); unique.push(it); } }
+                renderSuggestions(suggestBox, unique.slice(0, 50), onPick);
+                return true;
+            }
+
+            // FROM area: suggest objects
+            const fromInfo = getFromAreaInfo(q, cur);
+            if (fromInfo.inFrom) {
+                const objs = await ensureSObjectList();
+                const items = filterAndMap(objs, token);
+                return renderSuggestions(suggestBox, items, (val) => applySuggestionToQuery(input, val));
+            }
+            // In SELECT without a base object yet: still suggest FIELDS(...) and functions
+            if (ctx.inSelectArea && !ctx.baseObject) {
+                const fn = SOQL_FUNCTIONS.map(f => f + '()');
+                const apexFields = ['FIELDS(ALL)','FIELDS(STANDARD)','FIELDS(CUSTOM)'];
+                const items = filterAndMap(apexFields, token, ()=> 'apex').concat(filterAndMap(fn, token, ()=> 'fn')).concat(filterAndMap(SOQL_KEYWORDS, token));
+                return renderSuggestions(suggestBox, items, (val) => applySuggestionToQuery(input, val));
+            }
+            // In SELECT: suggest fields (with dot-walk for references)
+            if (ctx.inSelectArea && ctx.baseObject) {
+                // If token contains a dot, try dot-walk suggestions first
+                if (token && token.includes('.')) {
+                    const ok = await suggestDotWalk(ctx.baseObject, token, (val) => applySuggestionToQueryField(input, ctx, val));
+                    if (ok) return; // dot suggestions rendered
+                }
+                if (!sobjectFieldsCache[ctx.baseObject]) await fetchSObjectDescribeCached(ctx.baseObject);
+                const fieldMetas = (sobjectFieldsCache[ctx.baseObject] || []);
+                const fields = fieldMetas.map(f => f.name);
+                // Build relationship tokens for reference fields to show as Account. or Custom__r.
+                const relationshipTokens = fieldMetas
+                    .filter(f => String(f.type || '').toLowerCase() === 'reference')
+                    .map(f => getRelationshipTokenFromField(f))
+                    .filter(Boolean)
+                    .map(r => r + '.');
+                // Detect if cursor is immediately after a comma (ignoring spaces)
+                let afterComma = false;
+                if (tokenObj && typeof tokenObj.start === 'number') {
+                    const before = q.slice(0, tokenObj.start).replace(/\s+$/,'');
+                    const prevChar = before.slice(-1);
+                    afterComma = prevChar === ',';
+                }
+                const relItems = filterAndMap(relationshipTokens, token, () => 'rel');
+                if (afterComma) {
+                    // After a comma inside SELECT, show relationship tokens first, then fields
+                    const items = relItems.concat(filterAndMap(fields, token));
+                    return renderSuggestions(suggestBox, items, (val) => applySuggestionToQueryField(input, ctx, val));
+                } else {
+                    // Otherwise include functions, FIELDS(...), relationship tokens, then fields
+                    const fn = SOQL_FUNCTIONS.map(f => f + '()');
+                    const apexFields = ['FIELDS(ALL)','FIELDS(STANDARD)','FIELDS(CUSTOM)'];
+                    const items = filterAndMap(apexFields, token, ()=> 'apex')
+                        .concat(filterAndMap(fn, token, () => 'fn'))
+                        .concat(relItems)
+                        .concat(filterAndMap(fields, token));
+                    return renderSuggestions(suggestBox, items, (val) => applySuggestionToQueryField(input, ctx, val));
+                }
+            }
+            // In WHERE: suggest fields (prioritize reference fields and support dot-walk)
+            if (ctx.inWhereArea && ctx.baseObject) {
+                // Dot-walk in WHERE (e.g., Account.Name)
+                if (token && token.includes('.')) {
+                    const ok = await suggestDotWalk(ctx.baseObject, token, (val) => applySuggestionToQueryWhereField(input, ctx, val));
+                    if (ok) return;
+                }
+                if (!sobjectFieldsCache[ctx.baseObject]) await fetchSObjectDescribeCached(ctx.baseObject);
+                const meta = (sobjectFieldsCache[ctx.baseObject] || []);
+                const needle = String(token || '').toLowerCase();
+                // Build items with sublabels and prioritize reference fields first, then custom, then others
+                const allItems = meta
+                    .filter(f => {
+                        const nm = String(f.name || '').toLowerCase();
+                        const lb = String(f.label || '').toLowerCase();
+                        return !needle || nm.includes(needle) || lb.includes(needle);
+                    })
+                    .map(f => ({
+                        label: String(f.name || ''),
+                        value: String(f.name || ''),
+                        sub: (String(f.type || '').toLowerCase() === 'reference') ? 'reference' : (f.custom ? 'custom' : String(f.type || ''))
+                    }));
+                const rank = (it) => it.sub === 'reference' ? 0 : (it.sub === 'custom' ? 1 : 2);
+                allItems.sort((a, b) => {
+                    const ra = rank(a), rb = rank(b);
+                    if (ra !== rb) return ra - rb;
+                    return a.label.localeCompare(b.label);
+                });
+                const items = allItems.slice(0, 50);
+                return renderSuggestions(suggestBox, items, (val) => applySuggestionToQueryWhereField(input, ctx, val));
+            }
+            // Default: suggest keywords
+            const kws = SOQL_KEYWORDS.slice();
+            const items = filterAndMap(kws, token);
+            return renderSuggestions(suggestBox, items, (val) => applySuggestionToQuery(input, val));
+        }
+
+        async function showWhereValueSuggestions(input) {
+            const suggestBox = document.getElementById('soql-suggestions');
+            if (!input || !suggestBox) return;
+            const q = String(input.value || '');
+            const cur = input.selectionStart || 0;
+            const ctx = parseSoqlContext(q, cur);
+            const baseObj = ctx.baseObject;
+            const fieldToken = detectFieldNameBeforeCursor(q, cur);
+            const operator = detectOperatorNearCursor(q, cur);
+            if (!baseObj || !fieldToken || !operator) return;
+            if (!sobjectFieldsCache[baseObj]) await fetchSObjectDescribeCached(baseObj);
+            const meta = findFieldMeta(baseObj, fieldToken.split('.')[0]); // basic dotted notation support
+            const type = String(meta?.type || '').toLowerCase();
+
+            // Build suggestions
+            let items = [];
+            const push = (label, value, sub) => items.push({ label, value, sub: sub || '' });
+
+            const isIn = operator === 'IN' || operator === 'NOT IN';
+            const scaffoldIn = (vals) => `(${vals.join(', ')})`;
+
+            if (type === 'boolean') {
+                push('TRUE', 'TRUE', 'value');
+                push('FALSE', 'FALSE', 'value');
+            } else if (type === 'date' || type === 'datetime') {
+                // Salesforce date literals
+                push('TODAY', 'TODAY', 'literal');
+                push('YESTERDAY', 'YESTERDAY', 'literal');
+                push('LAST_N_DAYS:7', 'LAST_N_DAYS:7', 'literal');
+                push('THIS_MONTH', 'THIS_MONTH', 'literal');
+            } else if (type === 'int' || type === 'double' || type === 'currency' || type === 'percent') {
+                push('0', '0', 'number');
+                push('100', '100', 'number');
+            } else if (type === 'reference' || type === 'id') {
+                if (isIn) {
+                    push("('001XXXXXXXXXXXX','001YYYYYYYYYYYY')", "('001XXXXXXXXXXXX','001YYYYYYYYYYYY')", 'Ids');
+                    push("('a0123456789ABCDE','a01XXXXXXXXXXXX')", "('a0123456789ABCDE','a01XXXXXXXXXXXX')", 'Ids');
+                } else {
+                    push('001XXXXXXXXXXXX', '001XXXXXXXXXXXX', 'Id');
+                    push('a0123456789ABCDE', 'a0123456789ABCDE', 'Id');
+                }
+            } else if (type === 'multipicklist') {
+                // Operator likely INCLUDES/EXCLUDES
+                const vals = Array.isArray(meta?.picklistValues) ? meta.picklistValues.filter(v=>v?.active && v?.value).slice(0, 10) : [];
+                if (vals.length) {
+                    vals.forEach(v => push(String(v.value), quoteIfNeeded(String(v.value)), 'value'));
+                } else {
+                    push('ValueA', quoteIfNeeded('ValueA'), 'value');
+                    push('ValueB', quoteIfNeeded('ValueB'), 'value');
+                }
+            } else if (type === 'picklist') {
+                const vals = Array.isArray(meta?.picklistValues) ? meta.picklistValues.filter(v=>v?.active && v?.value).slice(0, 15) : [];
+                if (isIn) {
+                    if (vals.length >= 2) {
+                        const firstTwo = vals.slice(0, 2).map(v => quoteIfNeeded(String(v.value)));
+                        push(`(${firstTwo.join(', ')})`, `(${firstTwo.join(', ')})`, 'values');
+                    }
+                    push("('A','B')", "('A','B')", 'values');
+                } else {
+                    if (vals.length) vals.forEach(v => push(String(v.value), quoteIfNeeded(String(v.value)), 'value'));
+                    push('SomeValue', quoteIfNeeded('SomeValue'), 'value');
+                }
+            } else {
+                // Strings and others
+                if (operator === 'LIKE') {
+                    push("'abc%'", "'abc%'", 'pattern');
+                    push("'%abc%'", "'%abc%'", 'pattern');
+                    push("'%abc'", "'%abc'", 'pattern');
+                } else if (isIn) {
+                    push("('A','B')", "('A','B')", 'values');
+                } else {
+                    push('Sample', quoteIfNeeded('Sample'), 'value');
+                    if (type === 'email') push('user@example.com', quoteIfNeeded('user@example.com'), 'email');
+                    if (type === 'url') push('https://example.com', quoteIfNeeded('https://example.com'), 'url');
+                    if (type === 'phone') push('555-1234', quoteIfNeeded('555-1234'), 'phone');
+                }
+            }
+
+            if (!items.length) return;
+            renderSuggestions(suggestBox, items, (val) => applySuggestionToQueryWhereValue(input, val));
+        }
+
+        // ===== Missing helper implementations =====
+        async function ensureSObjectList() {
+            if (Array.isArray(sobjectApiNames) && sobjectApiNames.length) return sobjectApiNames;
+            if (!sessionInfo || !sessionInfo.instanceUrl) return [];
+            try {
+                const base = sessionInfo.instanceUrl.replace(/\/+$/, '');
+                const url = `${base}/services/data/v${API_VERSION}/sobjects`;
+                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${getAccessToken()}`, 'Accept': 'application/json' } });
+                if (!res.ok) return [];
+                const data = await res.json();
+                const list = Array.isArray(data?.sobjects) ? data.sobjects.map(o => o.name).filter(Boolean) : [];
+                sobjectApiNames = list.sort((a, b) => a.localeCompare(b));
+                // also prime prefix map if available
+                if (!sobjectPrefixMap) {
+                    const map = {};
+                    (Array.isArray(data?.sobjects) ? data.sobjects : []).forEach(o => {
+                        if (o.keyPrefix && o.name) map[o.keyPrefix] = o.name;
+                    });
+                    sobjectPrefixMap = map;
+                }
+                return sobjectApiNames;
+            } catch { return []; }
+        }
+
+        // New helpers: find field meta and resolve reference targets for dot-walk
+        function findFieldMeta(sObj, fieldOrRel) {
+            const obj = String(sObj || '');
+            const key = String(fieldOrRel || '');
+            const meta = sobjectFieldsCache[obj] || [];
+            const lower = key.toLowerCase();
+            // Try exact name, relationshipName, and name without trailing Id
+            let f = meta.find(x => String(x.name || '').toLowerCase() === lower);
+            if (f) return f;
+            f = meta.find(x => String(x.relationshipName || '').toLowerCase() === lower);
+            if (f) return f;
+            f = meta.find(x => String(x.name || '').replace(/id$/i,'').toLowerCase() === lower);
+            return f || null;
+        }
+
+        async function getFieldsForObject(objName) {
+            if (!objName) return [];
+            if (!sobjectFieldsCache[objName]) await fetchSObjectDescribeCached(objName);
+            return sobjectFieldsCache[objName] || [];
+        }
+
+        async function resolveReferenceTargets(baseObject, relToken) {
+            if (!baseObject || !relToken) return [];
+            if (!sobjectFieldsCache[baseObject]) await fetchSObjectDescribeCached(baseObject);
+            const meta = sobjectFieldsCache[baseObject] || [];
+            const lower = String(relToken).toLowerCase();
+            const matches = meta.filter(f => String(f.type || '').toLowerCase() === 'reference').filter(f => {
+                const name = String(f.name || '');
+                const rel = String(f.relationshipName || '');
+                return rel.toLowerCase() === lower || name.replace(/id$/i,'').toLowerCase() === lower || lower === (rel ? String(rel) : '').toLowerCase() || lower === name.toLowerCase();
+            });
+            const out = [];
+            for (const f of matches) {
+                const targets = Array.isArray(f.referenceTo) ? f.referenceTo : [];
+                for (const t of targets) out.push({ field: f.name, relationName: f.relationshipName || f.name.replace(/Id$/,''), targetSObject: t });
+            }
+            return out;
+        }
+
+        // ===== Additional missing utilities and wiring =====
+        function parseSoqlContext(q, cursor) {
+            const text = String(q || '');
+            const up = text.toUpperCase();
+            const cur = Number.isFinite(cursor) ? cursor : text.length;
+            const idxSelect = up.indexOf('SELECT');
+            const idxFrom = up.indexOf('FROM');
+            const idxWhere = up.indexOf('WHERE');
+            const clauseEndRegex = /\b(GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|FOR\s+(VIEW|REFERENCE|UPDATE)|WITH\b|ALL\s+ROWS|USING\s+SCOPE)\b/i;
+
+            let baseObject = '';
+            const mFrom = text.slice(idxFrom >= 0 ? idxFrom : 0).match(/\bFROM\s+([A-Za-z0-9_]+)/i);
+            if (mFrom && mFrom[1]) baseObject = mFrom[1];
+
+            const inSelectArea = idxSelect >= 0 && cur > idxSelect && (idxFrom < 0 || cur <= idxFrom);
+            let whereEnd = text.length;
+            const mEnd = clauseEndRegex.exec(text.slice(idxWhere >= 0 ? idxWhere : text.length));
+            if (mEnd && idxWhere >= 0) whereEnd = idxWhere + (mEnd.index || 0);
+            const inWhereArea = idxWhere >= 0 && cur >= idxWhere && cur <= whereEnd;
+
+            const selectToken = inSelectArea ? tokenAt(text, cur) : null;
+            const generalToken = !inSelectArea ? tokenAt(text, cur) : null;
+            return { inSelectArea, inWhereArea, baseObject, selectToken, generalToken };
+        }
+
+        function tokenAt(text, pos) {
+            const src = String(text || '');
+            const i = Math.max(0, Math.min(pos, src.length));
+            const isWord = (c) => /[A-Za-z0-9_.]/.test(c);
+            let s = i, e = i;
+            while (s > 0 && isWord(src[s - 1])) s--;
+            while (e < src.length && isWord(src[e])) e++;
+            const t = src.slice(s, e);
+            return { start: s, end: e, text: t };
+        }
+
+        function renderSuggestions(container, items, onPick) {
+            if (!container) return;
+            const arr = Array.isArray(items) ? items : [];
+            if (!arr.length) { container.innerHTML = ''; container.style.display = 'none'; container._items = []; container._onPick = null; return; }
+            container.innerHTML = arr.map((it, idx) => `
+                <div class="suggestion-item${idx===0?' selected':''}" role="option" data-index="${idx}" data-value="${escapeHtml(it.value)}">
+                    <span class="label">${escapeHtml(it.label)}</span>
+                    ${it.sub ? `<span class="sub">${escapeHtml(String(it.sub))}</span>` : ''}
+                </div>
+            `).join('');
+            container.style.display = 'block';
+            container._items = arr;
+            container._onPick = typeof onPick === 'function' ? onPick : null;
+            // Click handling
+            container.querySelectorAll('.suggestion-item').forEach((el) => {
+                el.addEventListener('mousedown', (e) => { // mousedown to avoid blur hiding before click
+                    e.preventDefault();
+                    const idx = parseInt(el.getAttribute('data-index') || '0', 10) || 0;
+                    acceptSuggestionAt(container, idx);
+                });
+            });
+        }
+
+        function acceptSuggestionAt(container, idx) {
+            try {
+                const items = container?._items || [];
+                const onPick = container?._onPick;
+                const it = items[idx];
+                if (!it) return hideSuggestions(container);
+                if (typeof onPick === 'function') onPick(it.value);
+            } finally {
+                hideSuggestions(container);
+            }
+        }
+
+        function hideSuggestions(container) {
+            if (!container) return;
+            container.innerHTML = '';
+            container.style.display = 'none';
+            container._items = [];
+            container._onPick = null;
+        }
+
+        function moveSuggestionSelection(container, dir) {
+            if (!container || container.style.display === 'none') return;
+            const items = Array.from(container.querySelectorAll('.suggestion-item'));
+            if (!items.length) return;
+            let idx = items.findIndex(el => el.classList.contains('selected'));
+            idx = (idx + dir + items.length) % items.length;
+            items.forEach(el => el.classList.remove('selected'));
+            items[idx].classList.add('selected');
+            items[idx].scrollIntoView({ block: 'nearest' });
+        }
+
+        function pickSelectedSuggestion(container) {
+            if (!container || container.style.display === 'none') return false;
+            const items = Array.from(container.querySelectorAll('.suggestion-item'));
+            const idx = items.findIndex(el => el.classList.contains('selected'));
+            if (idx >= 0) {
+                acceptSuggestionAt(container, idx);
+                return true;
+            }
+            return false;
+        }
+
+        function applySuggestionToQuery(input, value) {
+            const q = String(input.value || '');
+            const cur = input.selectionStart || 0;
+            const tok = tokenAt(q, cur);
+            const head = q.slice(0, tok.start);
+            const tail = q.slice(tok.end);
+            const next = head + value + tail;
+            const pos = (head + value).length;
+            input.value = next;
+            input.setSelectionRange(pos, pos);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function applySuggestionToQueryField(input, ctx, value) {
+            // Replace current token inside SELECT area
+            applySuggestionToQuery(input, value);
+        }
+
+        function applySuggestionToQueryWhereField(input, ctx, value) {
+            applySuggestionToQuery(input, value);
+            // After inserting a field in WHERE, show operator/value suggestions next
+            setTimeout(() => showWhereValueSuggestions(input), 0);
+        }
+
+        function applySuggestionToQueryWhereValue(input, value) {
+            const q = String(input.value || '');
+            const cur = input.selectionStart || 0;
+            const head = q.slice(0, cur);
+            const tail = q.slice(cur);
+            const ins = String(value || '');
+            const next = head + ins + tail;
+            const pos = (head + ins).length;
+            input.value = next;
+            input.setSelectionRange(pos, pos);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function detectFieldNameBeforeCursor(q, cur) {
+            try {
+                const text = String(q || '').slice(0, cur);
+                const m = text.match(/([A-Za-z0-9_.]+)\s*(=|!=|<=|>=|<|>|LIKE|INCLUDES|EXCLUDES|NOT\s+IN|IN)\s*$/i);
+                return m ? m[1] : '';
+            } catch { return ''; }
+        }
+
+        function detectOperatorNearCursor(q, cur) {
+            try {
+                const text = String(q || '').slice(0, cur);
+                const m = text.match(/(=|!=|<=|>=|<|>|LIKE|INCLUDES|EXCLUDES|NOT\s+IN|IN)\s*$/i);
+                return m ? m[1].toUpperCase().replace(/\s+/g, ' ') : '';
+            } catch { return ''; }
+        }
+
+        function quoteIfNeeded(val) {
+            if (/^'.*'$/.test(val)) return val;
+            if (/^[A-Za-z0-9_.-]+$/.test(val)) return `'${val}'`;
+            return `'${String(val).replace(/'/g, "''")}'`;
+        }
+
+        // Wire editor events
+        if (input) {
+            input.addEventListener('input', async () => {
+                // keep suggestions in sync
+                updateSuggestions();
+                // update schema panel when base object changes
+                const q = String(input.value || '');
+                const cur = input.selectionStart || 0;
+                const ctx = parseSoqlContext(q, cur);
+                if (ctx.baseObject && ctx.baseObject !== currentBaseObject) {
+                    await updateSchemaForBaseObject(ctx.baseObject);
+                    // persist recent objects
+                    try {
+                        const { soqlRecent = [] } = await chrome.storage.local.get({ soqlRecent: [] });
+                        const list = Array.isArray(soqlRecent) ? soqlRecent.slice() : [];
+                        const idx = list.indexOf(ctx.baseObject);
+                        if (idx !== -1) list.splice(idx, 1);
+                        list.unshift(ctx.baseObject);
+                        while (list.length > 10) list.pop();
+                        await chrome.storage.local.set({ soqlRecent: list });
+                        populateSelect(recentSel, list, 'Recent objects');
+                    } catch {}
+                }
+            });
+            input.addEventListener('keydown', (e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    runSoqlQuery();
+                    return;
+                }
+                if (!suggestBox || suggestBox.style.display === 'none') return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); moveSuggestionSelection(suggestBox, +1); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); moveSuggestionSelection(suggestBox, -1); }
+                else if (e.key === 'Enter' || e.key === 'Tab') {
+                    if (pickSelectedSuggestion(suggestBox)) { e.preventDefault(); }
+                } else if (e.key === 'Escape') { hideSuggestions(suggestBox); }
+            });
+            input.addEventListener('click', () => { updateSuggestions(); });
+            input.addEventListener('blur', () => { setTimeout(() => hideSuggestions(suggestBox), 120); });
+        }
+
+        if (recentSel) {
+            recentSel.addEventListener('change', async () => {
+                const val = String(recentSel.value || '').trim();
+                if (!val) return;
+                await updateSchemaForBaseObject(val);
+                const q = String(input?.value || '');
+                if (!/\bFROM\b/i.test(q)) {
+                    const tmpl = `SELECT Id FROM ${val} LIMIT ${parseInt(String(limitEl?.value || '200'), 10) || 200}`;
+                    input.value = tmpl;
+                    const pos = tmpl.length;
+                    input.setSelectionRange(pos, pos);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+        }
+
+        // Run button
+        if (runBtn) {
+            runBtn.addEventListener('click', () => runSoqlQuery());
+        }
+
+        async function runSoqlQuery() {
+            try {
+                const qRaw = String(input?.value || '').trim();
+                if (!qRaw) return;
+                if (!sessionInfo || !sessionInfo.instanceUrl) { renderError(results, 'Not connected to Salesforce'); return; }
+                const base = sessionInfo.instanceUrl.replace(/\/+$/, '');
+                const tooling = !!toolingEl?.checked;
+                // Ensure LIMIT if not present
+                let qFinal = qRaw;
+                if (!/\bLIMIT\b/i.test(qFinal)) {
+                    const lim = parseInt(String(limitEl?.value || '200'), 10) || 200;
+                    qFinal = qFinal + ` LIMIT ${lim}`;
+                }
+                const endpoint = tooling ? 'tooling/query' : 'query';
+                results.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Running SOQL...</p></div>';
+                const t0 = performance.now();
+                const res = await fetch(`${base}/services/data/v${API_VERSION}/${endpoint}?q=${encodeURIComponent(qFinal)}`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${getAccessToken()}`, 'Accept': 'application/json' },
+                    credentials: 'omit'
+                });
+                const text = await res.text();
+                let data; try { data = JSON.parse(text); } catch { data = { error: text }; }
+                const t1 = performance.now();
+                if (!res.ok) {
+                    const msg = data?.message || data?.[0]?.message || res.statusText || 'Query failed';
+                    renderError(results, `${res.status} ${escapeHtml(String(msg))}`);
+                    if (metricsEl) metricsEl.textContent = '';
+                    return;
+                }
+                const records = Array.isArray(data?.records) ? data.records : [];
+                renderSoqlResults(records);
+                if (metricsEl) {
+                    const t = Math.round(t1 - t0);
+                    const total = Number.isFinite(data?.totalSize) ? data.totalSize : records.length;
+                    metricsEl.textContent = `Rows: ${total} • Time: ${t} ms`;
+                }
+            } catch (e) {
+                renderError(results, String(e));
+            }
+        }
+
+        function renderSoqlResults(records) {
+            if (!results) return;
+            const rows = Array.isArray(records) ? records : [];
+            if (!rows.length) { results.innerHTML = '<div class="placeholder-note">No rows</div>'; return; }
+            // Determine columns from union of keys (skip attributes)
+            const colsSet = new Set();
+            rows.forEach(r => {
+                Object.keys(r || {}).forEach(k => { if (k !== 'attributes') colsSet.add(k); });
+            });
+            const cols = Array.from(colsSet);
+            const header = `<thead><tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>`;
+            const body = `<tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${formatCell(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+            results.innerHTML = `<div class="table-wrap"><table class="data-table">${header}${body}</table></div>`;
+            // Wire ID click handlers via delegation
+            setupIdDelegation(results);
+        }
+
+        function isSalesforceId(str) {
+            const s = String(str || '');
+            if (!/^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$/.test(s)) return false;
+            // Optionally validate known key prefixes if available for extra confidence
+            return true;
+        }
+
+        function setupIdDelegation(container) {
+            if (!container || container._idDelegation) return;
+            container._idDelegation = true;
+            let openMenuCleanup = null;
+
+            function hideMenu() {
+                const m = document.querySelector('.id-menu');
+                if (m) m.remove();
+                if (openMenuCleanup) {
+                    document.removeEventListener('click', openMenuCleanup, true);
+                    document.removeEventListener('keydown', onKeyDown, true);
+                    window.removeEventListener('resize', hideMenu, true);
+                    window.removeEventListener('scroll', hideMenu, true);
+                    openMenuCleanup = null;
+                }
+            }
+            function onKeyDown(e) {
+                if (e.key === 'Escape') hideMenu();
+            }
+
+            function showIdMenuForEl(el, event) {
+                hideMenu();
+                const id = el.getAttribute('data-id') || '';
+                if (!id) return;
+                const menu = document.createElement('div');
+                menu.className = 'id-menu';
+                menu.innerHTML = `
+                    <button type="button" class="menu-item" data-action="open">Open record in new tab</button>
+                    <div class="menu-sep"></div>
+                    <button type="button" class="menu-item" data-action="copy">Copy Id</button>
+                `;
+                document.body.appendChild(menu);
+                positionMenu(menu, event);
+                // Action handlers
+                menu.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('.menu-item');
+                    if (!btn) return;
+                    const action = btn.getAttribute('data-action');
+                    if (action === 'open') {
+                        await openRecordInNewTab(id);
+                    } else if (action === 'copy') {
+                        await copyText(id);
+                        // brief feedback
+                        btn.textContent = 'Copied!';
+                        setTimeout(() => { try { btn.textContent = 'Copy Id'; } catch {} }, 800);
+                    }
+                    hideMenu();
+                });
+                // Dismiss on outside click, ESC, resize, scroll
+                openMenuCleanup = (e) => { if (!menu.contains(e.target)) hideMenu(); };
+                setTimeout(() => {
+                    document.addEventListener('click', openMenuCleanup, true);
+                    document.addEventListener('keydown', onKeyDown, true);
+                    window.addEventListener('resize', hideMenu, true);
+                    window.addEventListener('scroll', hideMenu, true);
+                }, 0);
+            }
+
+            function positionMenu(menu, event) {
+                const vw = window.innerWidth, vh = window.innerHeight;
+                let x = 0, y = 0;
+                if (event && typeof event.clientX === 'number') {
+                    x = event.clientX; y = event.clientY;
+                } else {
+                    const rect = menu.getBoundingClientRect();
+                    x = Math.min(20, vw - rect.width - 8);
+                    y = Math.min(20, vh - rect.height - 8);
+                }
+                // place a bit offset from cursor
+                x += 6; y += 6;
+                // clamp after we know dimensions
+                document.body.appendChild(menu);
+                const rect = menu.getBoundingClientRect();
+                if (x + rect.width > vw - 8) x = vw - rect.width - 8;
+                if (y + rect.height > vh - 8) y = vh - rect.height - 8;
+                menu.style.left = `${Math.max(8, x)}px`;
+                menu.style.top = `${Math.max(8, y)}px`;
+            }
+
+            container.addEventListener('click', (e) => {
+                const t = e.target;
+                if (!(t instanceof Element)) return;
+                const idEl = t.closest('.sf-id');
+                if (idEl) {
+                    e.preventDefault();
+                    showIdMenuForEl(idEl, e);
+                }
+            });
+            container.addEventListener('keydown', (e) => {
+                const t = e.target;
+                if (!(t instanceof Element)) return;
+                if ((e.key === 'Enter' || e.key === ' ') && t.classList.contains('sf-id')) {
+                    e.preventDefault();
+                    showIdMenuForEl(t, null);
+                }
+            });
+        }
+
+        async function openRecordInNewTab(id) {
+            try {
+                let url = '';
+                // Prefer Lightning record URL if we can resolve sObject
+                const sobj = await sobjectNameFromId(id);
+                const base = sessionInfo?.instanceUrl?.replace(/\/+$/, '') || '';
+                if (sobj) url = `${base}/lightning/r/${encodeURIComponent(sobj)}/${encodeURIComponent(id)}/view`;
+                else url = `${base}/${encodeURIComponent(id)}`;
+                if (!url) return;
+                try {
+                    await chrome.tabs.create({ url });
+                } catch {
+                    // Fallback
+                    window.open(url, '_blank');
+                }
+            } catch { /* ignore */ }
+        }
+
+        async function copyText(text) {
+            const s = String(text || '');
+            try { await navigator.clipboard.writeText(s); return true; }
+            catch {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = s; ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.left = '-9999px';
+                    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+                    return true;
+                } catch { return false; }
+            }
+        }
+
+        function formatCell(v) {
+            if (v == null) return '';
+            if (typeof v === 'object') {
+                try { return `<pre class="cell-json">${escapeHtml(JSON.stringify(v))}</pre>`; } catch { return String(v); }
+            }
+            if (typeof v === 'string' && isSalesforceId(v)) {
+                const id = escapeHtml(v);
+                return `<span class="sf-id" data-id="${id}" role="button" tabindex="0" title="Open or copy">${id}</span>`;
+            }
+            if (typeof v === 'boolean') return v ? 'true' : 'false';
+            return escapeHtml(String(v));
+        }
+
+    }
+
+    function insertSubqueryIntoSelect(input, ctx, relationshipName) {
+        if (!input || !relationshipName) return;
+        const q = String(input.value || '');
+        const up = q.toUpperCase();
+        const idxSelect = up.indexOf('SELECT');
+        const idxFrom = up.indexOf('FROM');
+        if (idxSelect < 0) {
+            input.value = `SELECT (SELECT Id FROM ${relationshipName})` + (q ? ' ' + q : '');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            return;
+        }
+        const startSel = idxSelect + 6;
+        const endSel = (idxFrom > idxSelect) ? idxFrom : q.length;
+        const head = q.slice(0, startSel);
+        const body = q.slice(startSel, endSel);
+        const tail = q.slice(endSel);
+        const sep = body.trim() ? ',' : ' ';
+        const inserted = ` ${body.trim()}${sep} (SELECT Id FROM ${relationshipName}) `;
+        input.value = head + inserted + tail;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    async function detectSObjectFromActiveUrl() {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const url = tab?.url || '';
+            // Try record Id first
+            const rec = await detectRecordIdFromActiveTab();
+            if (rec) { const s = await sobjectNameFromId(rec); if (s) return s; }
+            // Lightning URL patterns
+            const m1 = url.match(/\/lightning\/(?:r|o)\/([A-Za-z0-9_]+)\//);
+            if (m1 && m1[1]) return m1[1];
+            return '';
+        } catch { return ''; }
+    }
+
+    // Minimal GraphQL handlers (UI tab already present)
+    function attachGraphqlHandlers() {
+        const runBtn = document.getElementById('gql-run');
+        const qEl = document.getElementById('gql-query');
+        const vEl = document.getElementById('gql-variables');
+        const out = document.getElementById('gql-results');
+        if (!runBtn) return;
+        runBtn.addEventListener('click', async () => {
+            if (!sessionInfo || !sessionInfo.instanceUrl) { renderError(out, 'Not connected to Salesforce'); return; }
+            const query = String(qEl?.value || '').trim();
+            if (!query) { renderError(out, 'Enter a GraphQL query'); return; }
+            let variables = null; const vtxt = String(vEl?.value || '').trim();
+            if (vtxt) { try { variables = JSON.parse(vtxt); } catch { renderError(out, 'Variables must be valid JSON'); return; } }
+            out.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Running GraphQL...</p></div>';
+            try {
+                const base = sessionInfo.instanceUrl.replace(/\/+$/, '');
+                const res = await fetch(`${base}/services/data/v${API_VERSION}/graphql`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${getAccessToken()}`, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, variables })
+                });
+                const text = await res.text();
+                let data; try { data = JSON.parse(text); } catch { throw new Error(text.slice(0,200)); }
+                if (!res.ok) throw new Error(data?.errors?.[0]?.message || res.statusText);
+                out.innerHTML = `<pre class="log-json">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+            } catch (e) {
+                renderError(out, String(e));
+            }
+        });
+    }
+
+    // Minimal Current Record handlers
+    function attachRecordHandlers() {
+        const detectBtn = document.getElementById('record-detect');
+        const fetchBtn = document.getElementById('record-fetch');
+        const idInput = document.getElementById('record-id');
+        const out = document.getElementById('record-results');
+        if (detectBtn) detectBtn.addEventListener('click', async () => { const id = await detectRecordIdFromActiveTab(); if (idInput && id) idInput.value = id; });
+        if (fetchBtn) fetchBtn.addEventListener('click', async () => {
+            const rid = String(idInput?.value || '').trim(); if (!rid) { renderError(out, 'Enter a record Id'); return; }
+            if (!sessionInfo || !sessionInfo.instanceUrl) { renderError(out, 'Not connected to Salesforce'); return; }
+            out.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Fetching record...</p></div>';
+            try {
+                const sObj = await sobjectNameFromId(rid);
+                if (!sObj) throw new Error('Unknown object for Id prefix');
+                const base = sessionInfo.instanceUrl.replace(/\/+$/, '');
+                const res = await fetch(`${base}/services/data/v${API_VERSION}/sobjects/${encodeURIComponent(sObj)}/${encodeURIComponent(rid)}`, { headers: { 'Authorization': `Bearer ${getAccessToken()}`, 'Accept': 'application/json' } });
+                if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+                const data = await res.json();
+                out.innerHTML = `<pre class="log-json">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+            } catch (e) { renderError(out, String(e)); }
+        });
+    }
+
+    async function detectRecordIdFromActiveTab() {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const url = tab?.url || '';
+            const m = url.match(/\/([a-zA-Z0-9]{15,18})(?:[\/?#]|$)/);
+            return m ? m[1] : '';
+        } catch { return ''; }
+    }
+
+    // Populate the Record Id input from the active tab if available and currently empty
+    function autoDetectRecordIdToInput() {
+        try {
+            const input = document.getElementById('record-id');
+            if (!input) return;
+            const cur = String(input.value || '').trim();
+            if (cur) return;
+            detectRecordIdFromActiveTab().then((id) => { if (id && !String(input.value || '').trim()) input.value = id; });
+        } catch { /* ignore */ }
+    }
+
+    async function sobjectNameFromId(id) {
+        if (!id) return null; const prefix = String(id).slice(0, 3);
+        const map = await ensurePrefixMap();
+        return map[prefix] || null;
+    }
+
+    // ===== SOQL Builder base helpers (autocomplete, context, error UI, metadata caches) =====
+    // Note: Some advanced wrappers later in the file augment these base functions. Define them early so wrappers can extend.
+
+    // Lightweight error renderer used by multiple tabs
+    function renderError(container, message) {
+        if (!container) return;
+        container.innerHTML = `<div class="error">${escapeHtml(String(message || 'Error'))}</div>`;
+    }
+
+    // Produce minimal syntax-highlighted HTML for SOQL preview overlay
+    function highlightSoql(text) {
+        try {
+            const src = String(text || '');
+            const out = [];
+            let i = 0;
+            while (i < src.length) {
+                const ch = src[i];
+                if (ch === "'") {
+                    // Capture SOQL single-quoted string, with '' as escaped quote
+                    let j = i + 1;
+                    while (j < src.length) {
+                        if (src[j] === "'" && src[j + 1] === "'") { j += 2; continue; }
+                        if (src[j] === "'") { j++; break; }
+                        j++;
+                    }
+                    const strLit = src.slice(i, j);
+                    out.push(`<span class="str">${escapeHtml(strLit)}</span>`);
+                    i = j;
+                    continue;
+                }
+                // Accumulate non-string chunk until next quote or end
+                let k = i;
+                while (k < src.length && src[k] !== "'") k++;
+                let chunk = src.slice(i, k);
+                // Escape first
+                chunk = escapeHtml(chunk);
+                // Functions: COUNT, SUM, AVG, MIN, MAX before keywords
+                chunk = chunk.replace(/\b(COUNT|SUM|AVG|MIN|MAX)\s*(?=\()/gi, '<span class="fn">$1</span>');
+                // Multi-word keywords
+                chunk = chunk.replace(/\bGROUP\s+BY\b/gi, '<span class="kw">GROUP BY</span>');
+                chunk = chunk.replace(/\bORDER\s+BY\b/gi, '<span class="kw">ORDER BY</span>');
+                chunk = chunk.replace(/\bNULLS\s+FIRST\b/gi, '<span class="kw">NULLS FIRST</span>');
+                chunk = chunk.replace(/\bNULLS\s+LAST\b/gi, '<span class="kw">NULLS LAST</span>');
+                // Single-word keywords
+                chunk = chunk.replace(/\b(SELECT|FROM|WHERE|HAVING|LIMIT|OFFSET|ASC|DESC|AND|OR|NOT|IN|LIKE|INCLUDES|EXCLUDES)\b/gi, '<span class="kw">$1</span>');
+                // Numbers
+                chunk = chunk.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="num">$&</span>');
+                out.push(chunk);
+                i = k;
+            }
+            return out.join('');
+        } catch { return escapeHtml(String(text || '')); }
+    }
+
+    // Build a keyPrefix->sObject map using the global sObjects list
+    async function ensurePrefixMap() {
+        if (sobjectPrefixMap && Object.keys(sobjectPrefixMap).length) return sobjectPrefixMap;
+        if (!sessionInfo || !sessionInfo.instanceUrl) return {};
+        try {
+            const base = sessionInfo.instanceUrl.replace(/\/+$/, '');
+            const url = `${base}/services/data/v${API_VERSION}/sobjects`;
+            const res = await fetch(url, { headers: { 'Authorization': `Bearer ${getAccessToken()}`, 'Accept': 'application/json' } });
+            if (!res.ok) return {};
+            const data = await res.json();
+            const map = {};
+            (Array.isArray(data?.sobjects) ? data.sobjects : []).forEach(o => {
+                if (o.keyPrefix && o.name) map[o.keyPrefix] = o.name;
+            });
+            sobjectPrefixMap = map;
+            return map;
+        } catch { return {}; }
+    }
+
+    // Populate a <select> with options
+    function populateSelect(sel, items, placeholder) {
+        try {
+            if (!sel) return;
+            const arr = Array.isArray(items) ? items.slice() : [];
+            const opts = [`<option value="">${escapeHtml(String(placeholder || 'Select'))}</option>`];
+            const seen = new Set();
+            arr.forEach(v => {
+                const s = String(v || '').trim();
+                if (!s || seen.has(s)) return;
+                seen.add(s);
+                opts.push(`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`);
+            });
+            sel.innerHTML = opts.join('');
+        } catch { /* ignore */ }
+    }
 })();

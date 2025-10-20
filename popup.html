@@ -17,6 +17,10 @@ File: `popup.html` (replace body content with this)
                 <button class="tab-button active" role="tab" aria-selected="true" data-tab="sf">Audit Trails</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="platform">Platform Events</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="lms">Lightning Message Service</button>
+                <!-- New tabs -->
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="soql">SOQL Builder</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="graphql">GraphQL</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="record">Current Record</button>
             </nav>
         </div>
 
@@ -169,6 +173,104 @@ File: `popup.html` (replace body content with this)
 
             <div id="lms-log" class="logs-container">
                 <div class="placeholder-note">No LMS activity yet</div>
+            </div>
+        </div>
+
+        <!-- SOQL Builder tab -->
+        <div id="tab-soql" class="tab-pane" data-tab="soql" style="display: none;">
+            <div class="audit-header">
+                <div class="audit-left">
+                    <div class="audit-controls" style="gap: 8px; align-items: center;">
+                        <button id="soql-run" class="icon-btn" aria-label="Run SOQL (Ctrl/Cmd+Enter)" title="Run SOQL (Ctrl/Cmd+Enter)"><span aria-hidden="true">▶</span></button>
+                        <label for="soql-limit" class="filter-label">Limit:</label>
+                        <input id="soql-limit" type="number" min="1" step="1" value="200" style="width: 84px;" aria-label="Limit" />
+                        <label class="toggle">
+                            <input id="soql-tooling" type="checkbox" /> Tooling
+                        </label>
+                        <button id="soql-export" class="icon-btn" aria-label="Export results to CSV" title="Export results to CSV" disabled><span aria-hidden="true">↓</span></button>
+                        <button id="soql-export-json" class="icon-btn" aria-label="Export results to JSON" title="Export results to JSON" disabled>{}</button>
+                        <button id="soql-export-xls" class="icon-btn" aria-label="Export results to Excel" title="Export results to Excel" disabled>⌁</button>
+                    </div>
+                </div>
+                <div class="audit-right"></div>
+            </div>
+
+            <div class="soql-split">
+                <!-- Schema sidebar -->
+                <aside class="soql-left" aria-label="SOQL Schema">
+                    <div class="schema-toolbar">
+                        <input id="schema-search" type="text" placeholder="Search fields" aria-label="Search fields" />
+                        <select id="schema-type-filter" aria-label="Filter by field type">
+                            <option value="">All types</option>
+                        </select>
+                        <select id="soql-recent-objects" aria-label="Recent objects">
+                            <option value="">Recent objects</option>
+                        </select>
+                    </div>
+                    <div class="schema-meta">
+                        <div id="schema-object">Object: —</div>
+                        <div><span id="schema-field-count">0</span> fields</div>
+                    </div>
+                    <div id="schema-fields" class="schema-list" aria-label="Fields list"></div>
+                    <div id="schema-children-list" class="schema-children" aria-label="Child relationships"></div>
+                </aside>
+
+                <!-- Resizer between schema and editor -->
+                <div id="soql-resizer" class="soql-resizer" role="separator" aria-label="Resize schema panel" aria-orientation="vertical" tabindex="0"></div>
+
+                <!-- Editor/results panel -->
+                <section class="soql-right">
+                    <div class="search-box editor-box">
+                        <div class="editor-wrap">
+                            <pre id="soql-highlight" class="editor-highlight" aria-hidden="true"></pre>
+                            <textarea id="soql-input" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 200" aria-label="SOQL query"></textarea>
+                        </div>
+                        <div id="soql-suggestions" class="suggestions" aria-label="SOQL suggestions" role="listbox"></div>
+                    </div>
+                    <div id="soql-results" class="logs-container">
+                        <div class="placeholder-note">Enter a SOQL query and click Run</div>
+                    </div>
+                    <div id="soql-metrics" class="metrics" aria-live="polite"></div>
+                </section>
+            </div>
+        </div>
+
+        <!-- GraphQL Query Builder tab -->
+        <div id="tab-graphql" class="tab-pane" data-tab="graphql" style="display: none;">
+            <div class="audit-header">
+                <div class="audit-left">
+                    <div class="audit-controls">
+                        <button id="gql-run" class="icon-btn" aria-label="Run GraphQL" title="Run GraphQL"><span aria-hidden="true">▶</span></button>
+                    </div>
+                </div>
+                <div class="audit-right"></div>
+            </div>
+            <div class="search-box" style="display: grid; gap: 8px;">
+                <textarea id="gql-query" rows="6" placeholder="query { uiapi { query { Account { edges { node { Id Name { value } } } } }" aria-label="GraphQL query"></textarea>
+                <textarea id="gql-variables" rows="3" placeholder='{"limit": 10}' aria-label="GraphQL variables (optional)"></textarea>
+            </div>
+            <div id="gql-results" class="logs-container">
+                <div class="placeholder-note">Enter a GraphQL query and click Run</div>
+            </div>
+        </div>
+
+        <!-- Current Record Utility tab -->
+        <div id="tab-record" class="tab-pane" data-tab="record" style="display: none;">
+            <div class="audit-header">
+                <div class="audit-left">
+                    <div class="audit-controls">
+                        <button id="record-detect" class="icon-btn" aria-label="Detect record Id from URL" title="Detect from URL"><span aria-hidden="true">🔍</span></button>
+                        <button id="record-fetch" class="icon-btn" aria-label="Fetch record" title="Fetch record"><span aria-hidden="true">▶</span></button>
+                    </div>
+                </div>
+                <div class="audit-right"></div>
+            </div>
+            <div class="filters" style="gap: 8px; align-items: center;">
+                <label class="filter-label" for="record-id">Record Id:</label>
+                <input id="record-id" type="text" placeholder="e.g. 001XXXXXXXXXXXX or 003..." aria-label="Salesforce record Id" />
+            </div>
+            <div id="record-results" class="logs-container">
+                <div class="placeholder-note">Enter a record Id or click the detect icon</div>
             </div>
         </div>
 
