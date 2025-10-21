@@ -118,3 +118,13 @@ MIT License - See LICENSE file for details
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development Workflow
+
+1. Fork the repository
+2. Make your changes
+3. Run validation: `npm run validate`
+4. Test your changes (see [TESTING.md](TESTING.md))
+5. Submit a Pull Request
+
+For help with JavaScript syntax errors, see [TROUBLESHOOTING_JS_ERRORS.md](TROUBLESHOOTING_JS_ERRORS.md).
