@@ -1,0 +1,28 @@
+{
+  "name": "trackforcepro",
+  "version": "1.0.1",
+  "description": "A Chrome extension that extracts and analyzes Salesforce Setup Audit Trail data",
+  "scripts": {
+    "validate": "node scripts/validate-syntax.js",
+    "lint": "node scripts/validate-syntax.js",
+    "test": "node scripts/validate-syntax.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/manaskumarbehera/sf-audit-extractor.git"
+  },
+  "keywords": [
+    "salesforce",
+    "audit-trail",
+    "chrome-extension",
+    "platform-events",
+    "soql",
+    "graphql"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {},
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}

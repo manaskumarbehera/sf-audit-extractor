@@ -11,6 +11,25 @@ Before testing, ensure:
 - [ ] Your user has "View Setup and Configuration" permission
 - [ ] API access is enabled for your profile
 
+## Developer Pre-Testing
+
+Before making code changes or deploying, run these validation steps:
+
+### Syntax Validation
+1. Run the syntax validator:
+   ```bash
+   npm run validate
+   # or
+   node scripts/validate-syntax.js
+   ```
+
+2. Check for syntax errors in all JavaScript files
+3. Verify all files pass validation
+
+Expected Result: All files should show green checkmarks with no syntax errors.
+
+See [TROUBLESHOOTING_JS_ERRORS.md](TROUBLESHOOTING_JS_ERRORS.md) for help with JavaScript syntax issues.
+
 ## Installation Testing
 
 ### Test 1: Extension Loads Successfully

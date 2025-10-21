@@ -63,6 +63,34 @@ GET /services/data/v65.0/query?q=SELECT+Id,Action,Section,CreatedDate,CreatedByI
 - Detects a record Id from the active Salesforce tab URL
 - Fetches and displays record details
 
+# Development Guide
+
+This guide is for developers who want to contribute to or modify the Salesforce Audit Trail Extractor extension.
+
+## Quick Start for Developers
+
+1. Clone the repository
+2. Run `npm run validate` to check for syntax errors
+3. Make your changes
+4. Test using the steps in [TESTING.md](TESTING.md)
+5. Submit a pull request
+
+## JavaScript Syntax Validation
+
+Before committing changes, always run:
+
+```bash
+npm run validate
+```
+
+This validates all JavaScript files for syntax errors and helps catch common issues like:
+- Unmatched parentheses, braces, or brackets
+- Incorrect IIFE patterns
+- Missing semicolons or commas
+- Other parse errors
+
+If you encounter syntax errors, see [TROUBLESHOOTING_JS_ERRORS.md](TROUBLESHOOTING_JS_ERRORS.md) for help.
+
 ## Project Structure
 
 ```
