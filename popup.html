@@ -19,8 +19,10 @@ File: `popup.html` (replace body content with this)
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="lms">Lightning Message Service</button>
                 <!-- New tabs -->
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="soql">SOQL Builder</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="graphql">GraphQL</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="record">Current Record</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="data">Data Explorer</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="settings">Settings</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="help">Help</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="about">About</button>
             </nav>
         </div>
 
@@ -30,6 +32,15 @@ File: `popup.html` (replace body content with this)
                 <span class="status-dot"></span>
                 <span class="status-text">Not connected</span>
             </div>
+            <label for="api-version" class="api-version-label" title="Salesforce API version">API</label>
+            <select id="api-version" class="api-version-select" aria-label="Salesforce API version">
+                <option value="65.0">65.0</option>
+                <option value="64.0">64.0</option>
+                <option value="63.0">63.0</option>
+                <option value="62.0">62.0</option>
+                <option value="61.0">61.0</option>
+                <option value="60.0">60.0</option>
+            </select>
             <button id="pe-pin" class="header-icon-btn" aria-label="Pin Platform Events window" title="Pin Platform Events window"></button>
         </div>
     </header>
@@ -40,7 +51,7 @@ File: `popup.html` (replace body content with this)
                 <div class="audit-left">
                     <div class="audit-controls">
                         <button id="fetch-btn" class="icon-btn" aria-label="Fetch Audit Logs" title="Fetch Audit Logs">
-                            <span aria-hidden="true">↻</span>
+                            <span aria-hidden="true">⟲</span>
                         </button>
                         <button id="export-btn" class="icon-btn" aria-label="Export CSV" title="Export CSV" disabled>
                             <span aria-hidden="true">↓</span>
@@ -96,7 +107,7 @@ File: `popup.html` (replace body content with this)
                 <div class="platform-left">
                     <div class="platform-controls">
                         <button id="pe-refresh" class="icon-btn" aria-label="Fetch Platform Events" title="Fetch Platform Events">
-                            <span aria-hidden="true">↻</span>
+                            <span aria-hidden="true">⟲</span>
                         </button>
                     </div>
                 </div>
@@ -132,6 +143,7 @@ File: `popup.html` (replace body content with this)
                                 <option value="event">Events</option>
                                 <option value="system">System</option>
                                 <option value="subscribe">Subscribe</option>
+                                <option value="unsubscribe">Unsubscribe</option>
                                 <option value="error">Errors</option>
                             </select>
                         </div>
@@ -148,7 +160,7 @@ File: `popup.html` (replace body content with this)
                 <div class="audit-left">
                     <div class="audit-controls">
                         <button id="lms-refresh" class="icon-btn" aria-label="Fetch LMS Channels" title="Fetch LMS Channels">
-                            <span aria-hidden="true">↻</span>
+                            <span aria-hidden="true">⟲</span>
                         </button>
                         <!-- No publish button: sample payload only -->
                     </div>
@@ -176,107 +188,84 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
 
-        <!-- SOQL Builder tab -->
+        <!-- New generic panes for additional tabs -->
         <div id="tab-soql" class="tab-pane" data-tab="soql" style="display: none;">
-            <div class="audit-header">
-                <div class="audit-left">
-                    <div class="audit-controls" style="gap: 8px; align-items: center;">
-                        <button id="soql-run" class="icon-btn" aria-label="Run SOQL (Ctrl/Cmd+Enter)" title="Run SOQL (Ctrl/Cmd+Enter)"><span aria-hidden="true">▶</span></button>
-                        <label for="soql-limit" class="filter-label">Limit:</label>
-                        <input id="soql-limit" type="number" min="1" step="1" value="200" style="width: 84px;" aria-label="Limit" />
-                        <label class="toggle">
-                            <input id="soql-tooling" type="checkbox" /> Tooling
-                        </label>
-                        <button id="soql-export" class="icon-btn" aria-label="Export results to CSV" title="Export results to CSV" disabled><span aria-hidden="true">↓</span></button>
-                        <button id="soql-export-json" class="icon-btn" aria-label="Export results to JSON" title="Export results to JSON" disabled>{}</button>
-                        <button id="soql-export-xls" class="icon-btn" aria-label="Export results to Excel" title="Export results to Excel" disabled>⌁</button>
-                    </div>
+            <div class="search-box">
+                <div class="toolbar" style="display:flex;gap:8px;align-items:center;">
+                    <select id="soql-obj" aria-label="SObject"><option>Loading objects...</option></select>
+                    <button id="soql-run" class="icon-btn" aria-label="Run SOQL" title="Run SOQL">▶</button>
+                    <button id="soql-clear" class="icon-btn" aria-label="Clear" title="Clear">🗑</button>
+                    <select id="soql-limit" class="compact" aria-label="Limit">
+                        <option value="200">Limit: 200</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                    </select>
+                    <label for="soql-auto-fill" class="toggle-small" title="Always replace editor with a basic query when the object changes">
+                        <input type="checkbox" id="soql-auto-fill" />
+                        <span>Auto-fill on change</span>
+                    </label>
+                    <label for="soql-debug-toggle" class="toggle-small" title="Show/hide debug overlay">
+                        <input type="checkbox" id="soql-debug-toggle" />
+                        <span>Debug</span>
+                    </label>
                 </div>
-                <div class="audit-right"></div>
+                <textarea id="soql-editor" rows="6" spellcheck="false" placeholder="Type SOQL: SELECT Id, Name FROM Account WHERE ..." aria-label="SOQL editor"></textarea>
+                <div id="soql-debug" class="soql-debug hidden" aria-live="polite" title="SOQL parsing debug"></div>
+                <ul id="soql-hints" class="hidden" role="listbox" tabindex="-1"></ul>
+                <div id="soql-errors" class="placeholder-note" aria-live="polite"></div>
             </div>
-
-            <div class="soql-split">
-                <!-- Schema sidebar -->
-                <aside class="soql-left" aria-label="SOQL Schema">
-                    <div class="schema-toolbar">
-                        <input id="schema-search" type="text" placeholder="Search fields" aria-label="Search fields" />
-                        <select id="schema-type-filter" aria-label="Filter by field type">
-                            <option value="">All types</option>
-                        </select>
-                        <select id="soql-recent-objects" aria-label="Recent objects">
-                            <option value="">Recent objects</option>
-                        </select>
-                    </div>
-                    <div class="schema-meta">
-                        <div id="schema-object">Object: —</div>
-                        <div><span id="schema-field-count">0</span> fields</div>
-                    </div>
-                    <div id="schema-fields" class="schema-list" aria-label="Fields list"></div>
-                    <div id="schema-children-list" class="schema-children" aria-label="Child relationships"></div>
-                </aside>
-
-                <!-- Resizer between schema and editor -->
-                <div id="soql-resizer" class="soql-resizer" role="separator" aria-label="Resize schema panel" aria-orientation="vertical" tabindex="0"></div>
-
-                <!-- Editor/results panel -->
-                <section class="soql-right">
-                    <div class="search-box editor-box">
-                        <div class="editor-wrap">
-                            <pre id="soql-highlight" class="editor-highlight" aria-hidden="true"></pre>
-                            <textarea id="soql-input" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 200" aria-label="SOQL query"></textarea>
-                        </div>
-                        <div id="soql-suggestions" class="suggestions" aria-label="SOQL suggestions" role="listbox"></div>
-                    </div>
-                    <div id="soql-results" class="logs-container">
-                        <div class="placeholder-note">Enter a SOQL query and click Run</div>
-                    </div>
-                    <div id="soql-metrics" class="metrics" aria-live="polite"></div>
-                </section>
+            <div id="soql-results" class="logs-container">
+                <div class="placeholder-note">No results yet</div>
             </div>
         </div>
-
-        <!-- GraphQL Query Builder tab -->
-        <div id="tab-graphql" class="tab-pane" data-tab="graphql" style="display: none;">
-            <div class="audit-header">
-                <div class="audit-left">
-                    <div class="audit-controls">
-                        <button id="gql-run" class="icon-btn" aria-label="Run GraphQL" title="Run GraphQL"><span aria-hidden="true">▶</span></button>
-                    </div>
+        <div id="tab-data" class="tab-pane" data-tab="data" style="display: none;">
+            <div class="logs-container">
+                <div class="placeholder">
+                    <p>Data Explorer</p>
+                    <p class="placeholder-note">Coming soon. Explore SObjects and fields.</p>
                 </div>
-                <div class="audit-right"></div>
-            </div>
-            <div class="search-box" style="display: grid; gap: 8px;">
-                <textarea id="gql-query" rows="6" placeholder="query { uiapi { query { Account { edges { node { Id Name { value } } } } }" aria-label="GraphQL query"></textarea>
-                <textarea id="gql-variables" rows="3" placeholder='{"limit": 10}' aria-label="GraphQL variables (optional)"></textarea>
-            </div>
-            <div id="gql-results" class="logs-container">
-                <div class="placeholder-note">Enter a GraphQL query and click Run</div>
             </div>
         </div>
-
-        <!-- Current Record Utility tab -->
-        <div id="tab-record" class="tab-pane" data-tab="record" style="display: none;">
-            <div class="audit-header">
-                <div class="audit-left">
-                    <div class="audit-controls">
-                        <button id="record-detect" class="icon-btn" aria-label="Detect record Id from URL" title="Detect from URL"><span aria-hidden="true">🔍</span></button>
-                        <button id="record-fetch" class="icon-btn" aria-label="Fetch record" title="Fetch record"><span aria-hidden="true">▶</span></button>
-                    </div>
+        <div id="tab-settings" class="tab-pane" data-tab="settings" style="display: none;">
+            <div class="logs-container">
+                <div class="placeholder">
+                    <p>Settings</p>
+                    <p class="placeholder-note">Configure preferences for the extension.</p>
                 </div>
-                <div class="audit-right"></div>
             </div>
-            <div class="filters" style="gap: 8px; align-items: center;">
-                <label class="filter-label" for="record-id">Record Id:</label>
-                <input id="record-id" type="text" placeholder="e.g. 001XXXXXXXXXXXX or 003..." aria-label="Salesforce record Id" />
+        </div>
+        <div id="tab-help" class="tab-pane" data-tab="help" style="display: none;">
+            <div class="logs-container">
+                <div class="placeholder">
+                    <p>Help</p>
+                    <p class="placeholder-note">Find docs, tips, and troubleshooting here.</p>
+                </div>
             </div>
-            <div id="record-results" class="logs-container">
-                <div class="placeholder-note">Enter a record Id or click the detect icon</div>
+        </div>
+        <div id="tab-about" class="tab-pane" data-tab="about" style="display: none;">
+            <div class="logs-container">
+                <div class="placeholder">
+                    <p>About</p>
+                    <p class="placeholder-note">Salesforce Audit Trail Extractor — version information and credits.</p>
+                </div>
             </div>
         </div>
 
     </section>
+    <footer class="app-footer" role="contentinfo">
+        <div class="footer-inner">
+            <span>Developed by </span>
+            <a href="https://www.linkedin.com/in/manas-behera-68607547/" target="_blank" rel="noopener noreferrer">Manas Behera</a>
+        </div>
+    </footer>
 </div>
 
+<script src="utils.js"></script>
+<script src="platform_helper.js"></script>
+<script src="lms_helper.js"></script>
+<script src="audit_helper.js"></script>
 <script src="popup.js"></script>
+<script type="module" src="soql_helper.js"></script>
 </body>
 </html>

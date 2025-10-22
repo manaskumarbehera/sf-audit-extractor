@@ -1,0 +1,383 @@
+{
+  "version": "1.0.0",
+  "description": "Context-aware SOQL autosuggestion rules",
+  "metadataMode": "dynamic",
+  "dynamic": {
+    "objects": true,
+    "fields": true,
+    "childRelationships": true,
+    "picklists": true
+  },
+  "tokens": {
+    "whitespace": "\\s+",
+    "identifier": "[A-Za-z_][A-Za-z0-9_]*",
+    "apiName": "[A-Za-z_][A-Za-z0-9_]*(__[cr])?",
+    "qualifiedField": "([A-Za-z_][A-Za-z0-9_]*\\.)*[A-Za-z_][A-Za-z0-9_]*",
+    "string": "'(?:[^'\\\\]|\\\\.)*'",
+    "number": "-?\\d+(?:\\.\\d+)?",
+    "dateLiteral": "(TODAY|YESTERDAY|TOMORROW|THIS_WEEK|LAST_WEEK|NEXT_WEEK|THIS_MONTH|LAST_MONTH|NEXT_MONTH|THIS_QUARTER|LAST_QUARTER|NEXT_QUARTER|THIS_YEAR|LAST_YEAR|NEXT_YEAR|LAST_N_DAYS:\\d+|NEXT_N_DAYS:\\d+|LAST_N_WEEKS:\\d+|NEXT_N_WEEKS:\\d+|LAST_N_MONTHS:\\d+|NEXT_N_MONTHS:\\d+|LAST_N_QUARTERS:\\d+|NEXT_N_QUARTERS:\\d+|LAST_N_YEARS:\\d+|NEXT_N_YEARS:\\d+)",
+    "boolean": "(TRUE|FALSE)",
+    "id": "[a-zA-Z0-9]{15,18}"
+  },
+  "keywords": [
+    "SELECT","FROM","WHERE","GROUP BY","HAVING","ORDER BY","LIMIT","OFFSET",
+    "ASC","DESC","NULLS FIRST","NULLS LAST"
+  ],
+  "functions": ["COUNT","SUM","AVG","MIN","MAX"],
+  "apexFieldMacros": ["FIELDS(ALL)","FIELDS(STANDARD)","FIELDS(CUSTOM)"],
+  "operatorsByType": {
+    "STRING": ["=","!=","LIKE","NOT LIKE","IN","NOT IN","INCLUDES","EXCLUDES","STARTS WITH","ENDS WITH","CONTAINS"],
+    "PICKLIST": ["=","!=","IN","NOT IN","INCLUDES","EXCLUDES"],
+    "BOOLEAN": ["="],
+    "NUMBER": ["=","!=","<","<=",">",">=","IN","NOT IN"],
+    "DATE": ["=","!=","<","<=",">",">=","IN","NOT IN"],
+    "DATETIME": ["=","!=","<","<=",">",">=","IN","NOT IN"],
+    "REFERENCE": ["=","!=","IN","NOT IN"],
+    "ID": ["=","!=","IN","NOT IN"],
+    "CURRENCY": ["=","!=","<","<=",">",">=","IN","NOT IN"]
+  },
+  "valueHintsByType": {
+    "STRING": ["'Sample'","'%abc%'","'abc%'","'%abc'"],
+    "PICKLIST": "USE_DYNAMIC_PICKLIST_VALUES",
+    "BOOLEAN": ["TRUE","FALSE"],
+    "NUMBER": ["0","100"],
+    "DATE": ["TODAY","YESTERDAY","LAST_N_DAYS:7","THIS_MONTH"],
+    "DATETIME": ["TODAY","LAST_N_DAYS:7"],
+    "REFERENCE": ["001XXXXXXXXXXXX","a0123456789ABCDE"],
+    "ID": ["001XXXXXXXXXXXX","a0123456789ABCDE"],
+    "EMAIL": ["'[user@example.com](mailto:user@example.com)'"],
+    "PHONE": ["'555-1234'"],
+    "URL": ["'[https://example.com](https://example.com)'"]
+  },
+  "stateMachine": {
+    "initial": "START",
+    "states": {
+      "START": {
+        "expect": ["SELECT"],
+        "suggestions": [
+          { "label": "SELECT", "insertText": "SELECT ", "kind": "keyword", "score": 1.0 }
+        ],
+        "next": ["AFTER_SELECT"]
+      },
+      "AFTER_SELECT": {
+        "expect": ["FIELD_LIST_OR_MACRO"],
+        "suggestionsProvider": "suggestSelectList",
+        "onAccept": { "if": "endsWithComma", "stay": true, "elseNext": "EXPECT_FROM" }
+      },
+      "EXPECT_FROM": {
+        "expect": ["FROM"],
+        "suggestions": [
+          { "label": "FROM", "insertText": " FROM ", "kind": "keyword", "score": 1.0 }
+        ],
+        "next": ["OBJECT_NAME"]
+      },
+      "OBJECT_NAME": {
+        "expect": ["SOBJECT"],
+        "suggestionsProvider": "suggestObjects",
+        "onAccept": "POST_FROM"
+      },
+      "POST_FROM": {
+        "expect": ["OPTIONAL_CLAUSES"],
+        "suggestions": [
+          { "label": "WHERE", "insertText": " WHERE ", "kind": "keyword", "score": 0.95 },
+          { "label": "GROUP BY", "insertText": " GROUP BY ", "kind": "keyword", "score": 0.8 },
+          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword", "score": 0.85 },
+          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword", "score": 0.7 },
+          { "label": "OFFSET", "insertText": " OFFSET ", "kind": "keyword", "score": 0.6 }
+        ],
+        "next": ["WHERE_CLAUSE","GROUP_BY","ORDER_BY","LIMIT","OFFSET","END"]
+      },
+      "WHERE_CLAUSE": {
+        "expect": ["FIELD_OR_PAREN"],
+        "suggestionsProvider": "suggestFilterFieldsOrParen",
+        "onAccept": "WHERE_OP"
+      },
+      "WHERE_OP": {
+        "expect": ["OPERATOR"],
+        "suggestionsProvider": "suggestOperatorsForField",
+        "onAccept": "WHERE_VALUE"
+      },
+      "WHERE_VALUE": {
+        "expect": ["VALUE_OR_SUBQUERY"],
+        "suggestionsProvider": "suggestValuesForField",
+        "onAccept": "WHERE_CONJ"
+      },
+      "WHERE_CONJ": {
+        "expect": ["AND_OR_MORE"],
+        "suggestions": [
+          { "label": "AND", "insertText": " AND ", "kind": "keyword", "score": 0.9 },
+          { "label": "OR", "insertText": " OR ", "kind": "keyword", "score": 0.85 },
+          { "label": "GROUP BY", "insertText": " GROUP BY ", "kind": "keyword", "score": 0.6 },
+          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword", "score": 0.65 },
+          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword", "score": 0.5 },
+          { "label": "OFFSET", "insertText": " OFFSET ", "kind": "keyword", "score": 0.4 }
+        ],
+        "next": ["WHERE_CLAUSE","GROUP_BY","ORDER_BY","LIMIT","OFFSET","END"]
+      },
+      "GROUP_BY": {
+        "expect": ["FIELD_LIST"],
+        "suggestionsProvider": "suggestGroupableFields",
+        "onAccept": "POST_GROUP_BY"
+      },
+      "POST_GROUP_BY": {
+        "expect": ["HAVING_OR_NEXT"],
+        "suggestions": [
+          { "label": "HAVING", "insertText": " HAVING ", "kind": "keyword", "score": 0.9 },
+          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword", "score": 0.7 },
+          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword", "score": 0.6 }
+        ],
+        "next": ["HAVING","ORDER_BY","LIMIT","END"]
+      },
+      "HAVING": {
+        "expect": ["AGGREGATE_FIELD"],
+        "suggestionsProvider": "suggestAggregateFilters",
+        "onAccept": "HAVING_OP"
+      },
+      "HAVING_OP": {
+        "expect": ["AGG_OPERATOR"],
+        "suggestions": [
+          { "label": "=", "insertText": " = " },
+          { "label": "!=", "insertText": " != " },
+          { "label": ">", "insertText": " > " },
+          { "label": ">=", "insertText": " >= " },
+          { "label": "<", "insertText": " < " },
+          { "label": "<=", "insertText": " <= " }
+        ],
+        "next": ["HAVING_VALUE"]
+      },
+      "HAVING_VALUE": {
+        "expect": ["NUMBER"],
+        "suggestionsProvider": "suggestAggregateValues",
+        "onAccept": "POST_HAVING"
+      },
+      "POST_HAVING": {
+        "expect": ["ORDER_OR_LIMIT"],
+        "suggestions": [
+          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword" },
+          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword" }
+        ],
+        "next": ["ORDER_BY","LIMIT","END"]
+      },
+      "ORDER_BY": {
+        "expect": ["ORDER_FIELD"],
+        "suggestionsProvider": "suggestOrderableFields",
+        "onAccept": "ORDER_DIR"
+      },
+      "ORDER_DIR": {
+        "expect": ["ASC_DESC_NULLS"],
+        "suggestions": [
+          { "label": "ASC", "insertText": " ASC" },
+          { "label": "DESC", "insertText": " DESC" },
+          { "label": "ASC NULLS FIRST", "insertText": " ASC NULLS FIRST" },
+          { "label": "ASC NULLS LAST", "insertText": " ASC NULLS LAST" },
+          { "label": "DESC NULLS FIRST", "insertText": " DESC NULLS FIRST" },
+          { "label": "DESC NULLS LAST", "insertText": " DESC NULLS LAST" }
+        ],
+        "next": ["ORDER_BY_MORE","LIMIT","OFFSET","END"]
+      },
+      "ORDER_BY_MORE": {
+        "expect": ["COMMA_OR_NEXT"],
+        "suggestions": [
+          { "label": ", next field", "insertText": ", " },
+          { "label": "LIMIT", "insertText": " LIMIT " },
+          { "label": "OFFSET", "insertText": " OFFSET " }
+        ],
+        "onAccept": { "if": "comma", "goto": "ORDER_BY", "elseNext": "END" }
+      },
+      "LIMIT": {
+        "expect": ["NUMBER"],
+        "suggestionsProvider": "suggestLimitValues",
+        "next": ["OFFSET","END"]
+      },
+      "OFFSET": {
+        "expect": ["NUMBER"],
+        "suggestionsProvider": "suggestOffsetValues",
+        "next": ["END"]
+      },
+      "END": {
+        "expect": [],
+        "suggestions": []
+      }
+    }
+  },
+  "suggestionProviders": {
+    "suggestSelectList": {
+      "strategy": "contextual",
+      "whenEmpty": [
+        { "label": "FIELDS(ALL)", "insertText": "FIELDS(ALL)", "kind": "function", "score": 1.0 },
+        { "label": "FIELDS(STANDARD)", "insertText": "FIELDS(STANDARD)", "kind": "function", "score": 0.95 },
+        { "label": "FIELDS(CUSTOM)", "insertText": "FIELDS(CUSTOM)", "kind": "function", "score": 0.9 }
+      ],
+      "also": "DYNAMIC_FIELDS_FOR_OBJECT_OR_RELATIONSHIP",
+      "allowAggregates": true,
+      "aggregateFunctions": ["COUNT","SUM","AVG","MIN","MAX"],
+      "examples": [
+        { "label": "COUNT()", "insertText": "COUNT()" },
+        { "label": "COUNT(Id)", "insertText": "COUNT(Id)" },
+        { "label": "SUM(Amount)", "insertText": "SUM(Amount)" }
+      ],
+      "separator": ", "
+    },
+    "suggestObjects": {
+      "strategy": "dynamicSchema",
+      "sourceHook": "getSObjects",
+      "displayField": "label",
+      "insertField": "apiName",
+      "filter": { "isQueryable": true },
+      "fallback": ["Account","Contact","Opportunity","Case","Lead"]
+    },
+    "suggestFilterFieldsOrParen": {
+      "strategy": "mixed",
+      "staticFirst": [
+        { "label": "(", "insertText": "(" }
+      ],
+      "dynamicNext": {
+        "sourceHook": "getFieldsForCurrentObject",
+        "filter": { "isFilterable": true },
+        "format": "{apiName}"
+      }
+    },
+    "suggestOperatorsForField": {
+      "strategy": "byFieldType",
+      "mappingHook": "getFieldType",
+      "operatorsByTypeRef": "operatorsByType"
+    },
+    "suggestValuesForField": {
+      "strategy": "byFieldType",
+      "typeHook": "getFieldType",
+      "valueHintsRef": "valueHintsByType",
+      "dynamicPicklistHook": "getPicklistValues",
+      "referenceLookupHook": "lookupReferenceIds",
+      "dateLiteralToken": "dateLiteral",
+      "wrapStringsInQuotes": true,
+      "autoLikePatterns": true
+    },
+    "suggestGroupableFields": {
+      "strategy": "dynamicSchema",
+      "sourceHook": "getFieldsForCurrentObject",
+      "filter": { "groupable": true },
+      "separator": ", "
+    },
+    "suggestAggregateFilters": {
+      "strategy": "aggregateOnly",
+      "fieldsHook": "getSelectedAggregatesOrGroupables"
+    },
+    "suggestAggregateValues": {
+      "strategy": "numericSamples",
+      "samples": ["1","10","100","1000"]
+    },
+    "suggestOrderableFields": {
+      "strategy": "dynamicSchema",
+      "sourceHook": "getFieldsForCurrentObject",
+      "filter": { "sortable": true },
+      "separator": ", "
+    },
+    "suggestLimitValues": {
+      "strategy": "numericSamples",
+      "samples": ["10","50","100","200","500","2000"]
+    },
+    "suggestOffsetValues": {
+      "strategy": "numericSamples",
+      "samples": ["0","10","100","500"]
+    }
+  },
+  "validators": {
+    "requireSelect": { "pattern": "^\\s*SELECT\\s+.+", "message": "Query must start with SELECT and include at least one field or function." },
+    "requireFrom": { "pattern": "FROM\\s+[A-Za-z_][A-ZaZ0-9_]*(?:__(?:c|kav|x))?", "message": "Missing FROM <ObjectName>." },
+    "groupByNeedsAggregate": { "rule": "if GROUP BY present, non-aggregated fields in SELECT must be grouped", "hook": "validateGroupBy" },
+    "havingNeedsGroupBy": { "rule": "HAVING requires GROUP BY", "hook": "validateHaving" },
+    "orderByFieldsExist": { "rule": "ORDER BY fields must be in schema", "hook": "validateOrderBy" },
+    "whereTypesMatch": { "rule": "WHERE value type must match field type", "hook": "validateWhereTypes" },
+    "limitIsInteger": { "pattern": "LIMIT\\s+\\d+(?:\\s+OFFSET\\s+\\d+)?\\b", "message": "LIMIT must be a positive integer." }
+  },
+  "ui": {
+    "debounceMs": 120,
+    "maxSuggestions": 12,
+    "allowTabToCommit": true,
+    "autoInsertSingleSuggestion": true,
+    "snippetPlaceholders": true
+  },
+  "snippets": [
+    {
+      "label": "SELECT • FROM • WHERE",
+      "insertText": "SELECT ${1:Id, Name} FROM ${2:Object} WHERE ${3:Field} ${4:=} ${5:Value}",
+      "kind": "snippet"
+    },
+    {
+      "label": "Aggregate with GROUP BY",
+      "insertText": "SELECT ${1:COUNT(Id)} ${2:, ${3:GroupField}} FROM ${4:Object} GROUP BY ${5:GroupField}${6: HAVING ${7:COUNT(Id)} ${8:> } ${9:10}}",
+      "kind": "snippet"
+    },
+    {
+      "label": "ORDER BY + LIMIT",
+      "insertText": "ORDER BY ${1:Field} ${2:ASC}${3: NULLS LAST} LIMIT ${4:100}",
+      "kind": "snippet"
+    }
+  ],
+  "intents": [
+    { "prefix": "sel", "action": "forceSelectStart", "insertText": "SELECT " },
+    { "prefix": "frm", "action": "forceFrom", "insertText": " FROM " },
+    { "prefix": "whr", "action": "forceWhere", "insertText": " WHERE " },
+    { "prefix": "grp", "action": "forceGroup", "insertText": " GROUP BY " },
+    { "prefix": "hav", "action": "forceHaving", "insertText": " HAVING " },
+    { "prefix": "ord", "action": "forceOrder", "insertText": " ORDER BY " },
+    { "prefix": "lim", "action": "forceLimit", "insertText": " LIMIT " }
+  ],
+  "autocompleteBehavior": {
+    "afterSelect": {
+      "insertSpace": true,
+      "transition": "AFTER_SELECT"
+    },
+    "afterFrom": {
+      "transition": "OBJECT_NAME"
+    },
+    "afterObject": {
+      "transition": "POST_FROM"
+    },
+    "afterWhereCondition": {
+      "autoOffer": ["AND","OR","GROUP BY","ORDER BY","LIMIT"]
+    }
+  },
+  "hooks": {
+    "getSObjects": "async () => [{ label, apiName, isQueryable }]",
+    "getFieldsForCurrentObject": "async (objectApiName) => [{ apiName, label, type, isFilterable, sortable, groupable }]",
+    "getPicklistValues": "async (objectApiName, fieldApiName) => ['Value1','Value2']",
+    "lookupReferenceIds": "async (objectApiName, fieldApiName, term) => [{ id:'001...', label:'Acme' }]",
+    "getFieldType": "async (objectApiName, fieldApiName) => 'STRING' | 'NUMBER' | 'DATE' | 'DATETIME' | 'BOOLEAN' | 'PICKLIST' | 'REFERENCE' | 'ID' | 'CURRENCY'",
+    "validateGroupBy": "({ selectFields, groupByFields }) => ({ ok: true, message: '' })",
+    "validateHaving": "({ hasGroupBy, hasHaving }) => ({ ok: hasGroupBy || !hasHaving, message: 'HAVING requires GROUP BY' })",
+    "validateOrderBy": "({ orderBy, fields }) => ({ ok: true, message: '' })",
+    "validateWhereTypes": "({ filters }) => ({ ok: true, message: '' })"
+  },
+  "ranking": {
+    "boosts": {
+      "recentFields": 0.3,
+      "idNamePriority": 0.25,
+      "filterableBoost": 0.15,
+      "startsWithPrefix": 0.2,
+      "relationshipDepthPenaltyPerDot": -0.05
+    }
+  },
+  "telemetry": {
+    "enabled": true,
+    "onAccept": "logAcceptedSuggestion(label, context)",
+    "onError": "logSoqlBuilderError(error, context)"
+  },
+  "defaults": {
+    "limit": 200,
+    "offset": 0
+  },
+  "examples": {
+    "flows": [
+      "User types: 'S' → suggests 'SELECT '",
+      "After fields + comma → suggests more fields and macros",
+      "User types ' FROM ' → object list appears",
+      "After object → suggests WHERE/GROUP BY/ORDER BY/LIMIT",
+      "WHERE → field list filtered by isFilterable, then operators based on type, then values (picklist/date literals/IDs etc.)"
+    ],
+    "goodQueries": [
+      "SELECT Id, Name FROM Account WHERE Industry IN ('Finance','Tech') ORDER BY Name ASC NULLS LAST LIMIT 100",
+      "SELECT COUNT(Id) cnt, OwnerId FROM Case WHERE IsClosed = TRUE GROUP BY OwnerId HAVING COUNT(Id) > 10 ORDER BY cnt DESC LIMIT 50"
+    ]
+  }
+}

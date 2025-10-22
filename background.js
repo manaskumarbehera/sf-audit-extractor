@@ -1,12 +1,9 @@
-// JavaScript
-// file: background.js
-// MV3 service worker: Salesforce detection, session reading, Tooling API fetch, and Platform Events pinning window support.
 
 const SALESFORCE_SUFFIXES = ['salesforce.com', 'force.com'];
 const API_VERSION = 'v65.0';
 
-// Track Platform Events pinned window
 let platformWindowId = null;
+let lastInstanceUrl = null;
 
 chrome.runtime.onInstalled.addListener(() => {
     if (!chrome.declarativeContent?.onPageChanged) return;
@@ -113,11 +110,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
 
             if (is('CONTENT_PING') || is('CONTENT_READY') || upper === 'CONTENTREADY') {
+                // keep track of last known instance URL for extension pages
+                try {
+                    const url = sanitizeUrl(msg?.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
+                    const norm = normalizeApiBase(url);
+                    if (norm) lastInstanceUrl = norm;
+                } catch {}
                 return { ok: true };
             }
 
             if (is('GET_SESSION_INFO') || is('GET_SESSION')) {
-                const url = sanitizeUrl(msg.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
+                const url = sanitizeUrl(msg.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 return await getSalesforceSession(url);
             }
 
@@ -125,7 +128,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const rawUrl =
                     sanitizeUrl(msg.instanceUrl) ||
                     sanitizeUrl(msg.url) ||
-                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
+                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) ||
+                    lastInstanceUrl ||
+                    (await findSalesforceOrigin());
 
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
@@ -145,15 +150,60 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const rawUrl =
                     sanitizeUrl(msg.instanceUrl) ||
                     sanitizeUrl(msg.url) ||
-                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
+                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) ||
+                    lastInstanceUrl ||
+                    (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) {
+                    return { success: false, error: 'Instance URL not detected.' };
+                }
+                const sess = await getSalesforceSession(instanceUrl);
+                const sessionId = sess.sessionId || null;
+                if (!sessionId) {
+                    return { success: false, error: 'Salesforce session not found. Log in and retry.' };
+                }
+
+                const channels = await fetchLmsChannels(instanceUrl, sessionId);
+                return { success: true, channels };
+            }
+
+            //  SOQL Builder schema and run actions
+            if (is('DESCRIBE_GLOBAL')) {
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
                 const sess = await getSalesforceSession(instanceUrl);
                 const sessionId = sess.sessionId || null;
-                if (!sessionId) return { success: false, error: 'Salesforce session not found. Log in and retry.' };
+                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
+                const data = await describeGlobal(instanceUrl, sessionId);
+                return { success: true, objects: data };
+            }
 
-                const channels = await fetchLmsChannels(instanceUrl, sessionId);
-                return { success: true, channels };
+            if (is('DESCRIBE_SOBJECT')) {
+                const name = (msg && msg.name) ? String(msg.name) : '';
+                if (!name) return { success: false, error: 'Missing sObject name' };
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+                const sess = await getSalesforceSession(instanceUrl);
+                const sessionId = sess.sessionId || null;
+                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
+                const describe = await describeSObject(instanceUrl, sessionId, name);
+                return describe ? { success: true, describe } : { success: false, error: 'Describe failed' };
+            }
+
+            if (is('RUN_SOQL')) {
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+                const sess = await getSalesforceSession(instanceUrl);
+                const sessionId = sess.sessionId || null;
+                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
+                const query = String(msg?.query || '').trim();
+                if (!query) return { success: false, error: 'Empty query' };
+                const limit = Number.isFinite(msg?.limit) ? Number(msg.limit) : null;
+                const result = await runSoql(instanceUrl, sessionId, query, limit);
+                return { success: true, totalSize: result.totalSize, records: result.records, done: true };
             }
 
             return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL'] };
@@ -234,6 +284,16 @@ function normalizeApiBase(url) {
         u.hostname = h.replace(/\.force\.com$/, '.salesforce.com');
     }
     return u.origin;
+}
+
+async function findSalesforceOrigin() {
+    try {
+        const tabs = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+        const t = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
+        return t?.url ? sanitizeUrl(t.url) : null;
+    } catch {
+        return null;
+    }
 }
 
 const cookies = {
@@ -394,3 +454,92 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
         return out;
     }
 }
+
+// New helpers for SOQL Builder
+async function getApiVersion() {
+    try {
+        const { apiVersion } = await chrome.storage.local.get({ apiVersion: '65.0' });
+        const v = String(apiVersion || '65.0');
+        return v.startsWith('v') ? v : ('v' + v);
+    } catch {
+        return API_VERSION; // fallback (already has leading 'v')
+    }
+}
+
+async function describeGlobal(instanceUrl, sessionId) {
+    const base = String(instanceUrl || '').replace(/\/+$/, '');
+    if (!base) throw new Error('Invalid instance URL');
+    const v = await getApiVersion();
+    const url = `${base}/services/data/${v}/sobjects`;
+    const res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' }, credentials: 'omit' });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Describe Global failed (${res.status}): ${text || res.statusText}`);
+    }
+    const data = await res.json();
+    const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
+    return list.map(s => ({ name: s.name, label: s.label || s.name, custom: !!s.custom, keyPrefix: s.keyPrefix || null }));
+}
+
+async function describeSObject(instanceUrl, sessionId, name) {
+    const base = String(instanceUrl || '').replace(/\/+$/, '');
+    if (!base) throw new Error('Invalid instance URL');
+    const v = await getApiVersion();
+    const url = `${base}/services/data/${v}/sobjects/${encodeURIComponent(name)}/describe`;
+    const res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' }, credentials: 'omit' });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Describe ${name} failed (${res.status}): ${text || res.statusText}`);
+    }
+    const json = await res.json();
+    // Keep as-is but trim heavy props; include relationshipName for relationship field suggestions
+    const fields = Array.isArray(json.fields)
+        ? json.fields.map(f => ({
+            name: f.name,
+            label: f.label || f.name,
+            type: f.type,
+            nillable: f.nillable,
+            referenceTo: f.referenceTo || [],
+            relationshipName: f.relationshipName || null
+        }))
+        : [];
+    return { name: json.name || name, label: json.label || name, fields };
+}
+
+async function runSoql(instanceUrl, sessionId, query, limit) {
+    const base = String(instanceUrl || '').replace(/\/+$/, '');
+    if (!base) throw new Error('Invalid instance URL');
+    const v = await getApiVersion();
+
+    let finalQuery = String(query || '').trim();
+    if (limit && !/\blimit\b/i.test(finalQuery)) {
+        finalQuery = `${finalQuery} LIMIT ${limit}`;
+    }
+
+    const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
+
+    const records = [];
+    let url = `${base}/services/data/${v}/query?q=${encodeURIComponent(finalQuery)}`;
+    let guard = 0;
+    const hardCap = Math.max(1, Number(limit || 200));
+
+    while (url && records.length < hardCap && guard < 50) {
+        guard++;
+        const res = await fetch(url, { method: 'GET', headers, credentials: 'omit' });
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(`Query failed (${res.status}): ${text || res.statusText}`);
+        }
+        const data = await res.json();
+        if (Array.isArray(data.records)) {
+            for (const r of data.records) {
+                records.push(r);
+                if (records.length >= hardCap) break;
+            }
+        }
+        url = data.nextRecordsUrl && records.length < hardCap ? `${base}${data.nextRecordsUrl}` : null;
+    }
+
+    return { totalSize: records.length, records };
+}
+
