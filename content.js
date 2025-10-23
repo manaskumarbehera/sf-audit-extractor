@@ -67,7 +67,7 @@
     // Ask background to read cookies and assemble session info.
     function getSessionInfoFromBackground() {
         const instanceUrl = getInstanceOrigin();
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             chrome.runtime.sendMessage(
                 {
                     action: 'GET_SESSION_INFO',

@@ -31,26 +31,81 @@ function splitCsvRespectingParens(s){
 }
 
 function extractClause(q, startKeyword, endKeywords){
-  const reStart = new RegExp(`\\b${startKeyword}\\b`, 'i');
-  const m = q.match(reStart);
-  if (!m) return null;
-  const start = m.index + m[0].length;
-  let rest = q.slice(start);
-  let earliest = rest.length;
-  for (const kw of endKeywords){
-    const idx = rest.search(new RegExp(`\\b${kw}\\b`, 'i'));
-    if (idx >= 0 && idx < earliest) earliest = idx;
+  // Scan the string and find the first occurrence of startKeyword at top-level
+  const Q = String(q || '');
+  const sk = startKeyword.toUpperCase();
+  const ekUpper = (endKeywords || []).map(k=>k.toUpperCase());
+  let depth = 0, inStr = false, quote = '';
+  let foundStartIndex = -1;
+  for (let i = 0; i < Q.length; i++){
+    const ch = Q[i];
+    if (inStr){
+      if (ch === quote && Q[i-1] !== '\\') inStr = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { inStr = true; quote = ch; continue; }
+    if (ch === '(') { depth++; continue; }
+    if (ch === ')') { depth = Math.max(0, depth-1); continue; }
+    if (depth === 0){
+      // check for keyword match at this position
+      const rest = Q.slice(i);
+      const m = rest.match(/^\s*([A-Za-z ]+)/);
+      if (m){
+        const token = m[1].trim().toUpperCase();
+        if (token === sk){ foundStartIndex = i + rest.indexOf(m[1]) + m[1].length; break; }
+      }
+      // alternatively check direct match of the keyword with word boundary
+      const direct = Q.slice(i).match(new RegExp(`^${startKeyword}\\b`, 'i'));
+      if (direct) { foundStartIndex = i + direct[0].length; break; }
+    }
   }
-  return rest.slice(0, earliest).trim();
+  if (foundStartIndex < 0) return null;
+  // Now find earliest endKeyword at top-level after foundStartIndex
+  let endIdx = Q.length;
+  depth = 0; inStr = false; quote = '';
+  for (let i = foundStartIndex; i < Q.length; i++){
+    const ch = Q[i];
+    if (inStr){
+      if (ch === quote && Q[i-1] !== '\\') inStr = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { inStr = true; quote = ch; continue; }
+    if (ch === '(') { depth++; continue; }
+    if (ch === ')') { depth = Math.max(0, depth-1); continue; }
+    if (depth === 0){
+      for (const ek of ekUpper){
+        const slice = Q.slice(i);
+        const m = slice.match(new RegExp(`^\\s*${ek}\\b`, 'i'));
+        if (m){ endIdx = i; i = Q.length; break; }
+      }
+    }
+  }
+  return Q.slice(foundStartIndex, endIdx).trim();
 }
 
 function parseQueryParts(query){
   const q = String(query||'');
   // FROM object
   let objectName = null;
-  const fromRe = /\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:__(?:c|kav|x))?)/i;
-  const fm = q.match(fromRe);
-  if (fm) objectName = fm[1];
+  // Find the first top-level FROM (ignore FROM inside parentheses / subqueries)
+  try {
+    let depth = 0, inStr = false, quote = '';
+    for (let i = 0; i < q.length; i++) {
+      const ch = q[i];
+      if (inStr) {
+        if (ch === quote && q[i-1] !== '\\') inStr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inStr = true; quote = ch; continue; }
+      if (ch === '(') { depth++; continue; }
+      if (ch === ')') { depth = Math.max(0, depth - 1); continue; }
+      if (depth === 0) {
+        const rest = q.slice(i);
+        const m = rest.match(/^FROM\s+([A-Za-z_][A-ZaZ0-9_]*(?:__(?:c|kav|x))?)/i);
+        if (m) { objectName = m[1]; break; }
+      }
+    }
+  } catch(e) { /* fallback: leave objectName null */ }
 
   // SELECT fields (raw)
   let selectRaw = extractClause(q, 'SELECT', ['FROM']);
@@ -103,7 +158,8 @@ function parseQueryParts(query){
     }
     pushBuf();
 
-    const simpleCondRe = /^([A-Za-z_][A-Za-z0-9_.]*?)\s*(=|!=|<|<=|>|>=|LIKE|NOT LIKE|IN|NOT IN|INCLUDES|EXCLUDES)\s*(.+)$/i;
+    // Match longer operator tokens first (NOT IN, INCLUDES, EXCLUDES) to avoid partial matches (e.g. IN in INCLUDES)
+    const simpleCondRe = /^([A-Za-z_][A-ZaZ0-9_.]*?)\s*(NOT\s+IN|INCLUDES|EXCLUDES|IN|NOT\s+LIKE|LIKE|!=|=|<=|<|>=|>)\s*(.+)$/i;
     for (const p of parts){
       const m = p.match(simpleCondRe);
       if (m) {
@@ -126,33 +182,103 @@ function validateSoql(query, describe){
   const errors = [];
   const parts = parseQueryParts(query);
 
-  // GROUP BY validations
-  if (parts.hasGroupBy) {
-    const grouped = new Set(parts.groupByFields.map(s=>s.toLowerCase()));
-    for (const sf of parts.selectFields){
-      if (isAggregateExpr(sf)) continue;
-      // handle alias: Field AS alias -> extract before AS
-      const base = sf.replace(/\s+AS\s+.+$/i,'').trim();
-      if (!grouped.has(base.toLowerCase())) {
-        errors.push(`Non-aggregated field '${base}' must appear in GROUP BY.`);
+  // Basic checks: SELECT MUST have fields
+  if (!parts.selectFields || parts.selectFields.length === 0) {
+    errors.push('SELECT list is empty');
+  }
+
+  // If object present but describe missing -> flag
+  if (parts.objectName) {
+    if (!describe) {
+      errors.push(`Failed to retrieve describe for '${parts.objectName}'`);
+    } else {
+      const describedName = (describe.name || describe.objectName || describe.sobjectName || describe.sobject || '').toString();
+      // If the caller provided a demo describe object (marker __demo), don't emit the unknown-object mismatch
+      const isDemoDescribe = !!describe.__demo;
+      if (describedName && describedName.toLowerCase() !== parts.objectName.toLowerCase() && !isDemoDescribe) {
+        errors.push(`Unknown object '${parts.objectName}' (describe is for '${describedName}')`);
       }
     }
   }
 
-  // HAVING requires GROUP BY
-  if (parts.hasHaving && !parts.hasGroupBy) {
-    errors.push('HAVING requires GROUP BY');
-  }
-
-  // ORDER BY fields exist
-  if (describe && describe.fields && parts.orderByFields.length) {
-    const fieldSet = new Set(describe.fields.map(f=>String(f.name||'').toLowerCase()));
-    for (const ofld of parts.orderByFields){
-      if (!fieldSet.has(ofld.toLowerCase())) errors.push(`ORDER BY field '${ofld}' is not in schema`);
+  // Detect FIELDS(...) macro mixing and aggregate misuse
+  try {
+    const macroCount = parts.selectFields.filter(s=>/^FIELDS\s*\(/i.test(String(s))).length;
+    if (macroCount > 0 && parts.selectFields.length > macroCount) {
+      errors.push('FIELDS(...) cannot be mixed with explicit field names.');
     }
+    // If macro present alongside aggregates -> invalid
+    if (macroCount > 0 && parts.selectFields.some(isAggregateExpr)) {
+      errors.push('FIELDS() macros cannot be used with aggregate functions.');
+    }
+  } catch (e) {}
+
+  // ORDER BY must have at least one field when present
+  if (/\bORDER\s+BY\b/i.test(query) && parts.orderByFields.length === 0) {
+    errors.push('ORDER BY must specify at least one field');
   }
 
-  // WHERE value types match
+  // LIMIT parsing and validation
+  try {
+    const mLim = query.match(/\bLIMIT\s+(-?\d+)\b/i);
+    if (mLim) {
+      const lim = parseInt(mLim[1], 10);
+      if (!Number.isFinite(lim) || lim < 0) errors.push('LIMIT must be a non-negative integer');
+    }
+    const mOffset = query.match(/\bOFFSET\s+(-?\d+)\b/i);
+    if (mOffset && !mLim) errors.push('OFFSET requires a LIMIT to be specified');
+  } catch (e) {}
+
+  // Aggregates mixed with non-aggregates without GROUP BY
+  try {
+    const hasAgg = parts.selectFields.some(isAggregateExpr);
+    if (hasAgg && !parts.hasGroupBy) {
+      // allow aggregate-only queries like COUNT()
+      const nonAgg = parts.selectFields.filter(s=>!isAggregateExpr(s)).filter(s=>!/^\(\s*/i.test(s));
+      if (nonAgg.length > 0) {
+        errors.push('Cannot mix aggregate and non-aggregate select items without GROUP BY');
+      }
+    }
+  } catch (e) {}
+
+  // GROUP BY rules: every non-aggregate select item must appear in GROUP BY
+  try {
+    if (parts.hasGroupBy) {
+      const gbSet = new Set(parts.groupByFields.map(s=>s.toLowerCase()));
+      for (const sf of parts.selectFields) {
+        const s = String(sf||'').trim();
+        if (s === '') continue;
+        if (/^\s*\(/.test(s)) continue; // subquery
+        if (isAggregateExpr(s)) continue;
+        if (/^FIELDS\s*\(/i.test(s)) continue;
+        // extract simple field name (ignore functions/aliases)
+        const m = s.match(/^([A-Za-z_][A-Za-z0-9_.]*)/);
+        const fld = m ? m[1].toLowerCase() : null;
+        if (fld && !gbSet.has(fld)) {
+          errors.push(`Non-aggregate select item '${s}' must appear in GROUP BY`);
+        }
+      }
+    }
+    // HAVING requires GROUP BY
+    if (parts.hasHaving && !parts.hasGroupBy) {
+      errors.push('HAVING clause requires a GROUP BY');
+    }
+  } catch(e) {}
+
+  // Subquery checks (in SELECT and in WHERE IN)
+  try {
+    // SELECT subqueries: ensure no ORDER BY inside subqueries
+    for (const sf of parts.selectFields) {
+      const s = String(sf || '');
+      if (/^\s*\(/.test(s) && /\bSELECT\b/i.test(s)) {
+        if (/\bORDER\s+BY\b/i.test(s)) {
+          errors.push('ORDER BY is not allowed inside subqueries');
+        }
+      }
+    }
+  } catch (e) {}
+
+  // WHERE clause validations against describe
   if (describe && Array.isArray(describe.fields) && parts.filters.length){
     const fmap = new Map();
     for (const f of describe.fields) fmap.set(String(f.name||'').toLowerCase(), f);
@@ -171,25 +297,92 @@ function validateSoql(query, describe){
 
     for (const cond of parts.filters){
       const fld = fmap.get(cond.field.toLowerCase());
-      if (!fld) continue; // unknown field, skip
+      if (!fld) continue; // unknown field, skip schema checks
       const type = String(fld.type||'').toUpperCase();
       const vals = valuesFromRaw(cond.rawValue);
+
+      // Special handling for IN-subqueries and invalid comparisons
+      const rvTrim = cond.rawValue.trim();
+      const isSubquery = /^\(\s*SELECT\b/i.test(rvTrim);
+      if ((cond.operator === 'IN' || cond.operator === 'NOT IN') && isSubquery) {
+        // parse inner SELECT ... FROM ...
+        const innerMatch = rvTrim.match(/^\(\s*SELECT\s+([\s\S]+?)\s+FROM\s+([A-Za-z_][A-ZaZ0-9_]*(?:__(?:c|kav|x))?)/i);
+        if (innerMatch) {
+          const innerSelect = innerMatch[1].trim();
+          const innerFrom = innerMatch[2].trim();
+          // ensure single field selected in inner query
+          if (/,/.test(innerSelect)) {
+            errors.push('Subquery used in IN(...) must select a single field');
+          } else {
+            // if inner selects Id but from different object -> likely incorrect (should select <Outer>Id)
+            if (/^Id$/i.test(innerSelect) && parts.objectName && innerFrom && innerFrom.toLowerCase() !== parts.objectName.toLowerCase()) {
+              errors.push(`Subquery in IN(...) must select a referencing field (e.g. ${parts.objectName}Id) rather than Id`);
+            }
+          }
+          // ORDER BY not allowed inside inner subquery
+          if (/\bORDER\s+BY\b/i.test(rvTrim)) {
+            errors.push('ORDER BY is not allowed inside subqueries');
+          }
+        } else {
+          errors.push('Malformed subquery used with IN/NOT IN');
+        }
+      }
+
+      // For IN/INCLUDES/EXCLUDES ensure proper parentheses and no trailing comparisons
+      if (/(IN|NOT IN|INCLUDES|EXCLUDES)/i.test(cond.operator)) {
+        const rv = cond.rawValue.trim();
+        if (!/^\(.*\)$/s.test(rv)) {
+          if (!/^\(\s*SELECT\b/i.test(rv)) {
+            errors.push(`Operator ${cond.operator} expects a parenthesized list or a subquery`);
+          }
+        }
+        if (/[=<>]/.test(rv) && !/^\(\s*SELECT\b/i.test(rv)) {
+          errors.push(`Unexpected comparison following ${cond.operator}`);
+        }
+      }
+
       for (const v of vals){
         const tv = v.trim();
+        // NULL handling: equality to NULL using '=' is flagged
+        if (/^null$/i.test(tv)) {
+          if (cond.operator === '=') {
+            errors.push(`Avoid using '=' to compare to NULL; use IS NULL / IS NOT NULL instead`);
+          }
+        }
+
         if (type === 'BOOLEAN') {
-          if (!/^TRUE|FALSE$/i.test(tv)) errors.push(`Field '${fld.name}' expects a BOOLEAN (TRUE/FALSE).`);
+          // must be unquoted TRUE/FALSE
+          if (!/^(TRUE|FALSE)$/i.test(tv)) errors.push(`Field '${fld.name}' expects a BOOLEAN (TRUE/FALSE).`);
+          if ((tv.startsWith("'") && tv.endsWith("'")) || (tv.startsWith('"') && tv.endsWith('"'))) {
+            errors.push(`Boolean value for '${fld.name}' should not be quoted`);
+          }
         } else if (type === 'NUMBER' || type === 'CURRENCY' ) {
           if (!numRe.test(trimQuotes(tv))) errors.push(`Field '${fld.name}' expects a numeric value.`);
         } else if (type === 'DATE' || type === 'DATETIME') {
-          const val = trimQuotes(tv);
-          if (!dateLitRe.test(val)) errors.push(`Field '${fld.name}' expects a date literal (e.g., TODAY, LAST_N_DAYS:7).`);
+          // DATE literals must be unquoted and match allowed literals
+          const valUnq = trimQuotes(tv);
+          if ((tv.startsWith("'") && tv.endsWith("'")) || (tv.startsWith('"') && tv.endsWith('"'))) {
+            errors.push(`Field '${fld.name}' expects an unquoted date literal (e.g., TODAY or LAST_N_DAYS:7), not a quoted string`);
+          } else if (!dateLitRe.test(valUnq)) {
+            errors.push(`Field '${fld.name}' expects a date literal (e.g., TODAY, LAST_N_DAYS:7).`);
+          }
         } else if (type === 'ID' || type === 'REFERENCE') {
-          const val = trimQuotes(tv);
-          if (!idRe.test(val)) errors.push(`Field '${fld.name}' expects a valid Salesforce Id (15 or 18 chars).`);
+          const valUnq = trimQuotes(tv);
+          if (!isSubquery && !idRe.test(valUnq)) errors.push(`Field '${fld.name}' expects a valid Salesforce Id (15 or 18 chars).`);
         } else {
-          // STRING-like types: ensure quotes for equality operators
+          // STRING-like types
+          if (/^(LIKE|NOT LIKE)$/i.test(cond.operator)) {
+            // value must be a quoted string for LIKE
+            if (!((tv.startsWith("'") && tv.endsWith("'")) || (tv.startsWith('"') && tv.endsWith('"')))) {
+              errors.push(`Field '${fld.name}' with LIKE operator requires a quoted string (e.g. 'Acme%').`);
+            }
+          }
           if (/^(=|!=)$/i.test(cond.operator)) {
-            if (!(tv.startsWith("'") && tv.endsWith("'"))) errors.push(`Field '${fld.name}' expects a quoted string.`);
+            // if RHS is not NULL and operator is equality on string-like fields, require quoted string
+            if (!/^null$/i.test(tv) && !((tv.startsWith("'") && tv.endsWith("'")) || (tv.startsWith('"') && tv.endsWith('"')))) {
+              // allow unquoted numbers handled earlier
+              errors.push(`Field '${fld.name}' expects a quoted string value.`);
+            }
           }
         }
       }

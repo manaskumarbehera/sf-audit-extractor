@@ -26,7 +26,8 @@
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
-    "https://*.force.com/*"
+    "https://*.force.com/*",
+    "https://*.salesforce-setup.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -36,7 +37,8 @@
     {
       "matches": [
         "https://*.salesforce.com/*",
-        "https://*.force.com/*"
+        "https://*.force.com/*",
+        "https://*.salesforce-setup.com/*"
       ],
       "js": ["content.js"],
       "all_frames": true,

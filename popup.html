@@ -195,21 +195,30 @@ File: `popup.html` (replace body content with this)
                     <select id="soql-obj" aria-label="SObject"><option>Loading objects...</option></select>
                     <button id="soql-run" class="icon-btn" aria-label="Run SOQL" title="Run SOQL">▶</button>
                     <button id="soql-clear" class="icon-btn" aria-label="Clear" title="Clear">🗑</button>
-                    <select id="soql-limit" class="compact" aria-label="Limit">
-                        <option value="200">Limit: 200</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                        <option value="500">500</option>
-                    </select>
+                    <input id="soql-limit" class="compact" aria-label="Limit" list="soql-limit-list" placeholder="Limit (e.g. 200)" />
+                    <datalist id="soql-limit-list">
+                        <option value="10"></option>
+                        <option value="50"></option>
+                        <option value="100"></option>
+                        <option value="200"></option>
+                        <option value="500"></option>
+                    </datalist>
                     <label for="soql-auto-fill" class="toggle-small" title="Always replace editor with a basic query when the object changes">
-                        <input type="checkbox" id="soql-auto-fill" />
+                        <input type="checkbox" id="soql-auto-fill" checked />
                         <span>Auto-fill on change</span>
                     </label>
-                    <label for="soql-debug-toggle" class="toggle-small" title="Show/hide debug overlay">
-                        <input type="checkbox" id="soql-debug-toggle" />
-                        <span>Debug</span>
+                    <!-- New: allow running query via the Tooling API (useful for some metadata objects and tooling sObjects) -->
+                    <label for="soql-use-tooling" class="toggle-small" title="Run SOQL against the Tooling API endpoint">
+                        <input type="checkbox" id="soql-use-tooling" />
+                        <span>Use Tooling API</span>
                     </label>
+<!--                    <label for="soql-debug-toggle" class="toggle-small" title="Show/hide debug overlay">-->
+<!--                        <input type="checkbox" id="soql-debug-toggle" />-->
+<!--                        <span>Debug</span>-->
+<!--                    </label>-->
                 </div>
+                <!-- New: dedicated validator area rendered above the editor (separate from #soql-errors) -->
+                <div id="soql-validator-top" class="soql-validator placeholder-note" aria-live="polite"></div>
                 <textarea id="soql-editor" rows="6" spellcheck="false" placeholder="Type SOQL: SELECT Id, Name FROM Account WHERE ..." aria-label="SOQL editor"></textarea>
                 <div id="soql-debug" class="soql-debug hidden" aria-live="polite" title="SOQL parsing debug"></div>
                 <ul id="soql-hints" class="hidden" role="listbox" tabindex="-1"></ul>

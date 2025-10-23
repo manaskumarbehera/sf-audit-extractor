@@ -1,62 +1,98 @@
 import { Soql_helper_schema } from './soql_helper_schema.js';
 import { Soql_helper_storage } from './soql_helper_storage.js';
-import { validateSoql, parseQueryParts } from './soql_semantic_validator.js';
 import {
-  // parse/context
+  getInstanceUrl,
+  buildKeyPrefixMap,
   getClauseAtCursor,
   getSelectPhase,
   getFromPhase,
-  getGroupByPhase,
-  getWherePhase,
-  getOrderByPhase,
-  prefixFilter,
-  // schema
-  getFieldsForObject,
-  getRelationshipMeta,
-  getFieldsForRelationship,
-  filterRelationshipCompletions,
-  buildKeyPrefixMap,
-  getObjectLabelByKeyPrefix,
-  // id/data
-  isSalesforceIdValue,
-  getByPath,
-  // exports
-  parseSelectItem,
-  toCSV,
-  toExcelHTML,
-  // SF/Chrome
-  getInstanceUrl,
-  openRecordInNewTab,
-  // misc
-  fallbackCopyText
+  validateFieldsMacro,
+  sendMessageToSalesforceTab,
+  buildColumnsUnion,
+  recordsToCsv,
+  downloadCsv,
+  downloadExcel,
+  linkifyInfoForValue
 } from './soql_helper_utils.js';
+import { ensureIdContextMenuWired, showIdContextMenu } from './soql_helper_dom.js';
 
 let initialized = false;
 let rules = {};
 
+// Load rules used by the SOQL helper UI (fetch JSON or fall back to defaults)
 async function loadRules(){
+  const defaultRules = {
+    keywords: ["SELECT","FROM","WHERE","GROUP BY","HAVING","ORDER BY","LIMIT","OFFSET","ASC","DESC","NULLS FIRST","NULLS LAST"],
+    operators: ["=","!=","<","<=",">",">=","LIKE","IN","NOT IN","INCLUDES","EXCLUDES"],
+    inlineValidators: [
+      { id: 'requireSelectFrom', level: 'error', pattern: "^\\s*select\\b[\\s\\S]*\\bfrom\\b", negate: false, message: 'A SOQL query requires SELECT ... FROM ...' }
+    ],
+    suggestionProviders: {
+      suggestLimitValues: { samples: ["10","50","100","200","500","2000"] },
+      suggestOffsetValues: { samples: ["0","10","100","500"] }
+    },
+    apexFieldMacros: ["FIELDS(ALL)", "FIELDS(STANDARD)", "FIELDS(CUSTOM)"]
+  };
+
+  const candidates = [
+    'soqlRules.json',
+    'soql_builder_tips.json',
+    'soql_suggestions_config.json'
+  ];
+
+  // Try fetching in browser/extension environment
   try {
-    const res = await fetch(new URL('./rules/soqlRules.json', import.meta.url));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    rules = await res.json();
-  } catch (e) {
-    console.error('Failed to load SOQL rules, using fallbacks', e);
-    rules = {
-      keywords: ["SELECT","FROM","WHERE","GROUP BY","HAVING","ORDER BY","LIMIT","OFFSET","ASC","DESC","NULLS FIRST","NULLS LAST"],
-      operators: ["=","!=","<","<=",">",">=","LIKE","IN","NOT IN","INCLUDES","EXCLUDES"],
-      inlineValidators: [
-        { id: 'requireSelectFrom', level: 'error', pattern: "^\\s*select\\b[\\s\\S]*\\bfrom\\b", negate: false, message: 'A SOQL query requires SELECT ... FROM ...' }
-      ],
-      suggestionProviders: {
-        suggestLimitValues: { samples: ["10","50","100","200","500","2000"] },
-        suggestOffsetValues: { samples: ["0","10","100","500"] }
+    if (typeof fetch === 'function') {
+      for (const name of candidates) {
+        try {
+          const url = new URL(`./rules/${name}`, import.meta.url);
+          if (typeof console !== 'undefined' && console.debug) console.debug && console.debug('soql_helper: attempting to fetch rules', url.href);
+          const res = await fetch(url, { cache: 'no-store' });
+          if (res && res.ok) {
+            const txt = await res.text();
+            try { rules = JSON.parse(txt); if (console && console.debug) console.debug('soql_helper: loaded rules from', name); return rules; }
+            catch (e) {
+              const cleaned = txt.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+              rules = JSON.parse(cleaned);
+              if (console && console.debug) console.debug('soql_helper: loaded rules (cleaned) from', name);
+              return rules;
+            }
+          }
+        } catch (e) { /* try next candidate */ if (console && console.debug) console.debug('soql_helper: fetch failed for', name, e && e.message ? e.message : e); }
       }
-    };
-  }
+    }
+  } catch (e) { if (console && console.debug) console.debug('soql_helper: fetch env threw', e && e.message ? e.message : e); /* ignore fetch errors and fallthrough to node fallback */ }
+
+  // Node/test fallback: try reading files from process.cwd()/rules
+  try {
+    if (typeof process !== 'undefined' && process.cwd) {
+      const fsMod = await import('fs');
+      const pathMod = await import('path');
+      const fs = fsMod && fsMod.default ? fsMod.default : fsMod;
+      const path = pathMod && pathMod.default ? pathMod.default : pathMod;
+      for (const name of candidates) {
+        try {
+          const p = path.resolve(process.cwd(), 'rules', name);
+          if (fs.existsSync(p)) {
+            if (console && console.debug) console.debug('soql_helper: reading rules file from', p);
+            const txt = fs.readFileSync(p, 'utf8');
+            const cleaned = txt.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+            rules = JSON.parse(cleaned);
+            if (console && console.debug) console.debug('soql_helper: loaded rules from file', p);
+            return rules;
+          }
+        } catch (e) { if (console && console.debug) console.debug('soql_helper: fs read failed for', name, e && e.message ? e.message : e); /* try next */ }
+      }
+    }
+  } catch (e) { if (console && console.debug) console.debug('soql_helper: node fs fallback error', e && e.message ? e.message : e); /* ignore node fs errors */ }
+
+  // Final fallback
+  if (console && console.debug) console.debug('soql_helper: using default rules fallback');
+  rules = defaultRules;
+  return rules;
 }
 
-function qs(id) { return document.getElementById(id); }
-
+// DOM element references used throughout the module
 const els = {
   editor: null,
   hints: null,
@@ -68,8 +104,134 @@ const els = {
   results: null,
   autoFill: null,
   debug: null,
-  debugToggle: null
+  debugToggle: null,
+  useTooling: null
 };
+
+function qs(id) { return document.getElementById(id); }
+
+// Suggestion subsystem state (added)
+let suggesterModule = null;
+let suggestionDebounce = null;
+const SUGGEST_DEBOUNCE_MS = 250;
+
+async function loadSuggester() {
+  if (suggesterModule) return suggesterModule;
+  try {
+    const mod = await import('./soql_suggester.js');
+    let fn = null;
+    if (mod && typeof mod.suggestSoql === 'function') fn = mod.suggestSoql;
+    else if (mod && typeof mod.default === 'function') fn = mod.default;
+    else if (mod && mod.default && typeof mod.default.suggestSoql === 'function') fn = mod.default.suggestSoql;
+    if (typeof fn === 'function') {
+      suggesterModule = { suggestSoql: fn };
+      return suggesterModule;
+    }
+    suggesterModule = mod || null;
+    return suggesterModule;
+  } catch (e) {
+    console.warn && console.warn('soql_helper: failed to load suggester', e);
+    suggesterModule = null;
+    return null;
+  }
+}
+
+async function computeAndRenderSuggestions() {
+  try {
+    if (!els || !els.editor || !els.hints) return;
+    const q = els.editor.value || '';
+    const mod = await loadSuggester();
+    if (!mod || typeof mod.suggestSoql !== 'function') { renderSuggestions([]); return; }
+    // Best-effort describe: none in popup module; pass null
+    let suggestions;
+    try {
+      suggestions = await mod.suggestSoql(q, null, 'soqlEditor') || [];
+    } catch (e) { suggestions = []; }
+    // store latest and render
+    try { els.hints._latestSuggestions = suggestions; } catch {}
+    renderSuggestions(Array.isArray(suggestions) ? suggestions.slice(0, 10) : []);
+  } catch (e) { console.warn && console.warn('computeAndRenderSuggestions error', e); renderSuggestions([]); }
+}
+
+function scheduleSuggestionCompute() {
+  if (suggestionDebounce) clearTimeout(suggestionDebounce);
+  suggestionDebounce = setTimeout(() => { computeAndRenderSuggestions().catch(()=>{}); }, SUGGEST_DEBOUNCE_MS);
+}
+
+function renderSuggestions(items) {
+  try {
+    if (!els || !els.hints) return;
+    const ul = els.hints;
+    ul.innerHTML = '';
+    if (!items || items.length === 0) { ul.classList.add('hidden'); return; }
+    const frag = document.createDocumentFragment();
+    items.forEach((s, idx) => {
+      try {
+        const li = document.createElement('li');
+        li.className = 'soql-suggestion';
+        li.tabIndex = 0;
+        // Use text or message as label
+        li.textContent = String(s.text || s.message || (s.apply && s.apply.text) || s.id || 'Suggestion');
+        li.addEventListener('click', (ev) => {
+          try { ev.preventDefault(); applySuggestionByIndex(idx); } catch (e) { console.warn && console.warn('suggest click error', e); }
+        });
+        li.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); applySuggestionByIndex(idx); }
+        });
+        frag.appendChild(li);
+      } catch (e) { /* ignore per-item errors */ }
+    });
+    ul.appendChild(frag);
+    ul.classList.remove('hidden');
+  } catch (e) { console.warn && console.warn('renderSuggestions error', e); }
+}
+
+function applySuggestionByIndex(idx) {
+  try {
+    if (!els || !els.hints || !els.editor) return;
+    const hintsEl = els.hints;
+    if (hintsEl._applying) return;
+    const suggestions = hintsEl._latestSuggestions || [];
+    const s = suggestions[idx];
+    if (!s) return;
+    const editor = els.editor;
+    if (!editor) return;
+    try {
+      hintsEl._applying = true;
+      const cur = editor.value || '';
+      const app = s.apply || {};
+      let next = cur;
+      if (app.type === 'append') {
+        next = cur + (app.text || '');
+      } else if (app.type === 'replace') {
+        if (typeof app.start === 'number' && typeof app.end === 'number' && app.start >= 0 && app.end > app.start && app.end <= cur.length) {
+          next = cur.slice(0, app.start) + (app.text || '') + cur.slice(app.end);
+        } else if (app.text) {
+          const star = cur.indexOf('*');
+          if (star >= 0) next = cur.slice(0, star) + app.text + cur.slice(star+1);
+          else next = cur + app.text;
+        }
+      } else if (app.type === 'insert') {
+        if (typeof app.pos === 'number' && app.pos >= 0 && app.pos <= cur.length) {
+          next = cur.slice(0, app.pos) + (app.text || '') + cur.slice(app.pos);
+        } else {
+          next = cur + (app.text || '');
+        }
+      } else {
+        next = cur + (app.text || '');
+      }
+      editor.value = next;
+      try { editor.focus(); } catch {}
+      try { editor.setSelectionRange(editor.value.length, editor.value.length); } catch {}
+      validateInline();
+      hintsHide();
+      // re-run suggestions after small delay
+      setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(_){} }, 80);
+    } finally {
+      try { hintsEl._applying = false; } catch(_){}
+    }
+  } catch (e) { console.warn && console.warn('applySuggestionByIndex top error', e); }
+}
 
 function bindDom(){
   try {
@@ -84,11 +246,9 @@ function bindDom(){
     els.autoFill = qs('soql-auto-fill');
     els.debug = qs('soql-debug');
     els.debugToggle = qs('soql-debug-toggle');
+    els.useTooling = qs('soql-use-tooling');
   } catch {}
 }
-
-let hintItems = [];
-let activeHint = -1;
 
 function ensureInitOnce() {
   if (initialized) {
@@ -102,20 +262,91 @@ function ensureInitOnce() {
 
 async function initSchemaAndUI() {
   await loadRules();
+  // Load persisted Tooling API preference (soqlUseTooling) if available
   try {
-    await Soql_helper_schema.initSchema();
-    buildKeyPrefixMap();
-  } catch { buildKeyPrefixMap(); }
-  populateObjectPicker();
+    if (els.useTooling && chrome?.storage?.local?.get) {
+      const pref = await chrome.storage.local.get({ soqlUseTooling: false });
+      els.useTooling.checked = !!pref.soqlUseTooling;
+    }
+  } catch {}
+
+  const toolingPref = !!(els.useTooling && els.useTooling.checked);
+
+  // Diagnostic: log detected instance url early so popup console shows why DESCRIBE_GLOBAL may fail
+  try {
+    const detectedInstance = await getInstanceUrl().catch(() => null);
+    console.debug && console.debug('soql_helper: initSchemaAndUI detected instance:', detectedInstance, 'toolingPref:', toolingPref);
+  } catch {}
+
+  // Try initializing the schema with a small retry loop to tolerate transient failures
+  let objs = [];
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.debug && console.debug(`soql_helper: initSchema attempt ${attempt} (useTooling=${toolingPref})`);
+      await Soql_helper_schema.initSchema(toolingPref);
+      buildKeyPrefixMap(toolingPref);
+    } catch (err) {
+      console.warn && console.warn('soql_helper: initSchema error attempt', attempt, err);
+      try { buildKeyPrefixMap(); } catch {}
+    }
+    populateObjectPicker();
+    objs = Soql_helper_schema.getObjects(toolingPref) || [];
+    console.debug && console.debug('soql_helper: objects after attempt', attempt, objs && objs.length);
+    if (objs && objs.length > 0) break;
+    // small backoff before retrying
+    if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 300 * attempt));
+  }
+
+  // If still empty, try the alternative endpoint(s) as a final fallback
+  if (!objs || objs.length === 0) {
+    try {
+      // Try standard endpoint
+      console.debug && console.debug('soql_helper: retrying initSchema with standard endpoint');
+      await Soql_helper_schema.initSchema(false);
+      buildKeyPrefixMap(false);
+      populateObjectPicker();
+      objs = Soql_helper_schema.getObjects(false) || [];
+      console.debug && console.debug('soql_helper: objects after standard retry', objs && objs.length);
+    } catch (err) { console.warn && console.warn('soql_helper: standard initSchema error', err); }
+
+    if ((!objs || objs.length === 0) && toolingPref) {
+      try {
+        // Try tooling endpoint explicitly
+        console.debug && console.debug('soql_helper: retrying initSchema with tooling endpoint');
+        await Soql_helper_schema.initSchema(true);
+        buildKeyPrefixMap(true);
+        populateObjectPicker();
+        objs = Soql_helper_schema.getObjects(true) || [];
+        console.debug && console.debug('soql_helper: objects after tooling retry', objs && objs.length);
+      } catch (err) { console.warn && console.warn('soql_helper: tooling initSchema error', err); }
+    }
+  }
+
+  if ((!objs || objs.length === 0) && els.errors) {
+    try {
+      // Attempt to give the user a diagnostic hint: do we see an instance URL/session?
+      let inst = null;
+      try { inst = await getInstanceUrl(); } catch {}
+      const instHint = inst ? `Detected instance: ${inst}` : 'No Salesforce session detected';
+      els.errors.textContent = `Warning: Could not load object list — ${instHint}. Try logging into Salesforce in a browser tab, then reopen this popup or toggle "Use Tooling API".`;
+
+      // Additional diagnostic: fetch and display raw responses (DESCRIBE_GLOBAL + GET_SESSION_INFO)
+      try { await fetchAndDisplayDiagnostics(toolingPref); } catch (e) { console.warn('soql_helper: fetchAndDisplayDiagnostics error', e); }
+    } catch (e) { console.warn && console.warn('soql_helper: error while setting error hint', e); }
+  }
+
   // Load recent query if any
   try {
     const recent = await Soql_helper_storage.loadRecent();
     if (recent && recent[0] && els.editor) els.editor.value = recent[0];
   } catch {}
+  // Sync object picker from any pre-filled query in the editor
+  try { syncObjectPickerFromEditor(); } catch {}
   // Load auto-fill preference
   try {
     if (els.autoFill && chrome?.storage?.local?.get) {
-      const pref = await chrome.storage.local.get({ soqlAutoFill: false });
+      const pref = await chrome.storage.local.get({ soqlAutoFill: true });
       els.autoFill.checked = !!pref.soqlAutoFill;
     }
   } catch {}
@@ -132,34 +363,351 @@ async function initSchemaAndUI() {
     applyDebugOverlayVisibility();
   }
   validateInline();
+  // sync the limit dropdown from any pre-filled query
+  try { syncLimitDropdownFromEditor(); } catch {}
+  // compute initial suggestions
+  try { scheduleSuggestionCompute(); } catch {}
 }
 
-function populateObjectPicker(){
-  const list = Soql_helper_schema.getObjects();
-  els.obj.innerHTML = '';
-  if (!list || list.length === 0) {
-    const o = document.createElement('option'); o.textContent = '\u2014 none \u2014'; els.obj.appendChild(o); return;
+// Expose a hook for the popup fallback and initialize the module UI when loaded
+try {
+  if (typeof window !== 'undefined') {
+    window.__soql_helper_loaded = true;
+    window.__soql_helper_ensureInitOnce = ensureInitOnce;
   }
+} catch (e) { /* ignore */ }
+
+// Auto-init when the module is loaded in the popup context
+try { ensureInitOnce(); } catch (e) { console.warn && console.warn('soql_helper auto-init failed', e); }
+
+// Diagnostic: force-tooling flag for dev/testing
+try {
+  if (typeof window !== 'undefined' && window.location) {
+    const q = window.location.search;
+    if (q.indexOf('soql_tooling=1') >= 0) {
+      const el = document.getElementById('soql-use-tooling');
+      if (el) {
+        el.checked = true;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  }
+} catch (e) { console.warn && console.warn('soql_helper tooling flag parse error', e); }
+
+let _populateRetries = 0;
+
+async function populateObjectPicker(){
+  try {
+    // If DOM hasn't been bound yet, retry a few times with backoff
+    if (!els.obj) {
+      if (_populateRetries < 5) {
+        _populateRetries++;
+        setTimeout(populateObjectPicker, 200 * _populateRetries);
+      }
+      return;
+    }
+  } catch {}
+
+  const list = Soql_helper_schema.getObjects(!!(els.useTooling && els.useTooling.checked));
+  console.debug && console.debug('soql_helper: populateObjectPicker got list length', Array.isArray(list) ? list.length : 'null');
+  try { els.obj.innerHTML = ''; } catch { return; }
+  if (!list || list.length === 0) {
+    // Runtime fallback: attempt direct DESCRIBE_GLOBAL from background (helps when schema cache didn't populate)
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage) {
+        const resp = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', useTooling: !!(els.useTooling && els.useTooling.checked) }, (r) => {
+              if (chrome.runtime.lastError) {
+                // Return structured error so UI can render a helpful diagnostic
+                console.debug('soql_helper: populateObjectPicker DESCRIBE_GLOBAL lastError', chrome.runtime.lastError);
+                resolve({ success: false, error: String(chrome.runtime.lastError && chrome.runtime.lastError.message ? chrome.runtime.lastError.message : chrome.runtime.lastError) });
+              } else {
+                resolve(r || { success: true, objects: null });
+              }
+            });
+          } catch (e) { console.debug('soql_helper: populateObjectPicker sendMessage exception', e); resolve({ success: false, error: String(e) }); }
+        });
+        // If the background returned a structured failure, show it to the user for diagnostics
+        if (resp && resp.success === false && resp.error) {
+          try { if (els.errors) els.errors.textContent = `Could not load objects: ${resp.error}`; } catch {}
+        }
+        if (resp && resp.success && Array.isArray(resp.objects) && resp.objects.length > 0) {
+          // Populate directly from background response
+          try { els.obj.innerHTML = ''; } catch {}
+          resp.objects.forEach(it => {
+            try {
+              const name = it.name || it.label || it.keyPrefix || '';
+              if (!name) return;
+              const o = document.createElement('option');
+              o.value = name;
+              o.textContent = `${it.label || name} (${name})`;
+              try { if (String(name || '').toLowerCase().endsWith('__mdt')) o.dataset.isMdt = '1'; } catch {}
+              els.obj.appendChild(o);
+            } catch {}
+          });
+          try { if (els.obj.options && els.obj.options.length > 0) { els.obj.selectedIndex = 0; try { els.obj.dispatchEvent(new Event('change', { bubbles: true })); } catch {} } } catch {}
+          // Clear any previous object-load errors
+          try { if (els.errors) els.errors.textContent = ''; } catch {}
+          return;
+        }
+      }
+    } catch (e) { console.debug('soql_helper: populateObjectPicker fallback failed', e); }
+     // show a disabled placeholder and a clear error hint so the user knows why objects are empty
+     const o = document.createElement('option');
+     o.textContent = '\u2014 none (objects not loaded) \u2014';
+     o.disabled = true;
+     o.selected = true;
+     try { els.obj.appendChild(o); } catch {}
+    try {
+      if (els.errors) {
+        // Clear previous content and render a retry UI
+        els.errors.textContent = '';
+        // If the last DESCRIBE_GLOBAL response explicitly said the instance URL wasn't detected,
+        // show a prominent action to open/sign-in to Salesforce and retry; otherwise fall back to the generic UI.
+        try {
+          const lastResp = (Soql_helper_schema && typeof Soql_helper_schema.getLastDescribeGlobalResponse === 'function') ? Soql_helper_schema.getLastDescribeGlobalResponse() : null;
+          const instUrlErr = lastResp && lastResp.success === false && typeof lastResp.error === 'string' && /instance\s*url\s*not\s*detected/i.test(lastResp.error);
+
+          if (instUrlErr) {
+            const wrap = document.createElement('div');
+            wrap.style.display = 'flex';
+            wrap.style.flexDirection = 'column';
+            wrap.style.gap = '8px';
+            wrap.style.padding = '8px 6px';
+
+            const header = document.createElement('div');
+            header.style.fontWeight = '600';
+            header.style.marginBottom = '4px';
+            header.textContent = 'Salesforce session not detected';
+            wrap.appendChild(header);
+
+            const msg = document.createElement('div');
+            msg.textContent = 'The extension could not detect a Salesforce instance or session. Open a Salesforce tab and sign in, then retry loading objects.';
+            wrap.appendChild(msg);
+
+            const actionsRow = document.createElement('div');
+            actionsRow.style.display = 'flex';
+            actionsRow.style.gap = '8px';
+
+            const openSfPrimary = document.createElement('button');
+            openSfPrimary.type = 'button';
+            openSfPrimary.textContent = 'Open Salesforce';
+            openSfPrimary.style.padding = '8px 12px';
+            openSfPrimary.style.background = 'var(--accent, #0070d2)';
+            openSfPrimary.style.color = '#fff';
+            openSfPrimary.style.border = 'none';
+            openSfPrimary.style.borderRadius = '4px';
+            openSfPrimary.addEventListener('click', async () => {
+              try {
+                openSfPrimary.disabled = true;
+                const tabs = await new Promise((resolve) => {
+                  try { chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] }, (arr) => resolve(arr || [])); }
+                  catch { resolve([]); }
+                });
+                if (Array.isArray(tabs) && tabs.length > 0) {
+                  const t = tabs[0];
+                  try { chrome.tabs.update(t.id, { active: true }); } catch {}
+                  try { chrome.windows.update(t.windowId, { focused: true }); } catch {}
+                } else {
+                  try { chrome.tabs.create({ url: 'https://login.salesforce.com/' }); } catch {}
+                }
+                // Give user a moment to sign in, then enable retry
+                setTimeout(() => { try { openSfPrimary.disabled = false; } catch {} }, 1500);
+              } catch (e) { console.warn('openSfPrimary error', e); try { openSfPrimary.disabled = false; } catch {} }
+            });
+            actionsRow.appendChild(openSfPrimary);
+
+            const retryBtn = document.createElement('button');
+            retryBtn.type = 'button';
+            retryBtn.textContent = 'Retry detection';
+            retryBtn.addEventListener('click', async () => {
+              try { retryBtn.disabled = true; await reloadObjects(); } catch {} finally { try { retryBtn.disabled = false; } catch {} }
+            });
+            actionsRow.appendChild(retryBtn);
+
+            const diagBtn = document.createElement('button');
+            diagBtn.type = 'button';
+            diagBtn.id = 'soql-show-diagnostics';
+            diagBtn.textContent = 'Show diagnostics';
+            diagBtn.addEventListener('click', async () => {
+              try { diagBtn.disabled = true; await fetchAndDisplayDiagnostics(!!(els.useTooling && els.useTooling.checked)); } catch (e) { console.warn('diagnostics button error', e); } finally { try { diagBtn.disabled = false; } catch {} }
+            });
+            actionsRow.appendChild(diagBtn);
+
+            wrap.appendChild(actionsRow);
+
+            els.errors.appendChild(wrap);
+            return; // done — we rendered the instance-URL-missing UI
+          }
+        } catch (e) { console.debug('soql_helper: failed to render last describe resp', e); }
+
+        // Fallback: render the previous generic UI when instance URL isn't the clear cause
+        const p = document.createElement('div');
+        p.textContent = 'Could not load objects. Ensure you have an active Salesforce session.';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'soql-retry-objects';
+        btn.textContent = 'Retry loading objects';
+        btn.style.marginLeft = '8px';
+        btn.addEventListener('click', async () => {
+          try { btn.disabled = true; await reloadObjects(); } catch {} finally { try { btn.disabled = false; } catch {} }
+        });
+        const diagBtn = document.createElement('button');
+        diagBtn.type = 'button';
+        diagBtn.id = 'soql-show-diagnostics';
+        diagBtn.textContent = 'Show diagnostics';
+        diagBtn.style.marginLeft = '8px';
+        diagBtn.addEventListener('click', async () => {
+          try { diagBtn.disabled = true; await fetchAndDisplayDiagnostics(!!(els.useTooling && els.useTooling.checked)); } catch (e) { console.warn('diagnostics button error', e); } finally { try { diagBtn.disabled = false; } catch {} }
+        });
+        const openSfBtn = document.createElement('button');
+        openSfBtn.type = 'button';
+        openSfBtn.id = 'soql-open-salesforce';
+        openSfBtn.textContent = 'Open Salesforce tab';
+        openSfBtn.style.marginLeft = '8px';
+        openSfBtn.addEventListener('click', async () => {
+          try {
+            openSfBtn.disabled = true;
+            const tabs = await new Promise((resolve) => { try { chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] }, (arr) => { resolve(arr || []); }); } catch (e) { resolve([]); } });
+            if (Array.isArray(tabs) && tabs.length > 0) {
+              const t = tabs[0];
+              try { chrome.tabs.update(t.id, { active: true }); } catch (e) {}
+              try { chrome.windows.update(t.windowId, { focused: true }); } catch (e) {}
+            } else {
+              try { chrome.tabs.create({ url: 'https://login.salesforce.com/' }); } catch (e) {}
+            }
+          } catch (e) { console.warn('openSfBtn error', e); }
+          try { openSfBtn.disabled = false; } catch {}
+        });
+        els.errors.appendChild(p);
+        els.errors.appendChild(btn);
+        els.errors.appendChild(diagBtn);
+        els.errors.appendChild(openSfBtn);
+       }
+     } catch {}
+  }
+  // Clear any previous object-load errors when we do have objects
+  try { if (els.errors) els.errors.textContent = ''; } catch {}
   list.forEach(it => {
-    const o = document.createElement('option');
-    o.value = it.name;
-    o.textContent = `${it.label || it.name} (${it.name})`;
-    els.obj.appendChild(o);
+    try {
+      const o = document.createElement('option');
+      o.value = it.name;
+      // show both label and an indicator when the object looks like tooling or metadata
+      o.textContent = `${it.label || it.name} (${it.name})`;
+      // mark custom metadata types so we can auto-select Tooling API
+      try { if (String(it.name || '').toLowerCase().endsWith('__mdt')) o.dataset.isMdt = '1'; } catch {}
+      els.obj.appendChild(o);
+    } catch {}
   });
+
+  // Make sure the select shows a selection (choose first) and trigger change so other UI updates run
+  try {
+    if (els.obj.options && els.obj.options.length > 0) {
+      els.obj.selectedIndex = 0;
+      // update any listeners
+      try { els.obj.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+    }
+  } catch {}
+}
+
+// Allow manual retry of schema/object loading from the UI
+async function reloadObjects() {
+  try {
+    if (!els.errors) return;
+    try { els.errors.textContent = 'Reloading objects...'; } catch {}
+    const tooling = !!(els.useTooling && els.useTooling.checked);
+    try { await Soql_helper_schema.initSchema(tooling); } catch {}
+    try { buildKeyPrefixMap(tooling); } catch {}
+    try { populateObjectPicker(); } catch {}
+    const objs = Soql_helper_schema.getObjects(tooling) || [];
+    if (objs && objs.length > 0) {
+      try { els.errors.textContent = ''; } catch {}
+    } else {
+      try {
+        let inst = null;
+        try { inst = await getInstanceUrl(); } catch {}
+        const instHint = inst ? `Detected instance: ${inst}` : 'No Salesforce session detected';
+        // Enhanced diagnostics: try to get raw DESCRIBE_GLOBAL response from background
+        let rawResp = null;
+        try {
+          rawResp = await new Promise((resolve) => {
+            try {
+              chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', instanceUrl: inst || undefined, useTooling: tooling }, (r) => {
+                if (chrome.runtime.lastError) {
+                  console.warn('soql_helper: reloadObjects DESCRIBE_GLOBAL lastError', chrome.runtime.lastError);
+                  resolve({ success: false, error: String(chrome.runtime.lastError) });
+                } else {
+                  resolve(r || null);
+                }
+              });
+            } catch (e) { console.warn('soql_helper: reloadObjects sendMessage exception', e); resolve({ success: false, error: String(e) }); }
+          });
+        } catch (e) { console.warn('soql_helper: reloadObjects DESCRIBE_GLOBAL promise error', e); }
+
+        // Also fetch session info from background for diagnostics
+        let sessionResp = null;
+        try {
+          sessionResp = await new Promise((resolve) => {
+            try {
+              chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO', url: inst || undefined }, (r) => {
+                if (chrome.runtime.lastError) {
+                  console.warn('soql_helper: reloadObjects GET_SESSION_INFO lastError', chrome.runtime.lastError);
+                  resolve({ success: false, error: String(chrome.runtime.lastError) });
+                } else {
+                  resolve(r || null);
+                }
+              });
+            } catch (e) { console.warn('soql_helper: reloadObjects GET_SESSION_INFO exception', e); resolve({ success: false, error: String(e) }); }
+          });
+        } catch (e) { console.warn('soql_helper: reloadObjects GET_SESSION_INFO promise error', e); }
+
+        try {
+          const detail = rawResp ? JSON.stringify(rawResp, null, 2) : 'No response from background (runtime.lastError or blocked)';
+          const sessionDetail = sessionResp ? JSON.stringify(sessionResp, null, 2) : 'No session info available';
+          els.errors.textContent = `Reload failed — ${instHint}.\n\nRaw DESCRIBE_GLOBAL response:\n${detail}\n\nGET_SESSION_INFO response:\n${sessionDetail}`;
+          console.warn('soql_helper: raw DESCRIBE_GLOBAL response', rawResp, 'GET_SESSION_INFO', sessionResp);
+        } catch (e) { console.warn('soql_helper: failed to render DESCRIBE_GLOBAL diagnostic', e); }
+      } catch {}
+    }
+  } catch {}
 }
 
 function wireEvents(){
   if (!els.editor) return;
   els.editor.addEventListener('keydown', onKeyDown);
-  els.editor.addEventListener('input', () => { validateInline(); suggestFromContext(); updateDebugOverlay(); });
-  els.editor.addEventListener('focus', () => { suggestFromContext(); updateDebugOverlay(); });
+  // On input, validate, update suggestions/debug overlay and keep object picker synced if a FROM clause exists
+  els.editor.addEventListener('input', () => {
+    try { validateInline(); suggestFromContext(); updateDebugOverlay(); syncObjectPickerFromEditor(); scheduleSuggestionCompute(); } catch {}
+  });
+  els.editor.addEventListener('focus', () => {
+      suggestFromContext();
+      updateDebugOverlay();
+      scheduleSuggestionCompute();
+  });
   els.editor.addEventListener('keyup', () => { updateDebugOverlay(); });
   els.editor.addEventListener('click', () => { updateDebugOverlay(); });
   els.editor.addEventListener('mouseup', () => { updateDebugOverlay(); });
   els.hints.addEventListener('mousedown', (e)=>{ e.preventDefault(); });
   els.run.addEventListener('click', runQuery);
-  els.clear.addEventListener('click', () => { els.editor.value=''; clearResults(); hintsHide(); els.errors.textContent=''; updateDebugOverlay(); });
-  els.obj.addEventListener('change', () => { handleObjectChange(); updateDebugOverlay(); });
+  els.clear.addEventListener('click', () => { els.editor.value=''; clearResults(); hintsHide(); els.errors.textContent=''; setEditorStatus(''); updateDebugOverlay(); });
+  els.obj.addEventListener('change', async () => { await handleObjectChange(); updateDebugOverlay(); });
+  // Keep the LIMIT input (with datalist) and editor synchronized
+  els.limit?.addEventListener('input', () => { applyLimitFromDropdown(); });
+  els.editor.addEventListener('input', () => { try { syncLimitDropdownFromEditor(); } catch {} });
+  if (els.useTooling) {
+    els.useTooling.addEventListener('change', async () => {
+      // Re-init schema against the selected endpoint and refresh object picker
+      try { await Soql_helper_schema.initSchema(!!els.useTooling.checked); } catch {}
+      try { buildKeyPrefixMap(!!els.useTooling.checked); } catch {}
+      // Persist the user's choice
+      try { await chrome?.storage?.local?.set?.({ soqlUseTooling: !!els.useTooling.checked }); } catch {}
+      populateObjectPicker();
+      // Clear any previous results since schema/objects changed
+      try { clearResults(); hintsHide(); clearLimit(); } catch {}
+      suggestFromContext();
+    });
+  }
   if (els.autoFill) {
     els.autoFill.addEventListener('change', async () => {
       try { await chrome?.storage?.local?.set?.({ soqlAutoFill: !!els.autoFill.checked }); } catch {}
@@ -173,10 +721,21 @@ function wireEvents(){
   }
 }
 
-function handleObjectChange(){
+async function handleObjectChange(){
   if (!els.obj || !els.editor) return;
   const obj = (els.obj.value || '').trim();
   if (!obj) { suggestFromContext(); return; }
+  try {
+    const sel = els.obj.selectedOptions && els.obj.selectedOptions[0];
+    if (sel && sel.dataset && sel.dataset.isMdt) {
+      if (els.useTooling && !els.useTooling.checked) {
+        // Do NOT auto-enable or persist the Tooling API. Require explicit user action.
+        try { els.errors.textContent = 'Note: custom metadata types require the Tooling API — enable "Use Tooling API" to view them.'; } catch {}
+      }
+    }
+  } catch {}
+  // Remove previous results when the user changes the selected object
+  try { clearResults(); hintsHide(); clearLimit(); } catch {}
   const current = (els.editor.value || '').trim();
   const autoRe = /^select\s+id\s+from\s+[A-Za-z_][A-Za-z0-9_]*(?:__(?:c|kav|x))?\s*;?$/i;
   const template = `SELECT Id FROM ${obj}`;
@@ -185,666 +744,488 @@ function handleObjectChange(){
     els.editor.value = template;
     const caret = els.editor.value.length;
     els.editor.focus();
-    els.editor.setSelectionRange(caret, caret);
+    try { els.editor.setSelectionRange(caret, caret); } catch {}
   }
   validateInline();
   suggestFromContext();
 }
 
-function onKeyDown(e){
-  if ((e.ctrlKey||e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); return; }
-  if (hintsVisible()) {
-    if (e.key === 'ArrowDown') { e.preventDefault(); moveHint(1); return; }
-    if (e.key === 'ArrowUp') { e.preventDefault(); moveHint(-1); return; }
-    if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); commitActiveHint(); return; }
-    if (e.key === 'Escape') { hintsHide(); }
-  }
-}
+// Module initialization helpers and lightweight UI implementations
 
-function getTokenAtCursor(){
-  const pos = els.editor.selectionStart;
-  const txt = els.editor.value;
-  let start = pos, end = pos;
-  while (start>0 && /[A-Za-z0-9_.]/.test(txt[start-1])) start--;
-  while (end < txt.length && /[A-Za-z0-9_.]/.test(txt[end])) end++;
-  const token = txt.slice(start, end);
-  return { token, start, end, pos };
-}
-
-function getObjectNameFromEditor() {
+function validateInline() {
   try {
-    const txt = els.editor?.value || '';
-    const m = txt.match(/\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:__(?:c|kav|x))?)/i);
-    if (m) return m[1];
-  } catch {}
-  return els.obj?.value || '';
-}
-
-function basicDateLiterals() {
-  return ['TODAY','YESTERDAY','LAST_N_DAYS:7','THIS_MONTH'];
-}
-
-function updateDebugOverlay(){
-  try {
-    if (!els.debug || !els.editor) return;
-    const q = els.editor.value || '';
-    const pos = els.editor.selectionStart || 0;
-    const clause = getClauseAtCursor(q, pos);
-    let phase = '';
-    switch (clause) {
-      case 'SELECT': phase = getSelectPhase(q, pos); break;
-      case 'FROM': phase = getFromPhase(q, pos); break;
-      case 'WHERE': phase = getWherePhase(q, pos); break;
-      case 'GROUP BY': phase = getGroupByPhase(q, pos); break;
-      case 'ORDER BY': phase = getOrderByPhase(q, pos); break;
-      case 'HAVING': phase = 'COND'; break;
-      case 'LIMIT': phase = 'VALUE'; break;
-      case 'OFFSET': phase = 'VALUE'; break;
-      case 'START': phase = 'BEGIN'; break;
-      default: phase = ''; break;
+    if (!els || !els.editor) return false;
+    const q = String(els.editor.value || '');
+    const macroErr = validateFieldsMacro ? validateFieldsMacro(q) : null;
+    if (macroErr) {
+      try { if (els.errors) els.errors.textContent = macroErr; } catch {}
+      setEditorStatus('error');
+      return false;
     }
-    const tok = (getTokenAtCursor().token || '').trim();
-    const obj = getObjectNameFromEditor();
-    els.debug.textContent = `Clause: ${clause} | Phase: ${phase || '-'} | Token: ${tok || '\u2205'} | Object: ${obj || '\u2205'}`;
-  } catch {}
-}
-
-async function suggestFromContext(){
-  const { token, pos } = (function(){
-    const t = getTokenAtCursor();
-    return { token: t.token, pos: t.pos };
-  })();
-  const t = token.trim();
-  const q = els.editor?.value || '';
-  const clause = getClauseAtCursor(q, pos);
-  const objectName = getObjectNameFromEditor();
-  const suggestions = [];
-
-  // Helper: push unique
-  function pushMany(arr, kind) {
-    for (const a of arr) {
-      if (!a) continue;
-      if (typeof a === 'string') suggestions.push(a);
-      else suggestions.push(Object.assign({ kind: kind || a.kind }, a));
-    }
-  }
-
-  const nextKeywords = ['WHERE','GROUP BY','HAVING','ORDER BY','LIMIT','OFFSET'];
-
-  // Relationship-aware helpers
-  async function addRelationshipNameSuggestions(prefixToken){
-    const meta = await getRelationshipMeta(objectName || els.obj?.value || '');
-    const base = Array.from(meta.relNames || []);
-    // propose relName. items
-    const relWithDot = base.map(r => `${r}.`);
-    pushMany(prefixFilter(relWithDot, prefixToken || ''));
-  }
-
-  async function addRelationshipFieldSuggestions(prefixToken){
-    // If token contains a dot, try to complete the right-hand side
-    const dot = prefixToken.indexOf('.');
-    if (dot <= 0) return;
-    const rel = prefixToken.slice(0, dot);
-    const after = prefixToken.slice(dot+1);
-    const list = await getFieldsForRelationship(objectName || els.obj?.value || '', rel);
-    const filtered = filterRelationshipCompletions(rel, after, list);
-    pushMany(filtered);
-  }
-
-  // Clause-aware suggestions
-  if (clause === 'START' || clause === 'SELECT') {
-    const selPhase = getSelectPhase(q, pos);
-    if (clause === 'START') pushMany(prefixFilter((rules.keywords||[]).map(k=>({label:k, insertText:k})), t));
-    if (selPhase === 'FROM') { pushMany(prefixFilter(['FROM'], t)); }
-
-    // Macros
-    const macros = (rules.apexFieldMacros||[]).map(m=>({ label: m, insertText: m }));
-    pushMany(prefixFilter(macros, t));
-
-    // Relationship completions first if user typed a dot
-    if (t.includes('.')) {
-      await addRelationshipFieldSuggestions(t);
-    } else {
-      // suggest relationship names with trailing dot
-      await addRelationshipNameSuggestions(t);
-    }
-
-    // Fields from current object if known
-    const fields = await getFieldsForObject(objectName || els.obj?.value || '');
-    const fieldItems = fields.map(f=>f.name);
-    pushMany(prefixFilter(fieldItems, t));
-  } else if (clause === 'FROM') {
-    const phase = getFromPhase(q, pos);
-    if (phase === 'OBJECT') {
-      const objs = Soql_helper_schema.getObjects?.() || [];
-      const items = objs.map(o=>o.name || o.apiName || o.label).filter(Boolean).slice(0, 500);
-      pushMany(prefixFilter(items, t));
-    } else {
-      pushMany(prefixFilter(nextKeywords, t));
-    }
-  } else if (clause === 'WHERE') {
-    const phase = getWherePhase(q, pos);
-    const fields = await getFieldsForObject(objectName || els.obj?.value || '');
-    if (phase === 'FIELD') {
-      // Relationship-aware field suggestions
-      if (t.includes('.')) {
-        await addRelationshipFieldSuggestions(t);
-      } else {
-        await addRelationshipNameSuggestions(t);
-      }
-      pushMany(prefixFilter(fields.map(f=>f.name), t));
-      pushMany(prefixFilter(['('], t));
-    } else if (phase === 'OP') {
-      const operators = rules.operators || ["=","!=","<","<=",">",">=","LIKE","IN","NOT IN","INCLUDES","EXCLUDES"];
-      pushMany(prefixFilter(operators, t));
-    } else if (phase === 'VALUE') {
-      const lit = basicDateLiterals();
-      pushMany(prefixFilter(['TRUE','FALSE'], t));
-      pushMany(prefixFilter(lit, t));
-      pushMany(prefixFilter(["'Sample'","'001000000000001'","0","100"], t));
-      pushMany(prefixFilter(['AND','OR'], t));
-    }
-    pushMany(prefixFilter(['AND','OR','GROUP BY','ORDER BY','LIMIT'], t));
-  } else if (clause === 'GROUP BY') {
-    const phase = getGroupByPhase(q, pos);
-    const fields = await getFieldsForObject(objectName || els.obj?.value || '');
-    if (phase === 'FIELD') {
-      if (t.includes('.')) { await addRelationshipFieldSuggestions(t); } else { await addRelationshipNameSuggestions(t); }
-      pushMany(prefixFilter(fields.map(f=>f.name), t));
-    }
-    pushMany(prefixFilter(['HAVING','ORDER BY','LIMIT','OFFSET'], t));
-  } else if (clause === 'ORDER BY') {
-    const phase = getOrderByPhase(q, pos);
-    const fields = await getFieldsForObject(objectName || els.obj?.value || '');
-    if (phase === 'FIELD') {
-      if (t.includes('.')) { await addRelationshipFieldSuggestions(t); } else { await addRelationshipNameSuggestions(t); }
-      pushMany(prefixFilter(fields.map(f=>f.name), t));
-    } else {
-      pushMany(prefixFilter(['ASC','DESC','ASC NULLS FIRST','ASC NULLS LAST','DESC NULLS FIRST','DESC NULLS LAST'], t));
-      pushMany(prefixFilter([','], t));
-      pushMany(prefixFilter(['LIMIT','OFFSET'], t));
-    }
-  } else if (clause === 'LIMIT') {
-    const samples = (rules?.suggestionProviders?.suggestLimitValues?.samples) || ["10","50","100","200","500","2000"];
-    pushMany(prefixFilter(samples, t));
-    pushMany(prefixFilter(['OFFSET'], t));
-  } else if (clause === 'OFFSET') {
-    const samples = (rules?.suggestionProviders?.suggestOffsetValues?.samples) || ["0","10","100","500"];
-    pushMany(prefixFilter(samples, t));
-  } else {
-    pushMany(prefixFilter((rules.keywords||[]), t));
-    const fields = await getFieldsForObject(objectName || els.obj?.value || '');
-    if (t.includes('.')) { await addRelationshipFieldSuggestions(t); } else { await addRelationshipNameSuggestions(t); }
-    pushMany(prefixFilter(fields.map(f=>f.name), t));
-    pushMany(prefixFilter((rules.operators||[]), t));
-  }
-
-  // Render plain strings
-  const rendered = suggestions.map(s => typeof s === 'string' ? s : (s.label || s.insertText || ''))
-    .filter((v,i,arr)=>v && arr.indexOf(v)===i)
-    .slice(0, 50);
-  renderHints(rendered);
-  updateDebugOverlay();
-}
-
-function renderHints(list){
-  hintItems = list;
-  if (!list || list.length === 0) { hintsHide(); return; }
-  els.hints.innerHTML = '';
-  list.forEach((s,i)=>{
-    const li = document.createElement('li');
-    li.textContent = s;
-    li.dataset.index = i;
-    li.addEventListener('click', ()=>{ activeHint = i; commitActiveHint(); });
-    els.hints.appendChild(li);
-  });
-  activeHint = 0;
-  updateHintActive();
-  els.hints.classList.remove('hidden');
-}
-
-function hintsHide(){ els.hints.classList.add('hidden'); hintItems = []; activeHint = -1; }
-function hintsVisible(){ return !els.hints.classList.contains('hidden'); }
-
-function moveHint(delta){
-  if (!hintItems.length) return;
-  activeHint = (activeHint + delta + hintItems.length) % hintItems.length;
-  updateHintActive();
-  ensureHintVisible();
-}
-
-function updateHintActive(){
-  Array.from(els.hints.children).forEach((li,idx)=> li.classList.toggle('active', idx===activeHint));
-}
-
-function ensureHintVisible(){
-  const el = els.hints.children[activeHint];
-  if (el) el.scrollIntoView({ block: 'nearest' });
-}
-
-function commitActiveHint(){
-  if (activeHint < 0 || !hintItems[activeHint]) return;
-  const { start, end } = getTokenAtCursor();
-  const before = els.editor.value.slice(0, start);
-  const after = els.editor.value.slice(end);
-  const insert = hintItems[activeHint];
-  const space = after.startsWith('.') || insert.endsWith('.') ? '' : ' ';
-  els.editor.value = before + insert + space + after;
-  const caret = (before + insert + space).length;
-  els.editor.focus();
-  els.editor.setSelectionRange(caret, caret);
-  hintsHide();
-  validateInline();
-  updateDebugOverlay();
-}
-
-function validateInline(){
-  const q = els.editor.value || '';
-  const errors = [];
-  for (const v of rules.inlineValidators || []) {
     try {
-      const re = new RegExp(v.pattern, v.flags || 'i');
-      const matched = re.test(q);
-      const isError = v.negate ? !matched : !matched;
-      if (isError && v.level === 'error') errors.push(v.message);
-      if (isError && v.level === 'hint' && errors.length === 0) errors.push(`Hint: ${v.message}`);
-    } catch {}
-  }
-  els.errors.textContent = errors.join(' \u2022 ');
-}
-
-function clearResults(){ if (els.results) els.results.innerHTML = '<div class="placeholder-note">No results yet</div>'; }
-
-function renderResults(resp, parts, describe){
-    if (!els.results) return;
-    els.results.innerHTML = '';
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    const exportBtn = document.createElement('button');
-    exportBtn.textContent = 'Export CSV';
-    exportBtn.addEventListener('click', () => {
-      const csv = toCSV(resp, parts, describe);
-      download('soql_results.csv', csv, 'text/csv');
-      try { const n = Array.isArray(resp?.records) ? resp.records.length : 0; window?.Utils?.showToast?.(`CSV downloaded${n?` (${n} rows)`:''}`, 'success'); } catch {}
-    });
-    const exportXlsBtn = document.createElement('button');
-    exportXlsBtn.textContent = 'Export Excel';
-    exportXlsBtn.addEventListener('click', () => {
-      const html = toExcelHTML(resp, parts, describe);
-      download('soql_results.xls', html, 'application/vnd.ms-excel');
-      try { const n = Array.isArray(resp?.records) ? resp.records.length : 0; window?.Utils?.showToast?.(`Excel downloaded${n?` (${n} rows)`:''}`, 'success'); } catch {}
-    });
-    const copyJsonBtn = document.createElement('button');
-    copyJsonBtn.textContent = 'Copy JSON';
-    copyJsonBtn.addEventListener('click', async () => {
-      const data = Array.isArray(resp?.records) ? resp.records : resp;
-      const json = (() => {
-        try { return JSON.stringify(data, null, 2); } catch { return String(data || ''); }
-      })();
-      try {
-        await navigator.clipboard.writeText(json);
-        copyJsonBtn.textContent = 'Copied';
-        setTimeout(() => { copyJsonBtn.textContent = 'Copy JSON'; }, 1200);
-      } catch {
-        try { fallbackCopyText(json); copyJsonBtn.textContent = 'Copied'; setTimeout(() => { copyJsonBtn.textContent = 'Copy JSON'; }, 1200); } catch {}
-      }
-    });
-    actions.appendChild(exportBtn);
-    actions.appendChild(exportXlsBtn);
-    actions.appendChild(copyJsonBtn);
-    els.results.appendChild(actions);
-
-  let colDefs = [];
-  if (parts && Array.isArray(parts.selectFields) && parts.selectFields.length) {
-    const defs = [];
-    for (const raw of parts.selectFields) {
-      const s = String(raw || '').trim();
-      const m = s.match(/^FIELDS\((ALL|STANDARD|CUSTOM)\)$/i);
-      if (m) {
-        const mode = m[1].toUpperCase();
-        const fields = Array.isArray(describe?.fields) ? describe.fields.map(f => f.name) : [];
-        const list = fields.length ? fields : [];
-        let chosen = list;
-        if (mode === 'STANDARD') chosen = list.filter(n => !/__c$/i.test(n));
-        else if (mode === 'CUSTOM') chosen = list.filter(n => /__c$/i.test(n));
-        chosen.forEach(name => defs.push({ expr: name, alias: null, label: name, path: [name], isAggregate: false }));
-      } else {
-        const parsed = parseSelectItem(s);
-        if (parsed) defs.push(parsed);
-      }
-    }
-    const seen = new Set();
-    colDefs = defs.filter(cd => {
-      const key = cd.label + '|' + (Array.isArray(cd.path) ? cd.path.join('.') : cd.expr);
-      if (seen.has(key)) return false; seen.add(key); return true;
-    });
-  }
-
-  if (!Array.isArray(resp.records)) {
-    const pre = document.createElement('pre');
-    pre.textContent = JSON.stringify(resp, null, 2);
-    els.results.appendChild(pre);
-    return;
-  }
-
-  const records = resp.records;
-
-  // Fallback when no parsed columns (e.g., parse failed): use object keys excluding 'attributes'
-  if (!colDefs.length) {
-    const keys = Array.from(records.reduce((s, r) => { Object.keys(r).forEach(k => { if (k !== 'attributes') s.add(k); }); return s; }, new Set()));
-    // Build simple table
-    const tbl = document.createElement('table');
-    tbl.className = 'results-table';
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    keys.forEach(k => { const c = document.createElement('th'); c.textContent = k; headerRow.appendChild(c); });
-    thead.appendChild(headerRow);
-    tbl.appendChild(thead);
-    const tbody = document.createElement('tbody');
-    records.forEach(rec => {
-      const tr = document.createElement('tr');
-      keys.forEach(k => {
-        const td = document.createElement('td');
-        const v = rec[k];
-        const clickableId = (k === 'Id' || /Id$/i.test(k)) && isSalesforceIdValue('Id', v);
-        if (clickableId) {
-          const idStr = String(v);
-          const a = document.createElement('span');
-          a.className = 'sf-id-link';
-          a.textContent = idStr;
-          const pref = idStr.slice(0,3);
-          const label = getObjectLabelByKeyPrefix(pref) || 'Record';
-          a.title = `${label} (${pref}) \u2014 Click for options`;
-          a.tabIndex = 0;
-          a.setAttribute('role', 'button');
-          a.dataset.id = idStr;
-          a.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            if (ev.metaKey || ev.ctrlKey) { openRecordInNewTab(idStr); return; }
-            if (ev.shiftKey) { try { navigator.clipboard.writeText(idStr); } catch { fallbackCopyText(idStr); } return; }
-            showIdContextMenu(idStr, ev.clientX, ev.clientY);
-          });
-          td.appendChild(a);
-        } else {
-          td.textContent = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-        }
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody);
-    els.results.appendChild(tbl);
-    ensureIdContextMenuWired();
-    return;
-  }
-
-  // Build table using colDefs
-  const tbl = document.createElement('table');
-  tbl.className = 'results-table';
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-  colDefs.forEach(cd => { const c = document.createElement('th'); c.textContent = cd.label; headerRow.appendChild(c); });
-  thead.appendChild(headerRow);
-  tbl.appendChild(thead);
-  const tbody = document.createElement('tbody');
-
-  // Precompute expr key mapping for aggregates without alias using the first record
-  const first = records[0] || {};
-  const exprKeys = Object.keys(first).filter(k=>/^expr\d+$/.test(k)).sort((a,b)=>Number(a.slice(4))-Number(b.slice(4)));
-  const aggNoAliasIdx = colDefs.map((cd, idx)=> (cd.isAggregate && !cd.alias) ? idx : -1).filter(i=>i>=0);
-  const exprMap = new Map(); // colIdx -> exprKey
-  let exprCursor = 0;
-  for (const colIdx of aggNoAliasIdx) {
-    if (exprCursor < exprKeys.length) {
-      exprMap.set(colIdx, exprKeys[exprCursor]);
-      exprCursor++;
-    }
-  }
-
-  // Build rows
-  records.forEach(rec=>{
-    const tr = document.createElement('tr');
-    colDefs.forEach((cd, colIdx)=>{
-      const td = document.createElement('td');
-      let v;
-      if (cd.path) {
-        v = getByPath(rec, cd.path);
-      } else if (cd.alias) {
-        v = rec[cd.alias];
-      } else if (cd.isAggregate) {
-        const key = exprMap.get(colIdx);
-        v = key ? rec[key] : undefined;
-      } else {
-        v = rec[cd.expr];
-      }
-
-      // Helper: derive related Id for relationship paths using parent object
-      function deriveRelatedIdForPath(pathArr){
+      const inline = Array.isArray(rules.inlineValidators) ? rules.inlineValidators : [];
+      for (const v of inline) {
         try {
-          if (!Array.isArray(pathArr) || pathArr.length < 2) return null;
-          const parentPath = pathArr.slice(0, pathArr.length - 1);
-          const parentObj = getByPath(rec, parentPath);
-          if (!parentObj || typeof parentObj !== 'object') return null;
-          if (typeof parentObj.Id === 'string') return parentObj.Id;
-          const url = parentObj?.attributes?.url || '';
-          const m = String(url).match(/\/sobjects\/[^/]+\/([a-zA-Z0-9]{15,18})$/);
-          return m ? m[1] : null;
-        } catch { return null; }
-      }
-
-      if (Array.isArray(cd.path) && cd.path.length === 1 && /Id$/i.test(cd.path[0]) && isSalesforceIdValue('Id', v)) {
-        // Top-level Id-like field (Id, OwnerId, AccountId, etc.)
-        const idStr = String(v);
-        const a = document.createElement('span');
-        a.className = 'sf-id-link';
-        a.textContent = idStr;
-        const pref = idStr.slice(0,3);
-        const label = getObjectLabelByKeyPrefix(pref) || 'Record';
-        a.title = `${label} (${pref}) \u2014 Click for options`;
-        a.tabIndex = 0;
-        a.setAttribute('role', 'button');
-        a.dataset.id = idStr;
-        a.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          if (ev.metaKey || ev.ctrlKey) { openRecordInNewTab(idStr); return; }
-          if (ev.shiftKey) { try { navigator.clipboard.writeText(idStr); } catch { fallbackCopyText(idStr); } return; }
-          showIdContextMenu(idStr, ev.clientX, ev.clientY);
-        });
-        td.appendChild(a);
-      } else if (Array.isArray(cd.path) && cd.path.length >= 2) {
-        let relatedId = null;
-        try {
-          const lastSeg = cd.path[cd.path.length - 1];
-          if (/Id$/i.test(lastSeg) && isSalesforceIdValue(lastSeg, v)) {
-            relatedId = String(v);
+          const re = new RegExp(v.pattern, 'i');
+          const match = re.test(q);
+          const ok = v.negate ? !match : match;
+          if (!ok) {
+            try { if (els.errors) els.errors.textContent = v.message || ''; } catch {}
+            setEditorStatus(v.level === 'error' ? 'error' : '');
+            return false;
           }
         } catch {}
-        if (!relatedId) {
-          relatedId = deriveRelatedIdForPath(cd.path);
-        }
-        if (relatedId && isSalesforceIdValue('Id', relatedId)) {
-          const text = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-          const a = document.createElement('span');
-          a.className = 'sf-id-link';
-          a.textContent = text;
-          const pref = relatedId.slice(0,3);
-          const label = getObjectLabelByKeyPrefix(pref) || 'Record';
-          a.title = `${label} (${pref}) \u2014 Click for options`;
-          a.tabIndex = 0;
-          a.setAttribute('role', 'button');
-          a.dataset.id = relatedId;
-          a.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            if (ev.metaKey || ev.ctrlKey) { openRecordInNewTab(relatedId); return; }
-            if (ev.shiftKey) { try { navigator.clipboard.writeText(relatedId); } catch { fallbackCopyText(relatedId); } return; }
-            showIdContextMenu(relatedId, ev.clientX, ev.clientY);
-          });
-          td.appendChild(a);
-        } else {
-          td.textContent = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-        }
-      } else {
-        td.textContent = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
       }
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  tbl.appendChild(tbody);
-  els.results.appendChild(tbl);
-
-  ensureIdContextMenuWired();
+    } catch {}
+    try { if (els.errors) els.errors.textContent = ''; } catch {}
+    setEditorStatus('success');
+    return true;
+  } catch (e) { console.warn && console.warn('validateInline error', e); return false; }
 }
 
-// --- Clickable Salesforce Id helpers ---
-let sfContextMenuEl = null;
-function ensureIdContextMenuWired(){
-  if (!sfContextMenuEl) {
-    sfContextMenuEl = document.createElement('div');
-    sfContextMenuEl.className = 'sf-context-menu hidden';
-    sfContextMenuEl.innerHTML = '<ul><li data-act="copy">Copy Id</li><li data-act="open" title="Open record in a new tab">Open in new tab</li></ul>';
-    document.body.appendChild(sfContextMenuEl);
-    sfContextMenuEl.addEventListener('click', async (e) => {
-      const li = e.target && e.target.closest('li');
-      if (!li || li.classList.contains('disabled')) return;
-      const act = li.getAttribute('data-act');
-      const id = sfContextMenuEl.getAttribute('data-id') || '';
-      hideIdContextMenu();
-      if (!id) return;
-      if (act === 'copy') {
-        try { await navigator.clipboard.writeText(id); } catch { fallbackCopyText(id); }
-      } else if (act === 'open') {
-        openRecordInNewTab(id);
-      }
-    });
-  }
-  // Global dismiss
-  document.addEventListener('click', (e) => {
-    const inside = sfContextMenuEl && (e.target === sfContextMenuEl || sfContextMenuEl.contains(e.target));
-    if (!inside) hideIdContextMenu();
-  }, { capture: true });
-  window.addEventListener('resize', hideIdContextMenu);
-  els.results?.addEventListener('scroll', hideIdContextMenu, { passive: true });
-}
-
-async function showIdContextMenu(id, clientX, clientY){
-  if (!sfContextMenuEl) ensureIdContextMenuWired();
-  sfContextMenuEl.setAttribute('data-id', id);
-  // Position
-  sfContextMenuEl.style.left = Math.max(8, Math.min(window.innerWidth - 180, clientX)) + 'px';
-  sfContextMenuEl.style.top = Math.max(8, Math.min(window.innerHeight - 80, clientY)) + 'px';
-
-  // Enable/disable Open action based on instance URL availability
-  const liOpen = sfContextMenuEl.querySelector('li[data-act="open"]');
+function suggestFromContext() {
   try {
-    const base = await getInstanceUrl();
-    const ok = !!base;
-    if (liOpen) {
-      liOpen.classList.toggle('disabled', !ok);
-      liOpen.title = ok ? 'Open record in a new tab' : 'Salesforce instance URL not detected. Open a Salesforce tab to enable this action.';
+    if (!els || !els.editor || !els.hints) return;
+    const txt = els.editor.value || '';
+    const pos = (els.editor.selectionStart == null) ? txt.length : els.editor.selectionStart;
+    let clause;
+    try { clause = getClauseAtCursor ? getClauseAtCursor(txt, pos) : null; } catch { clause = null; }
+    els.hints.innerHTML = '';
+    if (clause === 'FROM') {
+      const objs = Soql_helper_schema.getObjects(!!(els.useTooling && els.useTooling.checked)) || [];
+      const frag = document.createDocumentFragment();
+      objs.slice(0, 30).forEach(o => {
+        try {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'soql-hint';
+          btn.textContent = o.name || o.label || '';
+          btn.addEventListener('click', () => {
+            try {
+              const upTo = txt.slice(0, pos);
+              const after = txt.slice(pos);
+              const m = upTo.match(/FROM\s+([A-Za-z0-9_\u007F-]*)$/i);
+              const prefix = m ? m[1] : '';
+              const newUp = upTo.replace(new RegExp(prefix + '$'), (o.name || ''));
+              els.editor.value = newUp + after;
+              els.editor.focus();
+              try { els.editor.setSelectionRange(newUp.length, newUp.length); } catch {}
+              validateInline();
+              hintsHide();
+              syncObjectPickerFromEditor();
+            } catch (e) { console.warn && console.warn('suggest click error', e); }
+          });
+          frag.appendChild(btn);
+        } catch {}
+      });
+      els.hints.appendChild(frag);
     }
-  } catch {
-    if (liOpen) {
-      liOpen.classList.add('disabled');
-      liOpen.title = 'Salesforce instance URL not detected. Open a Salesforce tab to enable this action.';
-    }
-  }
-
-  sfContextMenuEl.classList.remove('hidden');
+  } catch (e) { console.warn && console.warn('suggestFromContext error', e); }
 }
 
-function hideIdContextMenu(){
-  if (sfContextMenuEl) {
-    sfContextMenuEl.classList.add('hidden');
-    sfContextMenuEl.removeAttribute('data-id');
-  }
+function updateDebugOverlay() {
+  try {
+    if (!els || !els.debug || !els.editor) return;
+    const q = els.editor.value || '';
+    const pos = (els.editor.selectionStart == null) ? q.length : els.editor.selectionStart;
+    const info = {
+      clause: (getClauseAtCursor ? getClauseAtCursor(q, pos) : null),
+      selectPhase: (getSelectPhase ? getSelectPhase(q, pos) : null),
+      fromPhase: (getFromPhase ? getFromPhase(q, pos) : null),
+      pos
+    };
+    els.debug.textContent = JSON.stringify(info, null, 2);
+  } catch (e) { console.warn && console.warn('updateDebugOverlay error', e); }
 }
 
-// Added: apply debug overlay visibility helper (used on init and toggle)
+function syncObjectPickerFromEditor(){
+  try {
+    if (!els || !els.editor || !els.obj) return;
+    const q = (els.editor.value || '');
+    const m = q.match(/\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:__(?:c|kav|x))?)/i);
+    if (!m) return;
+    const name = m[1];
+    Array.from(els.obj.options || []).forEach((opt, idx) => {
+      try { if ((opt.value || '').toLowerCase() === (name || '').toLowerCase()) els.obj.selectedIndex = idx; } catch {}
+    });
+  } catch (e) { console.warn && console.warn('syncObjectPickerFromEditor error', e); }
+}
+
+function syncLimitDropdownFromEditor(){
+  try {
+    if (!els || !els.editor || !els.limit) return;
+    const q = els.editor.value || '';
+    const m = q.match(/\bLIMIT\s+(\d+)/i);
+    const val = m ? m[1] : '';
+    els.limit.value = val;
+    try {
+      if (val) els.limit.setAttribute('data-applied', String(val)); else els.limit.removeAttribute('data-applied');
+    } catch (e) { /* ignore attribute errors */ }
+    try { console.debug && console.debug('syncLimitDropdownFromEditor -> limit value set to', val, 'data-applied=', els.limit.getAttribute && els.limit.getAttribute('data-applied')); } catch (e) {}
+  } catch (e) { console.warn && console.warn('syncLimitDropdownFromEditor error', e); }
+}
+
 function applyDebugOverlayVisibility(){
   try {
-    if (!els.debug) return;
-    const show = els.debugToggle ? !!els.debugToggle.checked : false;
-    els.debug.classList.toggle('hidden', !show);
-  } catch {}
+    if (!els || !els.debug) return;
+    const show = !!(els.debugToggle && els.debugToggle.checked);
+    els.debug.style.display = show ? '' : 'none';
+  } catch (e) { console.warn && console.warn('applyDebugOverlayVisibility error', e); }
 }
 
-// Download helper used by export
-function download(filename, data, mime){
-  const blob = new Blob([data], { type: mime || 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
+async function fetchAndDisplayDiagnostics(toolingPref){
+  try {
+    if (!els || !els.errors) return;
+    const inst = await getInstanceUrl().catch(() => null);
+    const instHint = inst ? `Detected instance: ${inst}` : 'No Salesforce session detected';
+    let rawResp;
+    try {
+      rawResp = await new Promise((resolve) => {
+        try { chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', instanceUrl: inst || undefined, useTooling: !!toolingPref }, (r) => { if (chrome.runtime.lastError) resolve({ success: false, error: String(chrome.runtime.lastError) }); else resolve(r || null); }); } catch (e) { resolve({ success: false, error: String(e) }); }
+      });
+    } catch (e) { rawResp = { success: false, error: String(e) }; }
+
+    let sessionResp;
+    try {
+      sessionResp = await new Promise((resolve) => {
+        try { chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO', url: inst || undefined }, (r) => { if (chrome.runtime.lastError) resolve({ success: false, error: String(chrome.runtime.lastError) }); else resolve(r || null); }); } catch (e) { resolve({ success: false, error: String(e) }); }
+      });
+    } catch (e) { sessionResp = { success: false, error: String(e) }; }
+
+    try {
+      const detail = rawResp ? JSON.stringify(rawResp, null, 2) : 'No response from background';
+      const sessionDetail = sessionResp ? JSON.stringify(sessionResp, null, 2) : 'No session info available';
+      els.errors.textContent = `${instHint}\n\nRaw DESCRIBE_GLOBAL response:\n${detail}\n\nGET_SESSION_INFO response:\n${sessionDetail}`;
+    } catch (e) { console.warn && console.warn('diagnostics render failed', e); }
+  } catch (e) { console.warn && console.warn('fetchAndDisplayDiagnostics error', e); }
 }
 
-// Run query used by Run button and keyboard shortcut
+function clearResults(){ try { if (els && els.results) els.results.innerHTML = ''; } catch {} }
+function hintsHide(){ try { if (els && els.hints) els.hints.innerHTML = ''; } catch {} }
+function clearLimit(){ try { if (els && els.limit) els.limit.value = ''; } catch {} }
+// New: update editor visual status and validator top area
+function setEditorStatus(status) {
+  try {
+    // Update textarea visual styles
+    const editorEl = (els && els.editor) ? els.editor : qs('soql-editor');
+    if (editorEl && editorEl.classList) {
+      editorEl.classList.remove('soql-editor--progress','soql-editor--success','soql-editor--error');
+      if (status === 'progress') editorEl.classList.add('soql-editor--progress');
+      else if (status === 'success') editorEl.classList.add('soql-editor--success');
+      else if (status === 'error') editorEl.classList.add('soql-editor--error');
+    }
+
+    // Update validator area above editor (helps screen readers and inline feedback)
+    const validatorEl = qs('soql-validator-top');
+    if (validatorEl) {
+      if (status === 'progress') {
+        validatorEl.textContent = 'Running...';
+        validatorEl.className = 'soql-validator placeholder-note';
+        validatorEl.setAttribute('aria-live', 'polite');
+      } else if (status === 'success') {
+        const msg = (els && els.errors && els.errors.textContent) ? els.errors.textContent : '';
+        validatorEl.textContent = msg || 'OK';
+        validatorEl.className = msg ? 'soql-validator soql-valid' : 'soql-validator placeholder-note';
+      } else if (status === 'error') {
+        const msg = (els && els.errors && els.errors.textContent) ? els.errors.textContent : 'Error';
+        validatorEl.textContent = msg;
+        validatorEl.className = 'soql-validator soql-error-list';
+      } else {
+        validatorEl.textContent = '';
+        validatorEl.className = 'soql-validator placeholder-note';
+      }
+    }
+  } catch (e) { console.warn && console.warn('setEditorStatus error', e); }
+}
+
+function onKeyDown(ev){
+  try {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); runQuery(); return; }
+    if (ev.key === 'Escape') { hintsHide(); }
+  } catch (e) { console.warn && console.warn('onKeyDown error', e); }
+}
+
 async function runQuery(){
-  const raw = els.editor?.value || '';
-  const query = raw.trim();
-  if (!query) { els.errors.textContent = 'Query empty'; return; }
   try {
-    const rule = (rules.inlineValidators||[]).find(v=>v.id==='requireSelectFrom');
-    if (rule) {
-      const re = new RegExp(rule.pattern, 'i');
-      const ok = re.test(query);
-      if (!ok) { els.errors.textContent = rule.message; return; }
-    }
-  } catch {}
+    if (!els || !els.editor || !els.results) return;
+    const q = (els.editor.value || '').trim();
+    if (!q) return;
+    setEditorStatus('progress');
+    try {
+      const payload = { action: 'RUN_SOQL', query: q };
+      try { if (els.useTooling) payload.useTooling = !!els.useTooling.checked; } catch {}
 
-  // Semantic validation using schema and query structure
-  els.errors.textContent = 'Validating...';
-  let parts = null;
-  try {
-    // Extract object name and get schema describe
-    parts = parseQueryParts(query);
-    let describe = null;
-    if (parts.objectName) {
-      try { describe = await Soql_helper_schema.describeSObject(parts.objectName); } catch {}
+      // debug: log payload state before attaching session/limit
+      try { console.debug && console.debug('runQuery initial payload', { query: payload.query, useTooling: payload.useTooling }); } catch (e) {}
+
+      // Attach instance/session hints when available so the background can use them directly
+      try {
+        const inst = await getInstanceUrl().catch(() => null);
+        if (inst) payload.instanceUrl = inst;
+      } catch {}
+
+      try {
+        // Try to get session info via the content tab (masked flow). This may return an object like { success, isLoggedIn, instanceUrl, sessionId }.
+        let sess = null;
+        try {
+          // Prefer the helper exposed on window if present (utils wrapper); fallback to utility function
+          if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.sendMessageToSalesforceTab === 'function') {
+            sess = await window.Utils.sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+          } else if (typeof sendMessageToSalesforceTab === 'function') {
+            sess = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+          }
+        } catch (e) { sess = null; }
+        if (sess && sess.success && sess.isLoggedIn && sess.sessionId) {
+          // attach sessionId only when it looks valid. Background will still validate/verify it.
+          payload.sessionId = sess.sessionId;
+          // ensure instanceUrl matches if available
+          try { if (!payload.instanceUrl && sess.instanceUrl) payload.instanceUrl = sess.instanceUrl; } catch {}
+        }
+      } catch (e) { /* non-fatal */ }
+
+      // Attach limit from the small limit input (or its data-applied) if present.
+      try {
+        let limitVal = null;
+        const applied = (els && els.limit && typeof els.limit.getAttribute === 'function') ? els.limit.getAttribute('data-applied') : null;
+        if (applied) {
+          const n = Number(applied);
+          if (Number.isFinite(n) && n > 0) limitVal = n;
+        } else if (els && els.limit) {
+          const v = (els.limit.value || '').trim();
+          const n = Number(v);
+          if (Number.isFinite(n) && n > 0) limitVal = n;
+        }
+        if (limitVal) payload.limit = limitVal;
+        try { console.debug && console.debug('runQuery -> attached limit to payload', payload.limit); } catch (e) {}
+      } catch (e) { /* ignore */ }
+
+      // Final debug: show full payload just before sending
+      try { console.debug && console.debug('RUN_SOQL payload', payload); } catch (e) {}
+
+      const resp = await new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage(payload, (r) => {
+            if (chrome.runtime.lastError) resolve({ success: false, error: String(chrome.runtime.lastError) });
+            else resolve(r || null);
+          });
+        } catch (e) { resolve({ success: false, error: String(e) }); }
+      });
+
+      // Clear previous results
+      try { clearResults(); } catch {}
+
+      if (!resp) {
+        try { if (els.errors) els.errors.textContent = 'No response from background'; } catch {}
+        setEditorStatus('error');
+        return;
+      }
+
+      if (resp.success === false && resp.error) {
+        try { if (els.errors) els.errors.textContent = String(resp.error || 'Query failed'); } catch {}
+        setEditorStatus('error');
+        return;
+      }
+
+      // Normalized shape: background returns { totalSize, records }
+      const records = Array.isArray(resp.records) ? resp.records : (Array.isArray(resp.data) ? resp.data : []);
+      const total = typeof resp.totalSize === 'number' ? resp.totalSize : (Array.isArray(records) ? records.length : 0);
+
+      if (!records || records.length === 0) {
+        try { if (els.results) els.results.textContent = 'No records'; } catch {}
+        setEditorStatus('success');
+        try { if (els.errors) els.errors.textContent = ''; } catch {}
+        return;
+      }
+
+      try { await renderSoqlResults(records, total); } catch (e) { console.warn && console.warn('renderSoqlResults error', e); try { if (els.results) els.results.textContent = JSON.stringify(records, null, 2); } catch {} }
+      setEditorStatus('success');
+      try { if (els.errors) els.errors.textContent = ''; } catch {}
+
+    } catch (e) {
+      try { if (els.errors) els.errors.textContent = String(e); } catch {}
+      setEditorStatus('error');
     }
-    const result = validateSoql(query, describe);
-    if (!result.ok) {
-      els.errors.textContent = result.messages.join(' \u2022 ');
+  } catch (e) { console.warn && console.warn('runQuery top error', e); }
+}
+
+// Update the editor's LIMIT clause (or append) when the small limit input is changed
+function applyLimitFromDropdown(){
+  try {
+    if (!els || !els.editor || !els.limit) return;
+    const v = (els.limit.value || '').trim();
+    // Store the last user selection in a data attribute so other UI can show it if needed.
+    if (!v) {
+      try { els.limit.removeAttribute('data-applied'); } catch {}
       return;
     }
-    // prefer describe from result.parts if validator modified; else keep
-  } catch (e) {
-    console.error('Semantic validation failed', e);
-  }
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return;
+    try { els.limit.setAttribute('data-applied', String(n)); } catch {}
 
-  els.errors.textContent = 'Running...';
-  try { await Soql_helper_storage.saveQuery(query); } catch {}
+    // Update the editor's query to reflect the selected limit: replace existing LIMIT or insert one.
+    try {
+      const editor = els.editor;
+      let q = String(editor.value || '');
+      if (!q) return;
+      // Remove trailing semicolon for manipulation, we'll re-add if present
+      const hasSemicolon = /;\s*$/.test(q);
+      if (hasSemicolon) q = q.replace(/;\s*$/, '');
 
-  // Include instanceUrl explicitly like Audit/LMS do
-  let instanceUrl = null;
-  try { instanceUrl = await getInstanceUrl(); } catch { instanceUrl = null; }
+      const limitRe = /\bLIMIT\s+\d+/i;
+      const offsetRe = /\bOFFSET\s+\d+/i;
 
-  const payload = { action: 'RUN_SOQL', query, limit: parseInt(els.limit?.value||'200',10) };
-  if (instanceUrl) payload.instanceUrl = instanceUrl;
+      if (limitRe.test(q)) {
+        // Replace existing LIMIT value
+        q = q.replace(/\bLIMIT\s+\d+/i, 'LIMIT ' + String(n));
+      } else if (offsetRe.test(q)) {
+        // If OFFSET exists, insert LIMIT before OFFSET
+        q = q.replace(offsetRe, 'LIMIT ' + String(n) + ' $&');
+      } else {
+        // Append LIMIT at end
+        q = q + ' LIMIT ' + String(n);
+      }
 
-  chrome.runtime.sendMessage(payload, (resp) => {
-    if (chrome.runtime.lastError || !resp) {
-        els.errors.textContent = 'Run failed: no response'; clearResults(); return;
-    }
-    if (resp.error || resp.success === false) {
-        els.errors.textContent = `Error: ${resp.error||'Unknown error'}`;
-        clearResults();
-        return;
-    }
-    els.errors.textContent = '';
-    // Pass describe we looked up to support FIELDS(...) expansion and exports
-    (async () => {
-      let describe = null;
-      try { describe = parts?.objectName ? await Soql_helper_schema.describeSObject(parts.objectName) : null; } catch {}
-      renderResults(resp, parts, describe);
-    })();
-  });
+      if (hasSemicolon) q = q + ';';
+      // Apply the modified query back to the editor but preserve caret position roughly at end
+      try {
+        editor.value = q;
+        // Dispatch input event so other listeners (validate/suggestions/sync) run
+        try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+        editor.focus();
+        const pos = editor.value.length;
+        try { editor.setSelectionRange(pos, pos); } catch {}
+      } catch (e) { /* ignore editor update errors */ }
+    } catch (e) { /* ignore editor sync errors */ }
+  } catch (e) { console.warn && console.warn('applyLimitFromDropdown error', e); }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  const pane = document.querySelector('#tab-soql.tab-pane');
-  if (pane && pane.style.display !== 'none') { ensureInitOnce(); if (els.editor) { els.editor.focus(); suggestFromContext(); updateDebugOverlay(); applyDebugOverlayVisibility(); } }
-});
+async function renderSoqlResults(records, totalSize){
+  try {
+    if (!els || !els.results) return;
+    els.results.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'soql-results-container';
 
-document.addEventListener('soql-load', () => { ensureInitOnce(); if (els.editor) { els.editor.focus(); suggestFromContext(); updateDebugOverlay(); applyDebugOverlayVisibility(); } });
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const appliedLimit = (els && els.limit && els.limit.getAttribute) ? els.limit.getAttribute('data-applied') : null;
+    const info = document.createElement('span');
+    const shown = Math.min(records.length, totalSize);
+    info.textContent = appliedLimit ? `Showing ${shown} of ${totalSize} records (display limit: ${appliedLimit})` : `Showing ${shown} of ${totalSize} records`;
+    info.style.marginRight = '8px';
+    actions.appendChild(info);
+
+    const copyJsonBtn = document.createElement('button');
+    copyJsonBtn.type = 'button';
+    copyJsonBtn.textContent = 'Copy JSON';
+    copyJsonBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(JSON.stringify(records, null, 2)); copyJsonBtn.textContent = 'Copied'; setTimeout(()=>copyJsonBtn.textContent='Copy JSON',1200); } catch (e) { console.warn('copy failed', e); }
+    });
+    actions.appendChild(copyJsonBtn);
+
+    const downloadCsvBtn = document.createElement('button');
+    downloadCsvBtn.type = 'button';
+    downloadCsvBtn.textContent = 'Download CSV';
+    actions.appendChild(downloadCsvBtn);
+
+    const downloadXlsBtn = document.createElement('button');
+    downloadXlsBtn.type = 'button';
+    downloadXlsBtn.textContent = 'Download Excel';
+    actions.appendChild(downloadXlsBtn);
+
+    // Linkify IDs/URLs: always enabled (restore previous behavior). No checkbox in the UI.
+    const linkifyEnabled = true;
+
+    container.appendChild(actions);
+
+    // Columns are built via utility
+    const cols = buildColumnsUnion(records || []);
+
+    const csvContent = recordsToCsv(records, cols);
+    downloadCsvBtn.addEventListener('click', async () => {
+      try { downloadCsv(`soql-results-${Date.now()}.csv`, csvContent); } catch (e) { console.warn('download csv failed', e); }
+    });
+
+    downloadXlsBtn.addEventListener('click', async () => {
+      try { downloadExcel(`soql-results-${Date.now()}.xls`, cols, records); } catch (e) { console.warn('download xls failed', e); }
+    });
+
+    // Wrap table in a dedicated wrapper for nicer styling (CSS handles scrolling, header stickiness, zebra rows)
+     const instanceBase = await getInstanceUrl().catch(()=>null);
+
+     // Ensure context menu wiring for clickable Ids is present
+     try { ensureIdContextMenuWired(); } catch {}
+
+     const tableWrap = document.createElement('div');
+     tableWrap.className = 'soql-table-wrap';
+
+     const table = document.createElement('table');
+     table.className = 'soql-results-table';
+     const thead = document.createElement('thead');
+     const thr = document.createElement('tr');
+     cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; thr.appendChild(th); });
+     thead.appendChild(thr); table.appendChild(thead);
+
+     const tbody = document.createElement('tbody');
+     for (const r of (records || [])) {
+      const tr = document.createElement('tr');
+      for (const c of cols) {
+        const td = document.createElement('td');
+        const info = linkifyInfoForValue(r && r[c], instanceBase);
+        // If linkify produced an actual link (URL or SF id) and linking is enabled, render anchor
+        if (info.isLink && linkifyEnabled) {
+          const a = document.createElement('a');
+          a.href = info.href;
+          a.target = '_blank'; a.rel = 'noopener noreferrer';
+          a.textContent = info.text || '';
+          a.className = 'sf-id-link';
+          // If the link text itself is an SF Id, wire context menu to show ID actions (copy/open)
+          try {
+            const idRe = /^[a-zA-Z0-9]{15,18}$/;
+            const txt = String(info.text || '');
+            const idMatch = idRe.test(txt) ? txt : null;
+            if (idMatch) {
+              a.addEventListener('contextmenu', (e) => { try { e.preventDefault(); showIdContextMenu(idMatch, e.clientX || 0, e.clientY || 0); } catch (err) { /* ignore */ } });
+              // Also handle middle-click or ctrl/meta-click behavior via normal anchor; no extra handling needed
+            }
+          } catch (e) { /* ignore */ }
+          td.appendChild(a);
+        } else {
+          // preserve long values while keeping cell layout manageable
+          const text = info.text || '';
+          // If text looks like a Salesforce Id and we have an instance base, make it a clickable id like other parts of the UI
+          try {
+            const idRe = /^[a-zA-Z0-9]{15,18}$/;
+            if (idRe.test(String(text || '')) && instanceBase) {
+              const idStr = String(text);
+              const a = document.createElement('a');
+              a.href = (instanceBase ? instanceBase.replace(/\/+$/, '') : '') + '/' + encodeURIComponent(idStr);
+              a.target = '_blank'; a.rel = 'noopener noreferrer';
+              a.textContent = idStr;
+              a.className = 'sf-id-link';
+              a.addEventListener('contextmenu', (e) => { try { e.preventDefault(); showIdContextMenu(idStr, e.clientX || 0, e.clientY || 0); } catch (err) { /* ignore */ } });
+              td.appendChild(a);
+            } else if (String(text).includes('\n') || String(text).length > 200) {
+              const pre = document.createElement('div');
+              pre.className = 'soql-cell-pre';
+              pre.textContent = text;
+              td.appendChild(pre);
+            } else {
+              td.textContent = text;
+            }
+          } catch (e) {
+            try { td.textContent = String(info.text || ''); } catch { td.textContent = ''; }
+          }
+        }
+        // add column metadata for targeted styling if needed
+        try { td.setAttribute('data-col', String(c)); } catch {}
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    container.appendChild(tableWrap);
+    els.results.appendChild(container);
+   } catch (e) { console.warn && console.warn('renderSoqlResults failed', e); try { els.results.textContent = JSON.stringify(records, null, 2); } catch {} }
+}

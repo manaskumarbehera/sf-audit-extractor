@@ -124,24 +124,41 @@
     }
 
     function svgPin() {
-        return (
-            '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-            + '<path d="M8 3h8"/>'
-            + '<path d="M10 3v6l-3 3v1h10v-1l-3-3V3"/>'
-            + '<path d="M12 13v8"/>'
-            + '</svg>'
-        );
+        const xmlns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(xmlns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        const paths = ['M8 3h8', 'M10 3v6l-3 3v1h10v-1l-3-3V3', 'M12 13v8'];
+        paths.forEach(d => {
+            const p = document.createElementNS(xmlns, 'path');
+            p.setAttribute('d', d);
+            svg.appendChild(p);
+        });
+        return svg.outerHTML;
     }
 
     function svgPinOff() {
-        return (
-            '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-            + '<path d="M8 3h8"/>'
-            + '<path d="M10 3v6l-3 3v1h10v-1l-3-3V3"/>'
-            + '<path d="M12 13v8"/>'
-            + '<path d="M4 4l16 16"/>'
-            + '</svg>'
-        );
+        const xmlns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(xmlns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        const paths = ['M8 3h8', 'M10 3v6l-3 3v1h10v-1l-3-3V3', 'M12 13v8', 'M4 4l16 16'];
+        paths.forEach(d => {
+            const p = document.createElementNS(xmlns, 'path');
+            p.setAttribute('d', d);
+            svg.appendChild(p);
+        });
+        return svg.outerHTML;
     }
 
     function updatePinButton(pinned) {
@@ -381,5 +398,307 @@
         if (connected) statusEl.classList.add('connected'); else statusEl.classList.remove('connected');
         statusText.textContent = message;
     }
+
+    // SOQL validation UI integration
+    // - Dynamically import the validator module when the SOQL pane is shown
+    // - Wire the editor to run validateSoql(query, describe) and render messages into #soql-errors
+    (function setupSoqlValidationUI(){
+        // If the richer soql_helper module is already loaded, it will own all editor wiring
+        // and validation; skip the popup.js fallback to avoid duplicate listeners and conflicts.
+        if (window.__soql_helper_loaded) {
+            try { console.debug && console.debug('soql_helper present — skipping popup-level SOQL validation'); } catch(e) {}
+            return;
+        }
+        // Additional guard: if the <script type="module" src="soql_helper.js"> tag is present
+        // in the DOM (it will be, since popup.html loads the module after popup.js), then the
+        // richer helper will initialize shortly. Avoid registering the popup-level fallback
+        // listeners now to prevent duplicate suggestion listeners and double-apply behaviour.
+        try {
+            const helperScript = document.querySelector('script[type="module"][src$="soql_helper.js"], script[type="module"][src*="/soql_helper.js"], script[type="module"][src*="soql_helper.js"]');
+            if (helperScript) {
+                try { console.debug && console.debug('soql_helper module script tag present — deferring popup-level SOQL fallback'); } catch(e) {}
+                return;
+            }
+        } catch(e) {}
+        // If the full helper loads later, let it initialize the UI; listen for the event and call its init
+        function onSoqlHelperLoaded() {
+            try { if (window.__soql_helper_ensureInitOnce) window.__soql_helper_ensureInitOnce(); } catch(e) {}
+            try { document.removeEventListener('soql-helper-loaded', onSoqlHelperLoaded); } catch(e) {}
+        }
+        try { document.addEventListener('soql-helper-loaded', onSoqlHelperLoaded); } catch(e) {}
+
+        let initialized = false;
+        let validatorModule = null;
+        let debounceTimer = null;
+        const DEBOUNCE_MS = 300;
+        // Suggestion-related state
+        let suggesterModule = null;
+        let suggestionDebounce = null;
+        const SUGGEST_DEBOUNCE_MS = 250;
+
+        // Minimal Account describe used for client-side validation when Account is selected
+        const demoAccountDescribe = {
+            name: 'Account',
+            __demo: true,
+            fields: [
+                { name: 'Id', type: 'reference' },
+                { name: 'Name', type: 'string' },
+                { name: 'Industry', type: 'string' },
+                { name: 'CreatedDate', type: 'date' },
+                { name: 'IsDeleted', type: 'boolean' },
+                { name: 'LastModifiedDate', type: 'date' },
+                { name: 'ShippingState', type: 'string' },
+                { name: 'BillingCountry', type: 'string' },
+                { name: 'NumberOfEmployees', type: 'number' },
+                { name: 'Type', type: 'string' },
+                { name: 'Active__c', type: 'boolean' },
+                { name: 'RecordType.DeveloperName', type: 'string' },
+                { name: 'Owner.UserType', type: 'string' }
+            ]
+        };
+
+        async function loadValidator() {
+            if (validatorModule) return validatorModule;
+            try {
+                // dynamic import of the ES module
+                validatorModule = await import('./soql_semantic_validator.js');
+                return validatorModule;
+            } catch (e) {
+                console.error('Failed to load SOQL validator module', e);
+                validatorModule = null;
+                return null;
+            }
+        }
+
+        async function loadSuggester() {
+            if (suggesterModule) return suggesterModule;
+            try {
+                // Import as module that exports suggestSoql
+                const mod = await import('./soql_suggester.js');
+                // Normalize to an object with a suggestSoql function, supporting default and named exports
+                let fn = null;
+                if (mod && typeof mod.suggestSoql === 'function') fn = mod.suggestSoql;
+                else if (mod && typeof mod.default === 'function') fn = mod.default;
+                else if (mod && mod.default && typeof mod.default.suggestSoql === 'function') fn = mod.default.suggestSoql;
+                if (typeof fn === 'function') {
+                    suggesterModule = { suggestSoql: fn };
+                    return suggesterModule;
+                }
+                // fallback: expose whatever the module exported
+                suggesterModule = mod || null;
+                return suggesterModule;
+            } catch (e) {
+                console.warn('Failed to load SOQL suggester module', e);
+                suggesterModule = null;
+                return null;
+            }
+        }
+
+        function renderMessages(messages) {
+            const el = document.getElementById('soql-errors');
+            if (!el) return;
+            const editor = document.getElementById('soql-editor');
+            const editorActive = (editor && document.activeElement === editor);
+            if (!messages || messages.length === 0) {
+                // If the SOQL editor has focus (cursor inside), avoid showing the 'No issues found.' text
+                // to prevent confusing the user while they are still editing. Instead, clear the area.
+                if (editorActive) {
+                    el.innerHTML = '';
+                    el.classList.remove('soql-error-list');
+                    el.classList.remove('soql-valid');
+                    return;
+                }
+                el.innerHTML = '<div class="soql-valid">No issues found.</div>';
+                el.classList.remove('soql-error-list');
+                el.classList.add('soql-valid');
+                return;
+            }
+            el.classList.remove('soql-valid');
+            el.classList.add('soql-error-list');
+            const lis = messages.map(m => `<li>${escapeHtml(String(m))}</li>`).join('\n');
+            el.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
+        }
+
+        // Render validator messages into the top validator area (#soql-validator-top)
+        function renderValidatorTop(messages) {
+            const topEl = document.getElementById('soql-validator-top');
+            if (!topEl) return;
+            if (!messages || messages.length === 0) {
+                topEl.innerHTML = '';
+                topEl.classList.remove('soql-error-list');
+                topEl.classList.remove('soql-valid');
+                return;
+            }
+            topEl.classList.remove('soql-valid');
+            topEl.classList.add('soql-error-list');
+            const lis = messages.map(m => `<li>${escapeHtml(String(m))}</li>`).join('\n');
+            topEl.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
+        }
+
+        function escapeHtml(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+
+        async function validateAndRender() {
+            // Run semantic validator and render results into the top validator area.
+            const editor = document.getElementById('soql-editor');
+            const objSel = document.getElementById('soql-obj');
+            if (!editor) return;
+            const q = editor.value || '';
+            const mod = await loadValidator();
+            if (!mod || typeof mod.validateSoql !== 'function') {
+                renderValidatorTop([`Failed to load validator module`]);
+                return;
+            }
+            // Provide describe only when the selected object is Account (demo) AND the query FROM is Account
+            let describe = null;
+            try {
+                const parts = (typeof mod.parseQueryParts === 'function') ? mod.parseQueryParts(q) : null;
+                const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
+                if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
+                    describe = demoAccountDescribe;
+                }
+            } catch {}
+
+            try {
+                const res = mod.validateSoql(q, describe);
+                const rawMsgs = Array.isArray(res.messages) ? res.messages.slice() : [];
+                const describeMsgRe = /^Failed to retrieve describe for\s+'?.+?'?$/i;
+                const nonDescribeMsgs = rawMsgs.filter(m => !describeMsgRe.test(String(m || '')));
+                // Remove the specific validator message 'SELECT list is empty' because it conflicts with suggester UX
+                const filteredMsgs = nonDescribeMsgs.filter(m => !/^\s*SELECT list is empty\s*$/i.test(String(m || '')));
+                 // Render any non-describe messages to the top validator area. If there are none, clear the top area.
+                if (filteredMsgs.length === 0) renderValidatorTop([]);
+                else renderValidatorTop(filteredMsgs);
+            } catch (e) {
+                renderValidatorTop([`Validator exception: ${String(e)}`]);
+            }
+        }
+
+        async function computeAndRenderSuggestions() {
+            const editor = document.getElementById('soql-editor');
+            const objSel = document.getElementById('soql-obj');
+            if (!editor) return;
+            const q = editor.value || '';
+            const mod = await loadSuggester();
+            if (!mod || typeof mod.suggestSoql !== 'function') {
+                renderSuggestions([]);
+                return;
+            }
+            let describe = null;
+            try {
+                const validatorMod = await loadValidator();
+                const parts = (validatorMod && typeof validatorMod.parseQueryParts === 'function') ? validatorMod.parseQueryParts(q) : null;
+                const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
+                if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
+                    describe = demoAccountDescribe;
+                }
+            } catch {}
+            try {
+                const suggestions = await mod.suggestSoql(q, describe, 'soqlEditor') || [];
+                 // normalize suggestions array
+                 renderSuggestions(suggestions.slice(0, 10));
+                 // store latest suggestions on the element so apply can access them
+                 const hintsEl = document.getElementById('soql-hints');
+                 if (hintsEl) hintsEl._latestSuggestions = suggestions;
+             } catch (e) {
+                 renderSuggestions([]);
+             }
+        }
+
+        function scheduleSuggestionCompute() {
+            if (suggestionDebounce) clearTimeout(suggestionDebounce);
+            suggestionDebounce = setTimeout(() => { computeAndRenderSuggestions().catch(()=>{}); }, SUGGEST_DEBOUNCE_MS);
+        }
+
+        function applySuggestionByIndex(idx) {
+            const hintsEl = document.getElementById('soql-hints');
+            if (!hintsEl) return;
+            // avoid double-apply if another handler (soql_helper) is already applying a suggestion
+            if (hintsEl._applying) return;
+            const suggestions = hintsEl._latestSuggestions || [];
+            const s = suggestions[idx];
+            if (!s) return;
+            const editor = document.getElementById('soql-editor');
+            if (!editor) return;
+            try {
+                // mark that we are applying to prevent other handlers from doing the same
+                hintsEl._applying = true;
+                 const cur = editor.value || '';
+                 const app = s.apply || {};
+                 let next = cur;
+                 if (app.type === 'append') {
+                     next = cur + (app.text || '');
+                 } else if (app.type === 'replace') {
+                     if (typeof app.start === 'number' && typeof app.end === 'number' && app.start >= 0 && app.end > app.start && app.end <= cur.length) {
+                         next = cur.slice(0, app.start) + (app.text || '') + cur.slice(app.end);
+                     } else if (app.text) {
+                        // fallback: try simple heuristic replace of first '*' occurrence
+                        const star = cur.indexOf('*');
+                        if (star >= 0) next = cur.slice(0, star) + app.text + cur.slice(star+1);
+                        else next = cur + app.text;
+                     }
+                 } else if (app.type === 'insert') {
+                     if (typeof app.pos === 'number' && app.pos >= 0 && app.pos <= cur.length) {
+                         next = cur.slice(0, app.pos) + (app.text || '') + cur.slice(app.pos);
+                     } else {
+                         next = cur + (app.text || '');
+                     }
+                 } else {
+                    // unknown -> append
+                    next = cur + (app.text || '');
+                 }
+                 editor.value = next;
+                 // re-run validation and suggestions after applying
+                 scheduleValidation();
+                 scheduleSuggestionCompute();
+                 // clear applying flag after scheduling recompute
+                 hintsEl._applying = false;
+             } catch (e) {
+                 // ignore
+                 try { hintsEl._applying = false; } catch(_){}
+             }
+         }
+
+        function scheduleValidation() {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => { validateAndRender().catch(()=>{}); }, DEBOUNCE_MS);
+        }
+
+        document.addEventListener('soql-load', async () => {
+            if (initialized) return;
+            initialized = true;
+            try {
+                // Do not eagerly validate on every keystroke; validator will run on blur/run/object change.
+                // Initial load of modules: suggester and validator (best-effort)
+                if (typeof loadSuggester === 'function') loadSuggester().catch(()=>{});
+                if (typeof loadValidator === 'function') loadValidator().catch(()=>{});
+
+                const editor = document.getElementById('soql-editor');
+                const runBtn = document.getElementById('soql-run');
+                const objSel = document.getElementById('soql-obj');
+
+                if (editor) {
+                    // Validation: only run on blur (user finished typing) to avoid overriding suggester in-flight
+                    editor.addEventListener('blur', scheduleValidation);
+                    // Suggestions: still compute on input and focus to provide live hints
+                    editor.addEventListener('input', scheduleSuggestionCompute);
+                    editor.addEventListener('keyup', scheduleSuggestionCompute);
+                    editor.addEventListener('focus', scheduleSuggestionCompute);
+                    editor.addEventListener('click', scheduleSuggestionCompute);
+                }
+                if (objSel) objSel.addEventListener('change', scheduleValidation);
+                if (runBtn) runBtn.addEventListener('click', scheduleValidation);
+                if (objSel) objSel.addEventListener('change', scheduleSuggestionCompute);
+                if (runBtn) runBtn.addEventListener('click', scheduleSuggestionCompute);
+                // Do not run validation immediately; wait for blur or run to avoid overriding suggestions during edit
+                // But compute suggestions initially so UI shows helpful hints
+                scheduleSuggestionCompute();
+            } catch (err) {
+                try { console.error('soql-load handler error', err); } catch(e) { /* ignore */ }
+            }
+        });
+
+    })();
 
 })();

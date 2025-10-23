@@ -1,14 +1,71 @@
-// soql_helper_utils.js
-// API: Utilities used by SOQL helper UI and logic
-// Exports
-// - parse/context: getClauseAtCursor, getSelectPhase, getFromPhase, getGroupByPhase, getWherePhase, getOrderByPhase, prefixFilter
-// - schema: getFieldsForObject, getRelationshipMeta, getFieldsForRelationship, filterRelationshipCompletions, buildKeyPrefixMap, getObjectLabelByKeyPrefix
-// - id/data: isSalesforceIdValue, getByPath
-// - exports: parseSelectItem, toCSV, toExcelHTML
-// - SF/Chrome: findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab
-// - misc: fallbackCopyText
+// Cleaned soql_helper_utils.js - single copy of utilities (dynamic schema imports to avoid circular references)
 
-import { Soql_helper_schema } from './soql_helper_schema.js';
+// Centralized instance URL/session detection cache and helpers
+let _instanceUrlCache = null;
+
+async function findSalesforceTab(){
+  try {
+    if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.findSalesforceTab === 'function') {
+      return await window.Utils.findSalesforceTab();
+    }
+  } catch {}
+  try {
+    const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+    if (!Array.isArray(matches) || matches.length === 0) return null;
+    let currentWindowId = null;
+    try { const current = await chrome.windows.getCurrent({ populate: true }); currentWindowId = current?.id ?? null; } catch {}
+    const activeInCurrent = matches.find(t => t.active && (currentWindowId == null || t.windowId === currentWindowId));
+    return activeInCurrent || matches[0] || null;
+  } catch { return null; }
+}
+
+export async function sendMessageToSalesforceTab(message){
+  try {
+    if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.sendMessageToSalesforceTab === 'function') {
+      return await window.Utils.sendMessageToSalesforceTab(message);
+    }
+  } catch {}
+  try {
+    const tab = await findSalesforceTab();
+    if (!tab?.id) return null;
+    return await new Promise((resolve) => {
+      try {
+        chrome.tabs.sendMessage(tab.id, message, (resp) => {
+          if (chrome.runtime.lastError) { resolve(null); return; }
+          resolve(resp || null);
+        });
+      } catch { resolve(null); }
+    });
+  } catch { return null; }
+}
+
+export async function getInstanceUrl(){
+  if (_instanceUrlCache) return _instanceUrlCache;
+  try {
+    if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.getInstanceUrl === 'function') {
+      const u = await window.Utils.getInstanceUrl();
+      _instanceUrlCache = u || null;
+      return _instanceUrlCache;
+    }
+  } catch {}
+  try {
+    const resp = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+    if (resp && resp.success && resp.isLoggedIn && resp.instanceUrl) {
+      _instanceUrlCache = resp.instanceUrl;
+      return _instanceUrlCache;
+    }
+  } catch {}
+  return await new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, (resp) => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        const url = resp?.instanceUrl || null;
+        _instanceUrlCache = url || null;
+        resolve(_instanceUrlCache);
+      });
+    } catch { resolve(null); }
+  });
+}
 
 // -------------------- parse/context helpers --------------------
 export function getClauseAtCursor(txt, pos) {
@@ -19,8 +76,7 @@ export function getClauseAtCursor(txt, pos) {
   let m;
   while ((m = re.exec(upTo)) !== null) { map.push({ kw: m[1].toUpperCase().replace(/\s+/g, ' '), idx: m.index }); }
   if (map.length === 0) return 'START';
-  const last = map[map.length - 1].kw;
-  return last;
+  return map[map.length - 1].kw;
 }
 
 export function getSelectPhase(txt, pos) {
@@ -84,23 +140,85 @@ export function prefixFilter(list, prefix) {
   return list.filter(x => String(x.label || x).toLowerCase().startsWith(p));
 }
 
-// -------------------- schema helpers --------------------
-let relationshipMetaCache = new Map();
-let keyPrefixMap = null; // prefix -> label/name
+export function prefixFilterFlexible(list, prefix) {
+  try {
+    const p = (prefix || '').toLowerCase();
+    if (!p) return Array.from(list);
+    const asStrings = Array.from(list);
+    const starts = asStrings.filter(x => String(x.label || x).toLowerCase().startsWith(p));
+    if (starts.length) return starts;
+    return asStrings.filter(x => String(x.label || x).toLowerCase().includes(p));
+  } catch (e) { return Array.from(list); }
+}
 
-export async function getFieldsForObject(objName) {
+export function getSelectSegment(query) {
+  try {
+    const q = String(query || '');
+    const m = q.match(/\bSELECT\b([\s\S]*?)\bFROM\b/i);
+    if (!m) return '';
+    return m[1] || '';
+  } catch { return ''; }
+}
+
+export function hasTopLevelFieldsMacro(query) {
+  try {
+    const seg = getSelectSegment(query).toUpperCase();
+    return /\bFIELDS\s*\(\s*(ALL|STANDARD|CUSTOM)\s*\)/i.test(seg);
+  } catch { return false; }
+}
+
+export function validateFieldsMacro(query) {
+  try {
+    const selectSeg = getSelectSegment(query);
+    if (!selectSeg) return null;
+
+    const hasMacro = /\bFIELDS\s*\(\s*(ALL|STANDARD|CUSTOM)\s*\)/i.test(selectSeg);
+    if (!hasMacro) return null;
+
+    const withoutMacros = selectSeg.replace(/\bFIELDS\s*\(\s*(?:ALL|STANDARD|CUSTOM)\s*\)/ig, '').replace(/[()]/g, '');
+    const remainder = withoutMacros.replace(/[\s,]+/g, '');
+    if (remainder.length > 0) {
+      return 'FIELDS(...) cannot be mixed with explicit field names.';
+    }
+
+    if (/\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i.test(selectSeg)) {
+      return 'FIELDS() macros cannot be used with aggregate functions.';
+    }
+
+    const afterFrom = String(query || '').match(/\bFROM\b\s*\(/i);
+    if (afterFrom) return 'FIELDS() macros are not allowed in subqueries.';
+    if (/\bSELECT\b[\s\S]*\(\s*SELECT\b/i.test(selectSeg)) return 'FIELDS() macros are not allowed in subqueries.';
+
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// -------------------- schema helpers (dynamic imports) --------------------
+let relationshipMetaCache = new Map();
+let keyPrefixMap = null;
+
+export async function getFieldsForObject(objName, useTooling = false) {
   if (!objName) return [];
   try {
-    const desc = await Soql_helper_schema.describeSObject(objName);
+    const schema = await import('./soql_helper_schema.js');
+    // Check if object is queryable before attempting describe
+    try {
+      const q = await schema.Soql_helper_schema.isQueryable(objName, useTooling);
+      if (!q) return [];
+    } catch (e) { /* fallback to describing if isQueryable fails */ }
+    const desc = await schema.Soql_helper_schema.describeSObject(objName, useTooling);
     return Array.isArray(desc?.fields) ? desc.fields.map(f => ({ name: f.name, type: f.type, sortable: true })) : [];
   } catch { return []; }
 }
 
-export async function getRelationshipMeta(objName){
+export async function getRelationshipMeta(objName, useTooling = false){
   if (!objName) return { relMap: new Map(), relNames: new Set() };
-  if (relationshipMetaCache.has(objName)) return relationshipMetaCache.get(objName);
+  const cacheKey = `${objName}::${useTooling ? 'TOOLING' : 'STD'}`;
+  if (relationshipMetaCache.has(cacheKey)) return relationshipMetaCache.get(cacheKey);
   try {
-    const d = await Soql_helper_schema.describeSObject(objName);
+    const d = await (await import('./soql_helper_schema.js')).Soql_helper_schema.describeSObject(objName, useTooling);
     const relMap = new Map();
     const relNames = new Set();
     if (d && Array.isArray(d.fields)) {
@@ -119,301 +237,318 @@ export async function getRelationshipMeta(objName){
       }
     }
     const meta = { relMap, relNames };
-    relationshipMetaCache.set(objName, meta);
+    relationshipMetaCache.set(cacheKey, meta);
     return meta;
   } catch {
     return { relMap: new Map(), relNames: new Set() };
   }
 }
 
-export async function getFieldsForRelationship(objName, relName){
-  const { relMap } = await getRelationshipMeta(objName);
+export async function getFieldsForRelationship(objName, relName, useTooling = false){
+  const { relMap } = await getRelationshipMeta(objName, useTooling);
   const refSet = relMap.get(relName) || new Set();
   if (!refSet.size) return [];
   const out = new Set();
   for (const refObj of refSet) {
     try {
-      const desc = await Soql_helper_schema.describeSObject(refObj);
+      // avoid describing non-queryable referenced objects
+      try {
+        const schema = await import('./soql_helper_schema.js');
+        const q = await schema.Soql_helper_schema.isQueryable(refObj, useTooling);
+        if (!q) continue;
+      } catch (e) { /* ignore and try describe */ }
+
+      const desc = await (await import('./soql_helper_schema.js')).Soql_helper_schema.describeSObject(refObj, useTooling);
       if (desc && Array.isArray(desc.fields)) {
-        for (const f of desc.fields) out.add(`${relName}.${f.name}`);
+        desc.fields.forEach(f => { if (f && f.name) out.add(f.name); });
       }
-    } catch {}
+    } catch(_) {
+      // ignore individual describe failures
+    }
   }
   return Array.from(out);
 }
 
-export function filterRelationshipCompletions(relName, partialAfterDot, fields){
-  const p = (partialAfterDot||'').toLowerCase();
-  return fields.filter(fn=>{
-    const after = fn.slice(relName.length+1);
-    return after.toLowerCase().startsWith(p);
-  });
-}
-
-export function buildKeyPrefixMap(){
+// Build a quick lookup map from keyPrefix -> object name. This is synchronous-friendly
+// (returns a Map immediately) but will attempt an async fill if the schema module isn't available yet.
+export function buildKeyPrefixMap(useTooling = false) {
+  keyPrefixMap = new Map();
   try {
-    const objs = Soql_helper_schema.getObjects?.() || [];
-    const map = new Map();
-    for (const o of objs) {
-      const p = (o && o.keyPrefix) ? String(o.keyPrefix).toUpperCase() : null;
-      if (p && p.length === 3) {
-        const label = o.label || o.name || p;
-        if (!map.has(p)) map.set(p, label);
-      }
-    }
-    keyPrefixMap = map;
-  } catch { keyPrefixMap = keyPrefixMap || new Map(); }
-}
-
-export function getObjectLabelByKeyPrefix(prefix){
-  if (!prefix || prefix.length < 3) return null;
-  const p = prefix.slice(0,3).toUpperCase();
-  try {
-    if (!keyPrefixMap || keyPrefixMap.size === 0) buildKeyPrefixMap();
-    return keyPrefixMap?.get(p) || null;
-  } catch { return null; }
-}
-
-// -------------------- id/data helpers --------------------
-export function isSalesforceIdValue(key, value){
-  if (!value || typeof value !== 'string') return false;
-  const s = value.trim();
-  const idRe = /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/;
-  return idRe.test(s);
-}
-
-export function getByPath(obj, pathArr){
-  try {
-    let cur = obj;
-    for (const p of pathArr) { if (cur == null) return undefined; cur = cur[p]; }
-    return cur;
-  } catch { return undefined; }
-}
-
-// -------------------- export helpers --------------------
-export function parseSelectItem(item){
-  const s = String(item||'').trim();
-  if (!s) return null;
-  if (s.startsWith('(')) return null;
-  let expr = s;
-  let alias = null;
-  const mAs = s.match(/^[\s\S]*?\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$/i);
-  if (mAs) {
-    expr = s.replace(/\s+AS\s+[A-Za-z_][A-ZaZ0-9_]*$/i,'').trim();
-    alias = mAs[1];
-  } else if (/\(/.test(s) && !/^FIELDS\(/i.test(s)) {
-    const mAgg = s.match(/^([\s\S]*?\))\s+([A-Za-z_][A-ZaZ0-9_]*)$/);
-    const mAgg2 = mAgg || s.match(/^(.*\))\s+([A-Za-z_][A-ZaZ0-9_]*)$/);
-    if (mAgg2) { expr = mAgg2[1].trim(); alias = mAgg2[2]; }
-  }
-  let path = null;
-  const isAggregate = /\(/.test(expr) && !/^FIELDS\(/i.test(expr);
-  if (!isAggregate && /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(expr)) {
-    path = expr.split('.');
-  }
-  const label = alias || expr;
-  return { expr, alias, label, path, isAggregate };
-}
-
-export function toCSV(resp, parts, describe){
-  if (!Array.isArray(resp?.records)) return '';
-  const records = resp.records;
-
-  let colDefs = [];
-  if (parts && Array.isArray(parts.selectFields) && parts.selectFields.length) {
-    const defs = [];
-    for (const raw of parts.selectFields) {
-      const s = String(raw||'').trim();
-      const m = s.match(/^FIELDS\((ALL|STANDARD|CUSTOM)\)$/i);
-      if (m) {
-        const mode = m[1].toUpperCase();
-        const fields = Array.isArray(describe?.fields) ? describe.fields.map(f => f.name) : [];
-        const list = fields.length ? fields : [];
-        let chosen = list;
-        if (mode === 'STANDARD') chosen = list.filter(n => !/__c$/i.test(n));
-        else if (mode === 'CUSTOM') chosen = list.filter(n => /__c$/i.test(n));
-        chosen.forEach(name => defs.push({ expr: name, alias: null, label: name, path: [name], isAggregate: false }));
-      } else {
-        const parsed = parseSelectItem(s);
-        if (parsed) defs.push(parsed);
-      }
-    }
-    const seen = new Set();
-    colDefs = defs.filter(cd => { const key = cd.label + '|' + (cd.path?cd.path.join('.'):''); if (seen.has(key)) return false; seen.add(key); return true; });
-  }
-
-  if (!colDefs.length) {
-    const keys = Array.from(records.reduce((s, r) => { Object.keys(r).forEach(k => { if (k !== 'attributes') s.add(k); }); return s; }, new Set()));
-    const rows = [keys.join(',')];
-    records.forEach(r=>{
-      const row = keys.map(k=>{
-        const v = r[k];
-        let s = (v===null||v===undefined) ? '' : (typeof v==='object' ? JSON.stringify(v) : String(v));
-        s = s.replace(/"/g,'""');
-        return `"${s}"`;
-      }).join(',');
-      rows.push(row);
-    });
-    return rows.join('\n');
-  }
-
-  const header = colDefs.map(cd=>cd.label).join(',');
-  const rows = [header];
-
-  const first = records[0] || {};
-  const exprKeys = Object.keys(first).filter(k=>/^expr\d+$/.test(k)).sort((a,b)=>Number(a.slice(4))-Number(b.slice(4)));
-  const aggNoAliasIdx = colDefs.map((cd, idx)=> (cd.isAggregate && !cd.alias) ? idx : -1).filter(i=>i>=0);
-  const exprMap = new Map();
-  let cursor = 0;
-  for (const idx of aggNoAliasIdx) { if (cursor < exprKeys.length) { exprMap.set(idx, exprKeys[cursor++]); } }
-
-  rows.push(...records.map(rec => {
-    const row = colDefs.map((cd, colIdx)=>{
-      let v;
-      if (cd.path) v = getByPath(rec, cd.path);
-      else if (cd.alias) v = rec[cd.alias];
-      else if (cd.isAggregate) { const key = exprMap.get(colIdx); v = key ? rec[key] : undefined; }
-      else v = rec[cd.expr];
-      let s = (v===null||v===undefined) ? '' : (typeof v==='object' ? JSON.stringify(v) : String(v));
-      s = s.replace(/"/g,'""');
-      return `"${s}"`;
-    }).join(',');
-    return row;
-  }));
-  return rows.join('\n');
-}
-
-export function toExcelHTML(resp, parts, describe){
-  const docStart = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1">\n<style>table{border-collapse:collapse} th,td{border:1px solid #000; padding:4px; text-align:left; white-space:pre-wrap}</style></head><body>';
-  const docEnd = '</body></html>';
-
-  if (!Array.isArray(resp?.records)) {
-    try {
-      const body = `<pre>${String(JSON.stringify(resp||{}, null, 2)).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>`;
-      return `${docStart}${body}${docEnd}`;
-    } catch {
-      return `${docStart}<pre></pre>${docEnd}`;
-    }
-  }
-  const records = resp.records;
-
-  function escHtml(s){ return String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-
-  let colDefs = [];
-  if (parts && Array.isArray(parts.selectFields) && parts.selectFields.length) {
-    const defs = [];
-    for (const raw of parts.selectFields) {
-      const s = String(raw||'').trim();
-      const m = s.match(/^FIELDS\((ALL|STANDARD|CUSTOM)\)$/i);
-      if (m) {
-        const mode = m[1].toUpperCase();
-        const fields = Array.isArray(describe?.fields) ? describe.fields.map(f => f.name) : [];
-        const list = fields.length ? fields : [];
-        let chosen = list;
-        if (mode === 'STANDARD') chosen = list.filter(n => !/__c$/i.test(n));
-        else if (mode === 'CUSTOM') chosen = list.filter(n => /__c$/i.test(n));
-        chosen.forEach(name => defs.push({ expr: name, alias: null, label: name, path: [name], isAggregate: false }));
-      } else {
-        const parsed = parseSelectItem(s);
-        if (parsed) defs.push(parsed);
-      }
-    }
-    const seen = new Set();
-    colDefs = defs.filter(cd => { const key = cd.label + '|' + (cd.path?cd.path.join('.'):''); if (seen.has(key)) return false; seen.add(key); return true; });
-  }
-
-  if (!colDefs.length) {
-    const keys = Array.from(records.reduce((s, r) => { Object.keys(r).forEach(k => { if (k !== 'attributes') s.add(k); }); return s; }, new Set()));
-    const head = '<tr>' + keys.map(k=>`<th>${escHtml(k)}</th>`).join('') + '</tr>';
-    const rows = records.map(r=> '<tr>' + keys.map(k=>`<td>${escHtml(typeof r[k]==='object' ? JSON.stringify(r[k]) : (r[k] ?? ''))}</td>`).join('') + '</tr>').join('');
-    return `${docStart}<table>${head}${rows}</table>${docEnd}`;
-  }
-
-  const first = records[0] || {};
-  const exprKeys = Object.keys(first).filter(k=>/^expr\d+$/.test(k)).sort((a,b)=>Number(a.slice(4))-Number(b.slice(4)));
-  const aggNoAliasIdx = colDefs.map((cd, idx)=> (cd.isAggregate && !cd.alias) ? idx : -1).filter(i=>i>=0);
-  const exprMap = new Map(); let cursor = 0;
-  for (const idx of aggNoAliasIdx) { if (cursor < exprKeys.length) { exprMap.set(idx, exprKeys[cursor++]); } }
-
-  const head = '<tr>' + colDefs.map(cd=>`<th>${escHtml(cd.label)}</th>`).join('') + '</tr>';
-  const rows = records.map(rec => {
-    return '<tr>' + colDefs.map((cd, colIdx)=>{
-      let v;
-      if (cd.path) v = getByPath(rec, cd.path);
-      else if (cd.alias) v = rec[cd.alias];
-      else if (cd.isAggregate) { const key = exprMap.get(colIdx); v = key ? rec[key] : undefined; }
-      else v = rec[cd.expr];
-      return `<td>${escHtml(v)}</td>`;
-    }).join('') + '</tr>';
-  }).join('');
-  return `${docStart}<table>${head}${rows}</table>${docEnd}`;
-}
-
-// -------------------- SF/Chrome helpers --------------------
-export async function findSalesforceTab(){
-  try {
-    const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
-    if (!Array.isArray(matches) || matches.length === 0) return null;
-    let currentWindowId = null;
-    try { const current = await chrome.windows.getCurrent({ populate: true }); currentWindowId = current?.id ?? null; } catch {}
-    const activeInCurrent = matches.find(t => t.active && (currentWindowId == null || t.windowId === currentWindowId));
-    return activeInCurrent || matches[0] || null;
-  } catch { return null; }
-}
-
-export async function sendMessageToSalesforceTab(message){
-  try {
-    const tab = await findSalesforceTab();
-    if (!tab?.id) return null;
-    return await new Promise((resolve) => {
-      try {
-        chrome.tabs.sendMessage(tab.id, message, (resp) => {
-          if (chrome.runtime.lastError) { resolve(null); return; }
-          resolve(resp || null);
-        });
-      } catch { resolve(null); }
-    });
-  } catch { return null; }
-}
-
-let instanceUrlCache = null;
-export async function getInstanceUrl(){
-  if (instanceUrlCache) return instanceUrlCache;
-  try {
-    const resp = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-    if (resp && resp.success && resp.isLoggedIn && resp.instanceUrl) {
-      instanceUrlCache = resp.instanceUrl;
-      return instanceUrlCache;
-    }
-  } catch {}
-  return await new Promise((resolve) => {
-    try {
-      chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, (resp) => {
-        if (chrome.runtime.lastError) { resolve(null); return; }
-        const url = resp?.instanceUrl || null;
-        instanceUrlCache = url || null;
-        resolve(instanceUrlCache);
+    // If Soql_helper_schema is already loaded into the environment (common when soql_helper.js imports it), use it
+    if (typeof Soql_helper_schema !== 'undefined' && Soql_helper_schema && typeof Soql_helper_schema.getObjects === 'function') {
+      const list = Soql_helper_schema.getObjects(!!useTooling) || [];
+      list.forEach(o => {
+        try { if (o && o.keyPrefix) keyPrefixMap.set(String(o.keyPrefix), String(o.name || o.label || '')); } catch {}
       });
-    } catch { resolve(null); }
-  });
+      return keyPrefixMap;
+    }
+  } catch (e) {
+    // fall through to dynamic import fallback
+  }
+
+  // Dynamic import fallback: fill the map asynchronously and keep the immediate Map return (may be empty at first)
+  (async () => {
+    try {
+      const mod = await import('./soql_helper_schema.js');
+      const list = mod.Soql_helper_schema.getObjects(!!useTooling) || [];
+      const m = new Map();
+      list.forEach(o => { try { if (o && o.keyPrefix) m.set(String(o.keyPrefix), String(o.name || o.label || '')); } catch {} });
+      keyPrefixMap = m;
+    } catch (e) { /* ignore */ }
+  })();
+
+  return keyPrefixMap;
 }
 
-export async function openRecordInNewTab(id){
-  const base = (await getInstanceUrl()) || '';
-  const url = (base ? base.replace(/\/+$/, '') : '') + '/' + encodeURIComponent(id);
-  if (!url.startsWith('http')) return;
+export function clearSchemaCaches(){
+  try { relationshipMetaCache = new Map(); } catch {}
+  try { keyPrefixMap = null; } catch {}
+}
+
+// Exported helpers for SOQL popup: CSV/Excel export and linkify utilities
+export function buildColumnsUnion(records) {
+  const cols = [];
+  const addKey = (k) => { if (k != null && !cols.includes(k)) cols.push(k); };
+  if (!Array.isArray(records)) return cols;
+  if (records.length > 0) {
+    Object.keys(records[0] || {}).forEach(addKey);
+    for (let i = 1; i < records.length; i++) {
+      try { Object.keys(records[i] || {}).forEach(addKey); } catch {}
+    }
+  }
+  return cols;
+}
+
+function escapeCsvCellInternal(v){
+  if (v == null) return '';
+  const s = String(v);
+  if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')){
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+export function recordsToCsv(records, cols){
   try {
-    await chrome.tabs.create({ url });
-  } catch {
-    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch {}
+    const header = (cols || []).map(c => escapeCsvCellInternal(c)).join(',');
+    const rows = (records || []).map(r => (cols || []).map(c => {
+      let v = r && r[c];
+      if (v && typeof v === 'object') {
+        if (typeof v.Name === 'string') v = v.Name;
+        else if (typeof v.label === 'string') v = v.label;
+        else v = JSON.stringify(v);
+      }
+      return escapeCsvCellInternal(v);
+    }).join(','));
+    return [header].concat(rows).join('\n');
+  } catch (e) { return ''; }
+}
+
+export function downloadCsv(filename, csvContent){
+  try {
+    if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.download === 'function') {
+      window.Utils.download(filename, csvContent, 'text/csv');
+      return;
+    }
+  } catch (e) {}
+  try {
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  } catch (e) { /* ignore */ }
+}
+
+export function downloadExcel(filename, cols, records){
+  try {
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let html = '<table><thead><tr>' + (cols || []).map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+    for (const r of (records || [])) {
+      html += '<tr>' + (cols || []).map(c => {
+        let v = r && r[c];
+        if (v && typeof v === 'object') {
+          if (typeof v.Name === 'string') v = v.Name;
+          else if (typeof v.label === 'string') v = v.label;
+          else v = JSON.stringify(v);
+        }
+        return `<td>${esc(v)}</td>`;
+      }).join('') + '</tr>';
+    }
+    html += '</tbody></table>';
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  } catch (e) { /* ignore */ }
+}
+
+export function linkifyInfoForValue(val, instanceBase){
+   try {
+     const idRegex = /^[a-zA-Z0-9]{15,18}$/;
+     const urlRegex = /^https?:\/\//i;
+     let isLink = false;
+     let href = null;
+     let text;
+
+     if (val && typeof val === 'object') {
+       if (typeof val.Name === 'string') { text = val.Name; }
+       else if (typeof val.label === 'string') { text = val.label; }
+       else { text = JSON.stringify(val); }
+       if (val.Id && idRegex.test(val.Id)) {
+         isLink = true; href = (instanceBase ? instanceBase.replace(/\/$/, '') : '') + '/' + val.Id; text = text || val.Id;
+       }
+       return { isLink, href, text };
+     }
+
+     const s = val == null ? '' : String(val);
+     if (urlRegex.test(s)) { isLink = true; href = s; text = s; }
+     else if (idRegex.test(s)) {
+       if (instanceBase) { isLink = true; href = instanceBase.replace(/\/$/, '') + '/' + s; text = s; }
+       else { isLink = false; text = s; }
+     } else { text = s; }
+     return { isLink, href, text };
+   } catch (e) { return { isLink: false, href: null, text: String(val == null ? '' : val) }; }
+ }
+
+// New helper: create a clickable Salesforce Id link element and wire custom events
+export function createSfIdLink(id, label, text) {
+  try {
+    const a = document.createElement('a');
+    a.className = 'sf-id-link';
+    a.href = 'javascript:void(0)';
+    a.setAttribute('role', 'button');
+    a.setAttribute('aria-label', label ? `${label} ${id}` : String(id || ''));
+    a.textContent = (typeof text === 'string' && text.length > 0) ? text : (id || '');
+
+    function dispatchSfIdEvent(ev) {
+      try {
+        // Prefer reporting client coordinates when available
+        const detail = { id: String(id || ''), clientX: ev?.clientX || 0, clientY: ev?.clientY || 0 };
+        const ce = new CustomEvent('sf-id-click', { detail, bubbles: true, cancelable: true });
+        a.dispatchEvent(ce);
+      } catch (e) { /* ignore */ }
+    }
+
+    // Primary interactions: left-click, auxiliary (middle) click, contextmenu, keyboard activation
+    a.addEventListener('click', (ev) => { try { ev.preventDefault(); dispatchSfIdEvent(ev); } catch (e) {} });
+    a.addEventListener('auxclick', (ev) => { try { dispatchSfIdEvent(ev); } catch (e) {} });
+    a.addEventListener('contextmenu', (ev) => { try { ev.preventDefault(); dispatchSfIdEvent(ev); } catch (e) {} });
+    a.addEventListener('keydown', (ev) => { try { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); dispatchSfIdEvent(ev); } } catch (e) {} });
+
+    return a;
+  } catch (e) {
+    try { const a = document.createElement('a'); a.textContent = String(id || ''); return a; } catch { return document.createElement('span'); }
   }
 }
 
-// -------------------- misc helpers --------------------
-export function fallbackCopyText(text){
+// New: synchronous fallback copy helper (used when navigator.clipboard isn't available or fails)
+export function fallbackCopyText(text) {
   try {
+    // Prefer a hidden textarea + execCommand copy fallback
     const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
-    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-  } catch {}
+    ta.value = String(text == null ? '' : text);
+    // Keep off-screen
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+    } catch (e) {
+      // ignore execCommand failure
+    }
+    try { ta.remove(); } catch (e) { /* ignore */ }
+  } catch (e) {
+    // Last-ditch: try to write to clipboard if available (async), ignoring promise
+    try { navigator.clipboard && navigator.clipboard.writeText && navigator.clipboard.writeText(String(text || '')); } catch (e2) { /* ignore */ }
+  }
+}
+
+// Lookup object label by key prefix (synchronous-friendly; may return empty string if map not populated yet)
+export function getObjectLabelByKeyPrefix(prefix) {
+  try {
+    if (!prefix) return '';
+    try {
+      if (keyPrefixMap && keyPrefixMap.has(String(prefix))) return keyPrefixMap.get(String(prefix));
+    } catch {}
+    // Attempt to build map synchronously (async fill may be in progress)
+    try { const m = buildKeyPrefixMap(); if (m && m.has(String(prefix))) return m.get(String(prefix)); } catch {}
+    return '';
+  } catch (e) { return '';
+  }
+}
+
+// Heuristic: check whether a value (or object) looks like a Salesforce Id
+export function isSalesforceIdValue(fieldName, value) {
+  try {
+    const idRegex = /^[a-zA-Z0-9]{15,18}$/;
+    if (value == null) return false;
+    if (typeof value === 'string') return idRegex.test(value);
+    if (typeof value === 'object') {
+      if (typeof value.Id === 'string' && idRegex.test(value.Id)) return true;
+      // If object is a simple wrapper with a single Id property
+      return false;
+    }
+    return false;
+  } catch (e) { return false; }
+}
+
+// Utility to retrieve a value by path array from nested record objects
+export function getByPath(obj, pathArr) {
+  try {
+    if (!obj || !Array.isArray(pathArr) || pathArr.length === 0) return null;
+    let cur = obj;
+    for (const seg of pathArr) {
+      if (cur == null) return null;
+      if (typeof cur !== 'object') return null;
+      cur = cur[seg];
+    }
+    return cur === undefined ? null : cur;
+  } catch (e) { return null; }
+}
+
+// Convert a response or records array into CSV string (small adapter used by DOM code)
+export function toCSV(resp, parts, describe) {
+  try {
+    const records = Array.isArray(resp?.records) ? resp.records : (Array.isArray(resp) ? resp : (resp?.data || []));
+    const cols = buildColumnsUnion(records || []);
+    return recordsToCsv(records || [], cols || []);
+  } catch (e) { return ''; }
+}
+
+// Create a simple Excel-compatible HTML table string for download
+export function toExcelHTML(resp, parts, describe) {
+  try {
+    const records = Array.isArray(resp?.records) ? resp.records : (Array.isArray(resp) ? resp : (resp?.data || []));
+    const cols = buildColumnsUnion(records || []);
+    const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let html = '<table><thead><tr>' + (cols || []).map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+    for (const r of (records || [])) {
+      html += '<tr>' + (cols || []).map(c => {
+        let v = r && r[c];
+        if (v && typeof v === 'object') {
+          if (typeof v.Name === 'string') v = v.Name;
+          else if (typeof v.label === 'string') v = v.label;
+          else v = JSON.stringify(v);
+        }
+        return `<td>${esc(v)}</td>`;
+      }).join('') + '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
+  } catch (e) { return ''; }
+}
+
+// Open a Salesforce record in a new tab using the detected instance URL
+export async function openRecordInNewTab(id) {
+  try {
+    const base = (await getInstanceUrl()) || '';
+    const url = (base ? base.replace(/\/+$/, '') : '') + '/' + encodeURIComponent(id);
+    if (!url.startsWith('http')) return;
+    try { await chrome.tabs.create({ url }); } catch {
+      try { window.open(url, '_blank', 'noopener,noreferrer'); } catch {}
+    }
+  } catch (e) { /* ignore */ }
 }

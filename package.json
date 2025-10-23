@@ -1,0 +1,10 @@
+{
+  "name": "sf-audit-extractor-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:suggest": "node test_soql_suggester.js"
+  }
+}
+

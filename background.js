@@ -1,4 +1,3 @@
-
 const SALESFORCE_SUFFIXES = ['salesforce.com', 'force.com'];
 const API_VERSION = 'v65.0';
 
@@ -56,7 +55,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                         'Accept': 'application/json'
                     }
                 });
-                if (!res.ok) throw new Error(`SF API ${res.status}: ${res.statusText}`);
+                if (!res.ok) {
+                    const errMsg = `SF API ${res.status}: ${res.statusText}`;
+                    sendResponse({ success: false, error: errMsg });
+                    return;
+                }
                 const data = await res.json();
                 const name = data?.records?.[0]?.Name || null;
                 sendResponse({ success: true, orgName: name });
@@ -120,7 +123,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
 
             if (is('GET_SESSION_INFO') || is('GET_SESSION')) {
-                const url = sanitizeUrl(msg.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                let url = sanitizeUrl(msg.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                if (!url) {
+                    const fromCookies = await findInstanceFromCookies();
+                    if (fromCookies) url = sanitizeUrl(fromCookies) || fromCookies;
+                }
                 return await getSalesforceSession(url);
             }
 
@@ -135,8 +142,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
 
-                const sess = await getSalesforceSession(instanceUrl);
-                const sessionId = sess.sessionId || null;
+                    // Accept sessionId passed from the caller (popup) as a hint. Fall back to cookie lookup if not provided.
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
+
                 if (!sessionId) return { success: false, error: 'Salesforce session not found. Log in and retry.' };
 
                 const days = Number.isFinite(msg?.days) ? Number(msg.days) : 180;
@@ -157,8 +169,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 if (!instanceUrl) {
                     return { success: false, error: 'Instance URL not detected.' };
                 }
-                const sess = await getSalesforceSession(instanceUrl);
-                const sessionId = sess.sessionId || null;
+                // Accept sessionId from caller when provided
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
                 if (!sessionId) {
                     return { success: false, error: 'Salesforce session not found. Log in and retry.' };
                 }
@@ -169,13 +185,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
             //  SOQL Builder schema and run actions
             if (is('DESCRIBE_GLOBAL')) {
-                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                // Try several approaches to determine the instance origin: explicit param, sender tab, last known tab,
+                // an open Salesforce tab, or derive from cookies when available.
+                let rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                if (!rawUrl) {
+                    const fromCookies = await findInstanceFromCookies();
+                    if (fromCookies) rawUrl = sanitizeUrl(fromCookies) || fromCookies;
+                }
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                const sess = await getSalesforceSession(instanceUrl);
-                const sessionId = sess.sessionId || null;
+                // allow provided sessionId to be used
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
                 if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
-                const data = await describeGlobal(instanceUrl, sessionId);
+                const data = await describeGlobal(instanceUrl, sessionId, msg.useTooling);
                 return { success: true, objects: data };
             }
 
@@ -185,24 +211,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                const sess = await getSalesforceSession(instanceUrl);
-                const sessionId = sess.sessionId || null;
+                // allow provided sessionId to be used
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
                 if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
-                const describe = await describeSObject(instanceUrl, sessionId, name);
-                return describe ? { success: true, describe } : { success: false, error: 'Describe failed' };
+                try {
+                    const describe = await describeSObject(instanceUrl, sessionId, name, msg.useTooling);
+                    return describe ? { success: true, describe } : { success: false, error: 'Describe failed' };
+                } catch (e) {
+                    // Forward the underlying error message for better diagnostics (e.g., Unknown object 'X')
+                    return { success: false, error: String(e) };
+                }
             }
 
             if (is('RUN_SOQL')) {
                 const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                const sess = await getSalesforceSession(instanceUrl);
-                const sessionId = sess.sessionId || null;
+                // allow provided sessionId to be used
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
                 if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
                 const query = String(msg?.query || '').trim();
                 if (!query) return { success: false, error: 'Empty query' };
                 const limit = Number.isFinite(msg?.limit) ? Number(msg.limit) : null;
-                const result = await runSoql(instanceUrl, sessionId, query, limit);
+                const result = await runSoql(instanceUrl, sessionId, query, limit, msg.useTooling);
                 return { success: true, totalSize: result.totalSize, records: result.records, done: true };
             }
 
@@ -305,6 +344,45 @@ const cookies = {
     })
 };
 
+// New: attempt to derive a Salesforce origin from available cookies when no tab is present.
+async function findInstanceFromCookies() {
+    try {
+        const all = await cookies.getAll({});
+        if (!Array.isArray(all) || all.length === 0) return null;
+        // Filter cookie domains that look like Salesforce hosts
+        const candidates = all
+            .map(c => ({ domain: c.domain || '', name: c.name || '', valueLength: c.value ? String(c.value).length : 0 }))
+            .filter(c => typeof c.domain === 'string' && /(?:salesforce\.com|force\.com)$/i.test(c.domain))
+            .map(c => {
+                // normalize domain to a host (remove leading dot)
+                let host = String(c.domain).trim();
+                if (host.startsWith('.')) host = host.slice(1);
+                return { host, name: c.name, valueLength: c.valueLength };
+            });
+        if (!candidates.length) return null;
+        // Rank candidates: prefer *.my.salesforce.com, then *.salesforce.com, then *.force.com
+        function rankHost(h) {
+            const lh = h.toLowerCase();
+            if (lh.endsWith('.my.salesforce.com')) return 3;
+            if (lh.endsWith('.salesforce.com')) return 2;
+            if (lh.endsWith('.force.com')) return 1;
+            return 0;
+        }
+        candidates.sort((a, b) => {
+            const rdiff = rankHost(b.host) - rankHost(a.host);
+            if (rdiff !== 0) return rdiff;
+            return b.valueLength - a.valueLength;
+        });
+        const pick = candidates[0];
+        if (!pick || !pick.host) return null;
+        // construct an origin
+        const origin = `https://${pick.host}`;
+        return origin;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function getSalesforceSession(url) {
     const rawOrigin = originFromUrl(url);
     const instanceUrl = normalizeApiBase(rawOrigin) || rawOrigin;
@@ -316,11 +394,16 @@ async function getSalesforceSession(url) {
 
     let sid = await cookies.get({ url: instanceUrl + '/', name: 'sid' });
 
+    let inspectedCandidates = [];
+
     if (!sid) {
         const all = await cookies.getAll({});
         const candidates = (all || []).filter(
             (c) => (c.name === 'sid' || /^sid[_-]/i.test(c.name)) && (c.domain.endsWith('salesforce.com') || c.domain.endsWith('force.com')) && c.value
         );
+
+        // Prepare a masked diagnostics list (do not expose full cookie values in UI)
+        inspectedCandidates = candidates.map(c => ({ domain: c.domain || null, name: c.name || null, valueLength: c.value ? String(c.value).length : 0 }));
 
         candidates.sort((a, b) => {
             const rank = (c) => (c.domain.endsWith('.my.salesforce.com') ? 3 : c.domain.endsWith('salesforce.com') ? 2 : c.domain.endsWith('force.com') ? 1 : 0);
@@ -331,6 +414,13 @@ async function getSalesforceSession(url) {
         sid = candidates[0] || null;
     }
 
+    // Also include a lightweight count of all cookies inspected for additional context
+    let allCookiesCount = null;
+    try {
+        const all = await cookies.getAll({});
+        allCookiesCount = Array.isArray(all) ? all.length : null;
+    } catch {}
+
     return {
         success: true,
         isSalesforce: true,
@@ -339,7 +429,9 @@ async function getSalesforceSession(url) {
         sessionId: sid?.value || null,
         cookieDomain: sid?.domain || null,
         cookieName: sid?.name || null,
-        expiry: sid?.expirationDate || null
+        expiry: sid?.expirationDate || null,
+        cookieCandidates: inspectedCandidates,
+        allCookiesCount
     };
 }
 
@@ -466,26 +558,39 @@ async function getApiVersion() {
     }
 }
 
-async function describeGlobal(instanceUrl, sessionId) {
+async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('Invalid instance URL');
     const v = await getApiVersion();
-    const url = `${base}/services/data/${v}/sobjects`;
+    const url = useTooling
+        ? `${base}/services/data/${v}/tooling/sobjects`
+        : `${base}/services/data/${v}/sobjects`;
     const res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' }, credentials: 'omit' });
     if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`Describe Global failed (${res.status}): ${text || res.statusText}`);
     }
     const data = await res.json();
-    const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
-    return list.map(s => ({ name: s.name, label: s.label || s.name, custom: !!s.custom, keyPrefix: s.keyPrefix || null }));
+    // Tooling global returns tooling sobjects on a different key but often mirrors sobjects structure
+    const list = Array.isArray(data?.sobjects) ? data.sobjects : (Array.isArray(data?.sobjects) ? data.sobjects : []);
+    // Map into a minimal, consistent shape and include a queryable flag when available from the API
+    return list.map(s => ({
+        name: s?.name || s?.keyPrefix || '',
+        label: s?.label || s?.name || s?.keyPrefix || '',
+        custom: !!s?.custom,
+        keyPrefix: s?.keyPrefix || null,
+        // Some endpoints expose a `queryable` boolean; preserve it when present, otherwise default to true
+        queryable: typeof s?.queryable === 'boolean' ? s.queryable : true
+    }));
 }
 
-async function describeSObject(instanceUrl, sessionId, name) {
+async function describeSObject(instanceUrl, sessionId, name, useTooling = false) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('Invalid instance URL');
     const v = await getApiVersion();
-    const url = `${base}/services/data/${v}/sobjects/${encodeURIComponent(name)}/describe`;
+    const url = useTooling
+        ? `${base}/services/data/${v}/tooling/sobjects/${encodeURIComponent(name)}/describe`
+        : `${base}/services/data/${v}/sobjects/${encodeURIComponent(name)}/describe`;
     const res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' }, credentials: 'omit' });
     if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -506,7 +611,7 @@ async function describeSObject(instanceUrl, sessionId, name) {
     return { name: json.name || name, label: json.label || name, fields };
 }
 
-async function runSoql(instanceUrl, sessionId, query, limit) {
+async function runSoql(instanceUrl, sessionId, query, limit, useTooling = false) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('Invalid instance URL');
     const v = await getApiVersion();
@@ -519,7 +624,9 @@ async function runSoql(instanceUrl, sessionId, query, limit) {
     const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
 
     const records = [];
-    let url = `${base}/services/data/${v}/query?q=${encodeURIComponent(finalQuery)}`;
+    let url = useTooling
+        ? `${base}/services/data/${v}/tooling/query?q=${encodeURIComponent(finalQuery)}`
+        : `${base}/services/data/${v}/query?q=${encodeURIComponent(finalQuery)}`;
     let guard = 0;
     const hardCap = Math.max(1, Number(limit || 200));
 
@@ -542,4 +649,3 @@ async function runSoql(instanceUrl, sessionId, query, limit) {
 
     return { totalSize: records.length, records };
 }
-

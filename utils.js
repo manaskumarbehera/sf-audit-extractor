@@ -13,8 +13,7 @@
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(resource, { ...options, signal: controller.signal });
-      return res;
+      return await fetch(resource, { ...options, signal: controller.signal });
     } finally { clearTimeout(id); }
   }
   function svgPlus() {
@@ -40,5 +39,94 @@
       }, Math.max(800, Number(durationMs)||1500));
     } catch {}
   }
-  window.Utils = { escapeHtml, sleep, fetchWithTimeout, svgPlus, svgMinus, showToast };
+
+  // New: reusable download helper
+  function download(filename, data, mime) {
+    try {
+      const blob = new Blob([data], { type: mime || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      // append and click
+      document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+    } catch (e) {
+      // fallback: copy data to clipboard if available
+      try { navigator.clipboard.writeText(String(data || '')); } catch {}
+    }
+  }
+
+  // Salesforce / Chrome helpers (centralized)
+  async function findSalesforceTab(){
+    try {
+      const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+      if (!Array.isArray(matches) || matches.length === 0) return null;
+      let currentWindowId = null;
+      try { const current = await chrome.windows.getCurrent({ populate: true }); currentWindowId = current?.id ?? null; } catch {}
+      const activeInCurrent = matches.find(t => t.active && (currentWindowId == null || t.windowId === currentWindowId));
+      return activeInCurrent || matches[0] || null;
+    } catch { return null; }
+  }
+
+  async function sendMessageToSalesforceTab(message){
+    try {
+      const tab = await findSalesforceTab();
+      if (!tab?.id) return null;
+      return await new Promise((resolve) => {
+        try {
+          chrome.tabs.sendMessage(tab.id, message, (resp) => {
+            if (chrome.runtime.lastError) { resolve(null); return; }
+            resolve(resp || null);
+          });
+        } catch { resolve(null); }
+      });
+    } catch { return null; }
+  }
+
+  let instanceUrlCache = null;
+  async function getInstanceUrl(){
+    if (instanceUrlCache) return instanceUrlCache;
+    // Prefer a live Salesforce tab first (like Audit/LMS helpers)
+    try {
+      const resp = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+      if (resp && resp.success && resp.isLoggedIn && resp.instanceUrl) {
+        instanceUrlCache = resp.instanceUrl;
+        return instanceUrlCache;
+      }
+    } catch {}
+    // Fallback: ask background (cookie-based)
+    return await new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, (resp) => {
+          if (chrome.runtime.lastError) { resolve(null); return; }
+          const url = resp?.instanceUrl || null;
+          instanceUrlCache = url || null;
+          resolve(instanceUrlCache);
+        });
+      } catch { resolve(null); }
+    });
+  }
+
+  async function openRecordInNewTab(id){
+    const base = (await getInstanceUrl()) || '';
+    const url = (base ? base.replace(/\/+$/, '') : '') + '/' + encodeURIComponent(id);
+    if (!url.startsWith('http')) return;
+    try {
+      await chrome.tabs.create({ url });
+    } catch {
+      try { window.open(url, '_blank', 'noopener,noreferrer'); } catch {}
+    }
+  }
+
+  // misc fallback copy
+  function fallbackCopyText(text){
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    } catch {}
+  }
+
+  window.Utils = { escapeHtml, sleep, fetchWithTimeout, svgPlus, svgMinus, showToast, download,
+    findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab, fallbackCopyText };
 })();

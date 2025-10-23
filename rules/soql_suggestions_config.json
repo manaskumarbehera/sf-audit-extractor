@@ -1,383 +1,838 @@
 {
-  "version": "1.0.0",
-  "description": "Context-aware SOQL autosuggestion rules",
-  "metadataMode": "dynamic",
-  "dynamic": {
-    "objects": true,
-    "fields": true,
-    "childRelationships": true,
-    "picklists": true
+  "meta": { "name": "soql-editor-suggestions-policy", "version": "1.3.0", "updatedAt": "2025-10-23" },
+  "declarativeOnly": true,
+  "lifecycle": {
+    "states": ["IDLE","SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING","LIMITING","OFFSETTING","SUBQUERY","ERROR_RECOVERY"],
+    "order": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING","LIMITING","OFFSETTING"]
   },
-  "tokens": {
-    "whitespace": "\\s+",
-    "identifier": "[A-Za-z_][A-Za-z0-9_]*",
-    "apiName": "[A-Za-z_][A-Za-z0-9_]*(__[cr])?",
-    "qualifiedField": "([A-Za-z_][A-Za-z0-9_]*\\.)*[A-Za-z_][A-Za-z0-9_]*",
-    "string": "'(?:[^'\\\\]|\\\\.)*'",
-    "number": "-?\\d+(?:\\.\\d+)?",
-    "dateLiteral": "(TODAY|YESTERDAY|TOMORROW|THIS_WEEK|LAST_WEEK|NEXT_WEEK|THIS_MONTH|LAST_MONTH|NEXT_MONTH|THIS_QUARTER|LAST_QUARTER|NEXT_QUARTER|THIS_YEAR|LAST_YEAR|NEXT_YEAR|LAST_N_DAYS:\\d+|NEXT_N_DAYS:\\d+|LAST_N_WEEKS:\\d+|NEXT_N_WEEKS:\\d+|LAST_N_MONTHS:\\d+|NEXT_N_MONTHS:\\d+|LAST_N_QUARTERS:\\d+|NEXT_N_QUARTERS:\\d+|LAST_N_YEARS:\\d+|NEXT_N_YEARS:\\d+)",
-    "boolean": "(TRUE|FALSE)",
-    "id": "[a-zA-Z0-9]{15,18}"
+  "clauseOrder": {
+    "topLevel": ["SELECT","FROM","WHERE","GROUP BY","HAVING","ORDER BY","LIMIT","OFFSET","FOR UPDATE"],
+    "subquery": ["SELECT","FROM(childRelationship)","WHERE","LIMIT"]
   },
-  "keywords": [
-    "SELECT","FROM","WHERE","GROUP BY","HAVING","ORDER BY","LIMIT","OFFSET",
-    "ASC","DESC","NULLS FIRST","NULLS LAST"
-  ],
-  "functions": ["COUNT","SUM","AVG","MIN","MAX"],
-  "apexFieldMacros": ["FIELDS(ALL)","FIELDS(STANDARD)","FIELDS(CUSTOM)"],
-  "operatorsByType": {
-    "STRING": ["=","!=","LIKE","NOT LIKE","IN","NOT IN","INCLUDES","EXCLUDES","STARTS WITH","ENDS WITH","CONTAINS"],
-    "PICKLIST": ["=","!=","IN","NOT IN","INCLUDES","EXCLUDES"],
-    "BOOLEAN": ["="],
-    "NUMBER": ["=","!=","<","<=",">",">=","IN","NOT IN"],
-    "DATE": ["=","!=","<","<=",">",">=","IN","NOT IN"],
-    "DATETIME": ["=","!=","<","<=",">",">=","IN","NOT IN"],
-    "REFERENCE": ["=","!=","IN","NOT IN"],
-    "ID": ["=","!=","IN","NOT IN"],
-    "CURRENCY": ["=","!=","<","<=",">",">=","IN","NOT IN"]
+  "sessionContextDefaults": {
+    "isActive": true,
+    "phase": "IDLE",
+    "cursorContext": "top-level",
+    "object": null,
+    "fieldListMode": "none",
+    "hasLimit": false,
+    "hasOffset": false,
+    "errors": [],
+    "emittedSuggestions": [],
+    "lastEmittedAt": {}
   },
-  "valueHintsByType": {
-    "STRING": ["'Sample'","'%abc%'","'abc%'","'%abc'"],
-    "PICKLIST": "USE_DYNAMIC_PICKLIST_VALUES",
-    "BOOLEAN": ["TRUE","FALSE"],
-    "NUMBER": ["0","100"],
-    "DATE": ["TODAY","YESTERDAY","LAST_N_DAYS:7","THIS_MONTH"],
-    "DATETIME": ["TODAY","LAST_N_DAYS:7"],
-    "REFERENCE": ["001XXXXXXXXXXXX","a0123456789ABCDE"],
-    "ID": ["001XXXXXXXXXXXX","a0123456789ABCDE"],
-    "EMAIL": ["'[user@example.com](mailto:user@example.com)'"],
-    "PHONE": ["'555-1234'"],
-    "URL": ["'[https://example.com](https://example.com)'"]
+  "conflictResolution": {
+    "groupStrategy": "highest-priority-wins",
+    "deDupeBy": ["message","id"],
+    "applyFireOncePer": true,
+    "respectCooldown": true
   },
-  "stateMachine": {
-    "initial": "START",
-    "states": {
-      "START": {
-        "expect": ["SELECT"],
-        "suggestions": [
-          { "label": "SELECT", "insertText": "SELECT ", "kind": "keyword", "score": 1.0 }
-        ],
-        "next": ["AFTER_SELECT"]
-      },
-      "AFTER_SELECT": {
-        "expect": ["FIELD_LIST_OR_MACRO"],
-        "suggestionsProvider": "suggestSelectList",
-        "onAccept": { "if": "endsWithComma", "stay": true, "elseNext": "EXPECT_FROM" }
-      },
-      "EXPECT_FROM": {
-        "expect": ["FROM"],
-        "suggestions": [
-          { "label": "FROM", "insertText": " FROM ", "kind": "keyword", "score": 1.0 }
-        ],
-        "next": ["OBJECT_NAME"]
-      },
-      "OBJECT_NAME": {
-        "expect": ["SOBJECT"],
-        "suggestionsProvider": "suggestObjects",
-        "onAccept": "POST_FROM"
-      },
-      "POST_FROM": {
-        "expect": ["OPTIONAL_CLAUSES"],
-        "suggestions": [
-          { "label": "WHERE", "insertText": " WHERE ", "kind": "keyword", "score": 0.95 },
-          { "label": "GROUP BY", "insertText": " GROUP BY ", "kind": "keyword", "score": 0.8 },
-          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword", "score": 0.85 },
-          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword", "score": 0.7 },
-          { "label": "OFFSET", "insertText": " OFFSET ", "kind": "keyword", "score": 0.6 }
-        ],
-        "next": ["WHERE_CLAUSE","GROUP_BY","ORDER_BY","LIMIT","OFFSET","END"]
-      },
-      "WHERE_CLAUSE": {
-        "expect": ["FIELD_OR_PAREN"],
-        "suggestionsProvider": "suggestFilterFieldsOrParen",
-        "onAccept": "WHERE_OP"
-      },
-      "WHERE_OP": {
-        "expect": ["OPERATOR"],
-        "suggestionsProvider": "suggestOperatorsForField",
-        "onAccept": "WHERE_VALUE"
-      },
-      "WHERE_VALUE": {
-        "expect": ["VALUE_OR_SUBQUERY"],
-        "suggestionsProvider": "suggestValuesForField",
-        "onAccept": "WHERE_CONJ"
-      },
-      "WHERE_CONJ": {
-        "expect": ["AND_OR_MORE"],
-        "suggestions": [
-          { "label": "AND", "insertText": " AND ", "kind": "keyword", "score": 0.9 },
-          { "label": "OR", "insertText": " OR ", "kind": "keyword", "score": 0.85 },
-          { "label": "GROUP BY", "insertText": " GROUP BY ", "kind": "keyword", "score": 0.6 },
-          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword", "score": 0.65 },
-          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword", "score": 0.5 },
-          { "label": "OFFSET", "insertText": " OFFSET ", "kind": "keyword", "score": 0.4 }
-        ],
-        "next": ["WHERE_CLAUSE","GROUP_BY","ORDER_BY","LIMIT","OFFSET","END"]
-      },
-      "GROUP_BY": {
-        "expect": ["FIELD_LIST"],
-        "suggestionsProvider": "suggestGroupableFields",
-        "onAccept": "POST_GROUP_BY"
-      },
-      "POST_GROUP_BY": {
-        "expect": ["HAVING_OR_NEXT"],
-        "suggestions": [
-          { "label": "HAVING", "insertText": " HAVING ", "kind": "keyword", "score": 0.9 },
-          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword", "score": 0.7 },
-          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword", "score": 0.6 }
-        ],
-        "next": ["HAVING","ORDER_BY","LIMIT","END"]
-      },
-      "HAVING": {
-        "expect": ["AGGREGATE_FIELD"],
-        "suggestionsProvider": "suggestAggregateFilters",
-        "onAccept": "HAVING_OP"
-      },
-      "HAVING_OP": {
-        "expect": ["AGG_OPERATOR"],
-        "suggestions": [
-          { "label": "=", "insertText": " = " },
-          { "label": "!=", "insertText": " != " },
-          { "label": ">", "insertText": " > " },
-          { "label": ">=", "insertText": " >= " },
-          { "label": "<", "insertText": " < " },
-          { "label": "<=", "insertText": " <= " }
-        ],
-        "next": ["HAVING_VALUE"]
-      },
-      "HAVING_VALUE": {
-        "expect": ["NUMBER"],
-        "suggestionsProvider": "suggestAggregateValues",
-        "onAccept": "POST_HAVING"
-      },
-      "POST_HAVING": {
-        "expect": ["ORDER_OR_LIMIT"],
-        "suggestions": [
-          { "label": "ORDER BY", "insertText": " ORDER BY ", "kind": "keyword" },
-          { "label": "LIMIT", "insertText": " LIMIT ", "kind": "keyword" }
-        ],
-        "next": ["ORDER_BY","LIMIT","END"]
-      },
-      "ORDER_BY": {
-        "expect": ["ORDER_FIELD"],
-        "suggestionsProvider": "suggestOrderableFields",
-        "onAccept": "ORDER_DIR"
-      },
-      "ORDER_DIR": {
-        "expect": ["ASC_DESC_NULLS"],
-        "suggestions": [
-          { "label": "ASC", "insertText": " ASC" },
-          { "label": "DESC", "insertText": " DESC" },
-          { "label": "ASC NULLS FIRST", "insertText": " ASC NULLS FIRST" },
-          { "label": "ASC NULLS LAST", "insertText": " ASC NULLS LAST" },
-          { "label": "DESC NULLS FIRST", "insertText": " DESC NULLS FIRST" },
-          { "label": "DESC NULLS LAST", "insertText": " DESC NULLS LAST" }
-        ],
-        "next": ["ORDER_BY_MORE","LIMIT","OFFSET","END"]
-      },
-      "ORDER_BY_MORE": {
-        "expect": ["COMMA_OR_NEXT"],
-        "suggestions": [
-          { "label": ", next field", "insertText": ", " },
-          { "label": "LIMIT", "insertText": " LIMIT " },
-          { "label": "OFFSET", "insertText": " OFFSET " }
-        ],
-        "onAccept": { "if": "comma", "goto": "ORDER_BY", "elseNext": "END" }
-      },
-      "LIMIT": {
-        "expect": ["NUMBER"],
-        "suggestionsProvider": "suggestLimitValues",
-        "next": ["OFFSET","END"]
-      },
-      "OFFSET": {
-        "expect": ["NUMBER"],
-        "suggestionsProvider": "suggestOffsetValues",
-        "next": ["END"]
-      },
-      "END": {
-        "expect": [],
-        "suggestions": []
+  "suggestions": [
+    {
+      "id": "starter_suggestions",
+      "type": "starter",
+      "enabled": true,
+      "priority": 50,
+      "phaseAllow": ["IDLE","SELECTING_FIELDS"],
+      "mutexGroup": "starter",
+      "guard": "Offer starter snippets when the editor is empty or whitespace",
+      "fireOncePer": "query",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "info",
+      "matchOn": "query",
+      "matchRegex": "^\\s*$",
+      "apply": { "type": "replace", "text": "SELECT ", "label": "Start a SELECT" },
+      "message": "Begin a SOQL SELECT"
+    },
+
+    {
+      "id": "sequencer-next-clause",
+      "type": "clause_sequencer",
+      "enabled": true,
+      "priority": 99,
+      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING","LIMITING","OFFSETTING"],
+      "mutexGroup": "sequencer",
+      "guard": "Suggest only the next valid clause in canonical order.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Next valid clause: respects SELECT → FROM → WHERE → GROUP BY → HAVING → ORDER BY → LIMIT → OFFSET → FOR UPDATE."
+    },
+    {
+      "id": "having-after-groupby",
+      "type": "next_keyword",
+      "enabled": true,
+      "priority": 96,
+      "phaseAllow": ["GROUPING","HAVING_AGG","FILTERING","ORDERING"],
+      "mutexGroup": "sequencer",
+      "guard": "Only show HAVING if GROUP BY exists.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "matchOn": "query",
+      "matchRegex": "\\bGROUP\\s+BY\\b",
+      "notMatchRegex": "",
+      "message": "Add `HAVING` to filter grouped results (only after `GROUP BY`)."
+    },
+    {
+      "id": "suppress-having-without-groupby",
+      "type": "suppress_keyword",
+      "enabled": true,
+      "priority": 100,
+      "phaseAllow": ["FILTERING","ORDERING"],
+      "mutexGroup": "sequencer",
+      "guard": "Hide HAVING unless GROUP BY is present.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "hidden",
+      "severity": "block",
+      "matchOn": "query",
+      "matchRegex": "^(?![\\s\\S]*\\bGROUP\\s+BY\\b)[\\s\\S]*$",
+      "message": "HAVING requires GROUP BY."
+    },
+    {
+      "id": "suppress-offset-without-limit",
+      "type": "suppress_keyword",
+      "enabled": true,
+      "priority": 100,
+      "phaseAllow": ["ORDERING","LIMITING","OFFSETTING","FILTERING"],
+      "mutexGroup": "sequencer",
+      "guard": "Hide OFFSET until LIMIT exists.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "hidden",
+      "severity": "block",
+      "matchOn": "query",
+      "matchRegex": "^(?![\\s\\S]*\\bLIMIT\\s+\\d+\\b)[\\s\\S]*$",
+      "message": "OFFSET requires LIMIT."
+    },
+
+    {
+      "id": "order-by-placement",
+      "type": "next_keyword",
+      "enabled": true,
+      "priority": 75,
+      "phaseAllow": ["FILTERING","GROUPING","HAVING_AGG"],
+      "mutexGroup": "sequencer",
+      "guard": "ORDER BY appears only after WHERE/GROUP BY/HAVING and before LIMIT.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Place `ORDER BY` before `LIMIT` and after filters/grouping."
+    },
+    {
+      "id": "with-security-position",
+      "type": "option_hint",
+      "enabled": true,
+      "priority": 74,
+      "phaseAllow": ["FILTERING","GROUPING","HAVING_AGG","ORDERING"],
+      "mutexGroup": "query-options",
+      "guard": "WITH SECURITY_ENFORCED should sit after WHERE/GROUP/HAVING and before ORDER BY/LIMIT.",
+      "fireOncePer": "query",
+      "cooldownMs": 20000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Place `WITH SECURITY_ENFORCED` before `ORDER BY`/`LIMIT`."
+    },
+    {
+      "id": "for-update-last",
+      "type": "option_hint",
+      "enabled": true,
+      "priority": 73,
+      "phaseAllow": ["LIMITING","OFFSETTING","ORDERING","HAVING_AGG","GROUPING","FILTERING"],
+      "mutexGroup": "query-options",
+      "guard": "FOR UPDATE must be the last clause.",
+      "fireOncePer": "query",
+      "cooldownMs": 20000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Append `FOR UPDATE` at the very end to lock rows."
+    },
+
+
+    {
+      "id": "select-star",
+      "type": "replace_select_star",
+      "enabled": true,
+      "priority": 100,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "field-list-shape",
+      "guard": "User typed * after SELECT at top level.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "quick-fix",
+      "severity": "warn",
+      "replacement": "Id, Name",
+      "matchOn": "query",
+      "matchRegex": "\\bSELECT\\b[\\s\\S]*\\*[^\\S\\n]*\\bFROM\\b",
+      "message": "Replace '*' with explicit fields to avoid invalid SOQL"
+    },
+    {
+      "id": "boolean-filter",
+      "type": "suggest_boolean_filter",
+      "enabled": true,
+      "priority": 40,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "filter-hints",
+      "guard": "Cursor after WHERE; base object has at least one boolean field.",
+      "fireOncePer": "phase",
+      "cooldownMs": 15000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "matchOn": "describe",
+      "matchDescribeFieldType": "boolean",
+      "notMatchRegex": "\\bWHERE\\b",
+      "message": "Consider filtering by a boolean field (e.g., IsActive__c = TRUE)",
+      "note": "Uses the first boolean field from the describe object"
+    },
+    {
+      "id": "space-after-keyword",
+      "type": "spacing_hint",
+      "enabled": true,
+      "priority": 80,
+      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","ORDERING","GROUPING","HAVING_AGG","LIMITING","OFFSETTING"],
+      "mutexGroup": "whitespace",
+      "guard": "Missing single space after major keyword (e.g., SELECT, FROM, WHERE, ORDER BY, GROUP BY, LIMIT, OFFSET).",
+      "fireOncePer": "phase",
+      "cooldownMs": 10000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use exactly one space after keywords (e.g., `SELECT Id`, `FROM Account`)."
+    },
+    {
+      "id": "comma-between-fields",
+      "type": "comma_hint",
+      "enabled": true,
+      "priority": 85,
+      "phaseAllow": ["SELECTING_FIELDS","SUBQUERY"],
+      "mutexGroup": "list-separators",
+      "guard": "Two adjacent identifiers in a field list without a comma (e.g., `Id Name`).",
+      "fireOncePer": "phase",
+      "cooldownMs": 10000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "matchOn": "selectSegment",
+      "matchRegex": "([A-Za-z_][\\w.]*)\\s+([A-Za-z_][\\w.]*)",
+      "message": "Separate fields with a comma and a space (e.g., `Id, Name`)."
+    },
+    {
+      "id": "no-trailing-comma",
+      "type": "comma_hint",
+      "enabled": true,
+      "priority": 60,
+      "phaseAllow": ["SELECTING_FIELDS","SUBQUERY","ORDERING","GROUPING"],
+      "mutexGroup": "list-separators",
+      "guard": "Trailing comma before a clause keyword or closing paren.",
+      "fireOncePer": "phase",
+      "cooldownMs": 8000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "matchOn": "selectSegment",
+      "matchRegex": ",+\\s*$",
+      "message": "Remove the trailing comma before the next clause."
+    },
+    {
+      "id": "fields-macro-helpers",
+      "type": "fields_helpers",
+      "enabled": true,
+      "priority": 40,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "field-list-shape",
+      "guard": "Suggest FIELDS(ALL|STANDARD|CUSTOM) when the user has typed `SELECT` (not for an empty editor).",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "info",
+      "matchOn": "query",
+      "matchRegex": "^\\s*SELECT\\s+",
+      "message": "Suggest FIELDS(...) macros when user typed `SELECT` or `SELECT `"
+    },
+
+    {
+      "id": "suggest-where-after-from",
+      "type": "next_keyword",
+      "enabled": true,
+      "priority": 60,
+      "phaseAllow": ["CHOOSING_OBJECT"],
+      "mutexGroup": "next-keyword",
+      "guard": "Valid base object chosen; no WHERE/GROUP/ORDER/LIMIT/OFFSET yet.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "matchOn": "query",
+      "matchRegex": "\\bFROM\\b",
+      "notMatchRegex": "\\bWHERE\\b|\\bGROUP\\s+BY\\b|\\bORDER\\s+BY\\b|\\bLIMIT\\b|\\bOFFSET\\b",
+      "message": "Add `WHERE` to filter results, or `ORDER BY` / `LIMIT`."
+    },
+    {
+      "id": "like-wildcard",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 55,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "filter-hints",
+      "guard": "Operator LIKE is present or being typed.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use `%` wildcards with LIKE (e.g., `Name LIKE 'Acme%'`)."
+    },
+    {
+      "id": "in-list-commas",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 55,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "list-separators",
+      "guard": "Inside IN ( ... ) list with adjacent values lacking commas or with trailing comma.",
+      "fireOncePer": "phase",
+      "cooldownMs": 10000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Separate values with commas; no trailing comma before `)`."
+    },
+    {
+      "id": "order-multi-fields",
+      "type": "order_hint",
+      "enabled": true,
+      "priority": 50,
+      "phaseAllow": ["ORDERING"],
+      "mutexGroup": "list-separators",
+      "guard": "Multiple ORDER BY fields without proper comma+space separation.",
+      "fireOncePer": "phase",
+      "cooldownMs": 8000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use `, ` between sort fields (e.g., `ORDER BY Name, CreatedDate DESC`)."
+    },
+    {
+      "id": "nulls-ordering",
+      "type": "order_hint",
+      "enabled": true,
+      "priority": 45,
+      "phaseAllow": ["ORDERING"],
+      "mutexGroup": "order-options",
+      "guard": "ORDER BY present; suggest NULLS FIRST/LAST after ASC/DESC.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Optionally add `NULLS FIRST` or `NULLS LAST`."
+    },
+    {
+      "id": "aggregate-needs-groupby",
+      "type": "aggregate_hint",
+      "enabled": true,
+      "priority": 95,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "aggregate-shape",
+      "guard": "Aggregate function present with non-aggregated fields and no GROUP BY.",
+      "fireOncePer": "query",
+      "cooldownMs": 0,
+      "visibility": "quick-fix",
+      "severity": "warn",
+      "message": "Add `GROUP BY` for non-aggregated fields when using aggregates."
+    },
+    {
+      "id": "fields-macro-exclusivity",
+      "type": "fields_macro_hint",
+      "enabled": true,
+      "priority": 92,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "field-list-shape",
+      "guard": "FIELDS(ALL|STANDARD|CUSTOM) used alongside explicit fields.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "quick-fix",
+      "severity": "warn",
+      "message": "Do not mix FIELDS() macros with explicit fields."
+    },
+    {
+      "id": "subquery-shape",
+      "type": "subquery_hint",
+      "enabled": true,
+      "priority": 70,
+      "phaseAllow": ["SUBQUERY"],
+      "mutexGroup": "subquery-shape",
+      "guard": "Inside `(SELECT … FROM ChildRel …)`; ensure comma-separated child fields and a space before FROM.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use `SELECT Id, Name FROM ChildRel` with commas and single spaces."
+    },
+    {
+      "id": "offset-after-limit",
+      "type": "add_offset",
+      "enabled": true,
+      "priority": 50,
+      "phaseAllow": ["LIMITING","OFFSETTING"],
+      "mutexGroup": "limit",
+      "guard": "OFFSET present without prior LIMIT, or user likely paging results.",
+      "fireOncePer": "query",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use `OFFSET` only after `LIMIT`."
+    },
+
+    {
+      "id": "quote-text-values",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 95,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "typing-datatypes",
+      "guard": "String/text field compared without single quotes.",
+      "fireOncePer": "phase",
+      "cooldownMs": 8000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "message": "Wrap text values in single quotes (e.g., Name = 'Acme')."
+    },
+    {
+      "id": "unquote-numbers",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 92,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "typing-datatypes",
+      "guard": "Numeric field compared to a quoted value.",
+      "fireOncePer": "phase",
+      "cooldownMs": 8000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Remove quotes around numbers (e.g., AnnualRevenue > 1000000)."
+    },
+    {
+      "id": "boolean-literals",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 92,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "typing-datatypes",
+      "guard": "Boolean comparison uses quoted value.",
+      "fireOncePer": "phase",
+      "cooldownMs": 8000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use TRUE/FALSE without quotes (e.g., IsDeleted = FALSE)."
+    },
+    {
+      "id": "null-comparison",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 91,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "typing-datatypes",
+      "guard": "Comparison to NULL is quoted or uses invalid operator.",
+      "fireOncePer": "phase",
+      "cooldownMs": 10000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use = NULL or != NULL (no quotes) for null checks."
+    },
+    {
+      "id": "date-literal-suggestion",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 88,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "dates",
+      "guard": "Date/Datetime field compared to a free-form string.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Prefer date literals (e.g., CreatedDate >= LAST_N_DAYS:30)."
+    },
+    {
+      "id": "datetime-iso8601",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 70,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "dates",
+      "guard": "Explicit datetime detected without timezone.",
+      "fireOncePer": "phase",
+      "cooldownMs": 15000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use full ISO datetime with Z (e.g., 2024-01-01T00:00:00Z)."
+    },
+    {
+      "id": "picklist-values",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 86,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "picklist",
+      "guard": "Picklist operator used; suggest valid values for field.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Choose from valid picklist values for this field."
+    },
+    {
+      "id": "multi-select-includes",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 86,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "picklist",
+      "guard": "Multi-select picklist compared using IN/= or LIKE.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "message": "Use INCLUDES/EXCLUDES for multi-select picklists."
+    },
+    {
+      "id": "id-quoting",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 89,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "typing-datatypes",
+      "guard": "Id field or Id list contains unquoted values.",
+      "fireOncePer": "phase",
+      "cooldownMs": 10000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "message": "Quote Salesforce Ids in lists (e.g., Id IN ('001…','001…'))."
+    },
+    {
+      "id": "like-not-wildcard",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 84,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "like",
+      "guard": "LIKE used without % wildcard or with mismatched quotes.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Add % wildcards (e.g., Name LIKE 'Acme%')."
+    },
+    {
+      "id": "not-like-supported",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 60,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "like",
+      "guard": "User types NOT LIKE pattern.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use `NOT LIKE` to exclude patterns (e.g., Name NOT LIKE 'A%')."
+    },
+    {
+      "id": "in-list-spacing",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 83,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "list-separators",
+      "guard": "IN (…) list lacks `, ` spacing.",
+      "fireOncePer": "phase",
+      "cooldownMs": 9000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Separate values with `, ` and no trailing comma before `)`."
+    },
+    {
+      "id": "and-or-spacing",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 72,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "whitespace",
+      "guard": "Logical operators adjacent to tokens without spaces.",
+      "fireOncePer": "phase",
+      "cooldownMs": 9000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use spaces around AND/OR (e.g., A = 1 AND B = 2)."
+    },
+    {
+      "id": "parent-dot-depth",
+      "type": "dot_hint",
+      "enabled": true,
+      "priority": 65,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "relationship-access",
+      "guard": "Relationship chain exceeds recommended depth.",
+      "fireOncePer": "phase",
+      "cooldownMs": 15000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Keep relationship depth shallow for performance (e.g., a.b.c.Name)."
+    },
+    {
+      "id": "childrel-vs-object",
+      "type": "subquery_hint",
+      "enabled": true,
+      "priority": 82,
+      "phaseAllow": ["SUBQUERY"],
+      "mutexGroup": "subquery-shape",
+      "guard": "Object API name used instead of child relationship in subquery FROM.",
+      "fireOncePer": "phase",
+      "cooldownMs": 12000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "message": "Use the child relationship name, not the object API name, in subqueries."
+    },
+    {
+      "id": "semi-join-type-match",
+      "type": "where_hint",
+      "enabled": true,
+      "priority": 78,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "joins",
+      "guard": "IN/NOT IN subquery returns a field whose type doesn’t match the outer field.",
+      "fireOncePer": "phase",
+      "cooldownMs": 15000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "message": "Ensure subquery returns a compatible type (e.g., Id IN (SELECT AccountId …))."
+    },
+    {
+      "id": "fields-macro-vs-aggregate",
+      "type": "fields_macro_hint",
+      "enabled": true,
+      "priority": 93,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "field-list-shape",
+      "guard": "FIELDS(…) used together with aggregates in SELECT.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "quick-fix",
+      "severity": "warn",
+      "message": "Don’t combine FIELDS() with aggregates; choose one approach."
+    },
+    {
+      "id": "limit-upper-cap",
+      "type": "add_limit",
+      "enabled": true,
+      "priority": 88,
+      "phaseAllow": ["ORDERING","FILTERING","CHOOSING_OBJECT","SELECTING_FIELDS"],
+      "mutexGroup": "limit",
+      "guard": "LIMIT missing or set above recommended cap.",
+      "fireOncePer": "query",
+      "cooldownMs": 60000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "defaultLimit": 200,
+      "message": "Cap LIMIT to a reasonable value (e.g., 200) to keep queries fast.",
+      "example": "LIMIT 200"
+    },
+    {
+      "id": "with-security-enforced",
+      "type": "option_hint",
+      "enabled": true,
+      "priority": 55,
+      "phaseAllow": ["CHOOSING_OBJECT","FILTERING","ORDERING","GROUPING","HAVING_AGG"],
+      "mutexGroup": "query-options",
+      "guard": "Top-level query on standard or sensitive objects.",
+      "fireOncePer": "query",
+      "cooldownMs": 60000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Consider `WITH SECURITY_ENFORCED` to respect FLS and object perms."
+    },
+    {
+      "id": "for-update-lock",
+      "type": "option_hint",
+      "enabled": true,
+      "priority": 40,
+      "phaseAllow": ["CHOOSING_OBJECT","FILTERING","ORDERING","LIMITING","OFFSETTING"],
+      "mutexGroup": "query-options",
+      "guard": "Pattern suggests read-for-update in admin/dev contexts.",
+      "fireOncePer": "query",
+      "cooldownMs": 60000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Need to lock selected rows? Append `FOR UPDATE` at the end."
+    },
+    {
+      "id": "space-after-comma",
+      "type": "spacing_hint",
+      "enabled": true,
+      "priority": 76,
+      "phaseAllow": ["SELECTING_FIELDS","SUBQUERY","ORDERING","GROUPING"],
+      "mutexGroup": "list-separators",
+      "guard": "Comma not followed by a single space in lists.",
+      "fireOncePer": "phase",
+      "cooldownMs": 9000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Insert a single space after commas (e.g., Id, Name, OwnerId)."
+    },
+    {
+      "id": "no-space-before-dot-strong",
+      "type": "spacing_hint",
+      "enabled": true,
+      "priority": 76,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "relationship-access",
+      "guard": "Space detected before dot in relationship path.",
+      "fireOncePer": "phase",
+      "cooldownMs": 9000,
+      "visibility": "inline-hint",
+      "severity": "warn",
+      "message": "Remove the space before the dot (e.g., Account.Name)."
+    },
+    {
+      "id": "keyword-single-space",
+      "type": "spacing_hint",
+      "enabled": true,
+      "priority": 80,
+      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","ORDERING","GROUPING","HAVING_AGG","LIMITING","OFFSETTING"],
+      "mutexGroup": "whitespace",
+      "guard": "Multiple spaces between keywords and tokens.",
+      "fireOncePer": "phase",
+      "cooldownMs": 7000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Use exactly one space between keywords and tokens."
+    },
+    {
+      "id": "close-parens-and-quotes",
+      "type": "syntax_hint",
+      "enabled": true,
+      "priority": 98,
+      "phaseAllow": ["ERROR_RECOVERY","SELECTING_FIELDS","FILTERING","SUBQUERY"],
+      "mutexGroup": "syntax",
+      "guard": "Unbalanced parentheses or quotes detected.",
+      "fireOncePer": "phase",
+      "cooldownMs": 4000,
+      "visibility": "inline-hint",
+      "severity": "block",
+      "message": "Close all open `(` and `'` before continuing."
+    },
+    {
+      "id": "order-by-after-where",
+      "type": "next_keyword",
+      "enabled": true,
+      "priority": 58,
+      "phaseAllow": ["FILTERING"],
+      "mutexGroup": "next-keyword",
+      "guard": "WHERE present, no ORDER BY/LIMIT/OFFSET yet.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Add `ORDER BY` to control sorting, then `LIMIT`."
+    },
+
+    {
+      "id": "subquery-where-after-from",
+      "type": "subquery_hint",
+      "enabled": true,
+      "priority": 71,
+      "phaseAllow": ["SUBQUERY"],
+      "mutexGroup": "subquery-shape",
+      "guard": "Inside subquery: ensure SELECT → FROM(childRel) → WHERE → LIMIT order.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "In subqueries, use `SELECT fields FROM ChildRel [WHERE …] [LIMIT N]` (no ORDER BY/GROUP BY)."
+    },
+
+    {
+      "id": "order-by-field-suggestions",
+      "type": "order_hint",
+      "enabled": true,
+      "priority": 78,
+      "matchOn": "query",
+      "matchRegex": "\\border\\s+by\\b",
+      "notMatchRegex": "\\(\\s*select\\b",
+      "phaseAllow": ["ORDERING"],
+      "mutexGroup": "order-list",
+      "guard": "Cursor is inside ORDER BY list at top level (not in subquery).",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Choose a sortable field (base or one-level parent). After field, optionally add ASC/DESC and NULLS FIRST/LAST.",
+      "rules": {
+        "allowOutsideSelect": true,
+        "allowParentDepth": 1,
+        "allowAggregatesWhenGrouped": true,
+        "allowMultipleOrderItems": true,
+        "directionOptional": true,
+        "nullsPlacementOptional": true,
+        "disallowInSubquery": true,
+        "noTrailingComma": true
       }
-    }
-  },
-  "suggestionProviders": {
-    "suggestSelectList": {
-      "strategy": "contextual",
-      "whenEmpty": [
-        { "label": "FIELDS(ALL)", "insertText": "FIELDS(ALL)", "kind": "function", "score": 1.0 },
-        { "label": "FIELDS(STANDARD)", "insertText": "FIELDS(STANDARD)", "kind": "function", "score": 0.95 },
-        { "label": "FIELDS(CUSTOM)", "insertText": "FIELDS(CUSTOM)", "kind": "function", "score": 0.9 }
-      ],
-      "also": "DYNAMIC_FIELDS_FOR_OBJECT_OR_RELATIONSHIP",
-      "allowAggregates": true,
-      "aggregateFunctions": ["COUNT","SUM","AVG","MIN","MAX"],
-      "examples": [
-        { "label": "COUNT()", "insertText": "COUNT()" },
-        { "label": "COUNT(Id)", "insertText": "COUNT(Id)" },
-        { "label": "SUM(Amount)", "insertText": "SUM(Amount)" }
-      ],
-      "separator": ", "
     },
-    "suggestObjects": {
-      "strategy": "dynamicSchema",
-      "sourceHook": "getSObjects",
-      "displayField": "label",
-      "insertField": "apiName",
-      "filter": { "isQueryable": true },
-      "fallback": ["Account","Contact","Opportunity","Case","Lead"]
-    },
-    "suggestFilterFieldsOrParen": {
-      "strategy": "mixed",
-      "staticFirst": [
-        { "label": "(", "insertText": "(" }
-      ],
-      "dynamicNext": {
-        "sourceHook": "getFieldsForCurrentObject",
-        "filter": { "isFilterable": true },
-        "format": "{apiName}"
-      }
-    },
-    "suggestOperatorsForField": {
-      "strategy": "byFieldType",
-      "mappingHook": "getFieldType",
-      "operatorsByTypeRef": "operatorsByType"
-    },
-    "suggestValuesForField": {
-      "strategy": "byFieldType",
-      "typeHook": "getFieldType",
-      "valueHintsRef": "valueHintsByType",
-      "dynamicPicklistHook": "getPicklistValues",
-      "referenceLookupHook": "lookupReferenceIds",
-      "dateLiteralToken": "dateLiteral",
-      "wrapStringsInQuotes": true,
-      "autoLikePatterns": true
-    },
-    "suggestGroupableFields": {
-      "strategy": "dynamicSchema",
-      "sourceHook": "getFieldsForCurrentObject",
-      "filter": { "groupable": true },
-      "separator": ", "
-    },
-    "suggestAggregateFilters": {
-      "strategy": "aggregateOnly",
-      "fieldsHook": "getSelectedAggregatesOrGroupables"
-    },
-    "suggestAggregateValues": {
-      "strategy": "numericSamples",
-      "samples": ["1","10","100","1000"]
-    },
-    "suggestOrderableFields": {
-      "strategy": "dynamicSchema",
-      "sourceHook": "getFieldsForCurrentObject",
-      "filter": { "sortable": true },
-      "separator": ", "
-    },
-    "suggestLimitValues": {
-      "strategy": "numericSamples",
-      "samples": ["10","50","100","200","500","2000"]
-    },
-    "suggestOffsetValues": {
-      "strategy": "numericSamples",
-      "samples": ["0","10","100","500"]
-    }
-  },
-  "validators": {
-    "requireSelect": { "pattern": "^\\s*SELECT\\s+.+", "message": "Query must start with SELECT and include at least one field or function." },
-    "requireFrom": { "pattern": "FROM\\s+[A-Za-z_][A-ZaZ0-9_]*(?:__(?:c|kav|x))?", "message": "Missing FROM <ObjectName>." },
-    "groupByNeedsAggregate": { "rule": "if GROUP BY present, non-aggregated fields in SELECT must be grouped", "hook": "validateGroupBy" },
-    "havingNeedsGroupBy": { "rule": "HAVING requires GROUP BY", "hook": "validateHaving" },
-    "orderByFieldsExist": { "rule": "ORDER BY fields must be in schema", "hook": "validateOrderBy" },
-    "whereTypesMatch": { "rule": "WHERE value type must match field type", "hook": "validateWhereTypes" },
-    "limitIsInteger": { "pattern": "LIMIT\\s+\\d+(?:\\s+OFFSET\\s+\\d+)?\\b", "message": "LIMIT must be a positive integer." }
-  },
-  "ui": {
-    "debounceMs": 120,
-    "maxSuggestions": 12,
-    "allowTabToCommit": true,
-    "autoInsertSingleSuggestion": true,
-    "snippetPlaceholders": true
-  },
-  "snippets": [
+
     {
-      "label": "SELECT • FROM • WHERE",
-      "insertText": "SELECT ${1:Id, Name} FROM ${2:Object} WHERE ${3:Field} ${4:=} ${5:Value}",
-      "kind": "snippet"
+      "id": "order-by-followups",
+      "type": "order_hint",
+      "enabled": true,
+      "priority": 77,
+      "matchOn": "query",
+      "matchRegex": "\\border\\s+by\\b",
+      "notMatchRegex": "\\(\\s*select\\b",
+      "phaseAllow": ["ORDERING"],
+      "mutexGroup": "order-followups",
+      "guard": "After an ORDER BY field or expression.",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "message": "Optionally add ASC or DESC, then NULLS FIRST/LAST, or start another field with ', '.",
+      "followups": ["ASC", "DESC", "NULLS FIRST", "NULLS LAST", ", "]
+    },  {
+      "id": "limit-suggestion",
+      "type": "add_limit",
+      "enabled": true,
+      "priority": 90,
+      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING"],
+      "mutexGroup": "limit",
+      "guard": "Top-level query has no LIMIT; not inside SUBQUERY; no blocking syntax errors.",
+      "fireOncePer": "query",
+      "cooldownMs": 60000,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "defaultLimit": 200,
+      "matchOn": "query",
+      "matchRegex": "\\bSELECT\\b[\\s\\S]*\\bFROM\\b",
+      "notMatchRegex": "\\bLIMIT\\b\\s*\\d+|\\(\\s*select\\b",
+      "message": "Add a LIMIT to avoid large result sets",
+      "example": "LIMIT 200"
     },
+
+
+
     {
-      "label": "Aggregate with GROUP BY",
-      "insertText": "SELECT ${1:COUNT(Id)} ${2:, ${3:GroupField}} FROM ${4:Object} GROUP BY ${5:GroupField}${6: HAVING ${7:COUNT(Id)} ${8:> } ${9:10}}",
-      "kind": "snippet"
-    },
-    {
-      "label": "ORDER BY + LIMIT",
-      "insertText": "ORDER BY ${1:Field} ${2:ASC}${3: NULLS LAST} LIMIT ${4:100}",
-      "kind": "snippet"
+      "id": "suggest-from-after-select",
+      "type": "next_keyword",
+      "enabled": true,
+      "priority": 70,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "next-keyword",
+      "guard": "Top-level SELECT list present and no FROM present.",
+      "fireOncePer": "query",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "matchOn": "query",
+      "matchRegex": "\\bSELECT\\b",
+      "notMatchRegex": "\\bFROM\\b",
+      "message": "Add `FROM` to choose the base object."
     }
-  ],
-  "intents": [
-    { "prefix": "sel", "action": "forceSelectStart", "insertText": "SELECT " },
-    { "prefix": "frm", "action": "forceFrom", "insertText": " FROM " },
-    { "prefix": "whr", "action": "forceWhere", "insertText": " WHERE " },
-    { "prefix": "grp", "action": "forceGroup", "insertText": " GROUP BY " },
-    { "prefix": "hav", "action": "forceHaving", "insertText": " HAVING " },
-    { "prefix": "ord", "action": "forceOrder", "insertText": " ORDER BY " },
-    { "prefix": "lim", "action": "forceLimit", "insertText": " LIMIT " }
-  ],
-  "autocompleteBehavior": {
-    "afterSelect": {
-      "insertSpace": true,
-      "transition": "AFTER_SELECT"
-    },
-    "afterFrom": {
-      "transition": "OBJECT_NAME"
-    },
-    "afterObject": {
-      "transition": "POST_FROM"
-    },
-    "afterWhereCondition": {
-      "autoOffer": ["AND","OR","GROUP BY","ORDER BY","LIMIT"]
-    }
-  },
-  "hooks": {
-    "getSObjects": "async () => [{ label, apiName, isQueryable }]",
-    "getFieldsForCurrentObject": "async (objectApiName) => [{ apiName, label, type, isFilterable, sortable, groupable }]",
-    "getPicklistValues": "async (objectApiName, fieldApiName) => ['Value1','Value2']",
-    "lookupReferenceIds": "async (objectApiName, fieldApiName, term) => [{ id:'001...', label:'Acme' }]",
-    "getFieldType": "async (objectApiName, fieldApiName) => 'STRING' | 'NUMBER' | 'DATE' | 'DATETIME' | 'BOOLEAN' | 'PICKLIST' | 'REFERENCE' | 'ID' | 'CURRENCY'",
-    "validateGroupBy": "({ selectFields, groupByFields }) => ({ ok: true, message: '' })",
-    "validateHaving": "({ hasGroupBy, hasHaving }) => ({ ok: hasGroupBy || !hasHaving, message: 'HAVING requires GROUP BY' })",
-    "validateOrderBy": "({ orderBy, fields }) => ({ ok: true, message: '' })",
-    "validateWhereTypes": "({ filters }) => ({ ok: true, message: '' })"
-  },
-  "ranking": {
-    "boosts": {
-      "recentFields": 0.3,
-      "idNamePriority": 0.25,
-      "filterableBoost": 0.15,
-      "startsWithPrefix": 0.2,
-      "relationshipDepthPenaltyPerDot": -0.05
-    }
-  },
-  "telemetry": {
-    "enabled": true,
-    "onAccept": "logAcceptedSuggestion(label, context)",
-    "onError": "logSoqlBuilderError(error, context)"
-  },
-  "defaults": {
-    "limit": 200,
-    "offset": 0
-  },
-  "examples": {
-    "flows": [
-      "User types: 'S' → suggests 'SELECT '",
-      "After fields + comma → suggests more fields and macros",
-      "User types ' FROM ' → object list appears",
-      "After object → suggests WHERE/GROUP BY/ORDER BY/LIMIT",
-      "WHERE → field list filtered by isFilterable, then operators based on type, then values (picklist/date literals/IDs etc.)"
-    ],
-    "goodQueries": [
-      "SELECT Id, Name FROM Account WHERE Industry IN ('Finance','Tech') ORDER BY Name ASC NULLS LAST LIMIT 100",
-      "SELECT COUNT(Id) cnt, OwnerId FROM Case WHERE IsClosed = TRUE GROUP BY OwnerId HAVING COUNT(Id) > 10 ORDER BY cnt DESC LIMIT 50"
-    ]
-  }
+  ]
 }

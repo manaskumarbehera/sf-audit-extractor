@@ -424,7 +424,7 @@ h1 {
 .sf-context-menu li.disabled:hover { background: transparent; }
 
 /* --- SOQL Builder results table: Excel-like appearance --- */
-#soql-results .actions { display: flex; gap: 8px; margin-bottom: 8px; }
+#soql-results .actions { display: none; }
 #soql-results .actions button { padding: 6px 10px; font-size: 12px; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #212529; cursor: pointer; }
 #soql-results .actions button:hover { background: #f8f9fa; }
 
@@ -442,3 +442,35 @@ h1 {
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.error { background: #c92a2a; }
 .toast.success { background: #2f9e44; }
+
+/* SOQL editor status indicators: progress (blue), success (green), error (red) */
+#soql-editor { transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease; }
+#soql-editor.soql-editor--progress { border: 2px solid var(--primary); box-shadow: 0 0 0 6px rgba(1,118,211,0.06); }
+#soql-editor.soql-editor--success { border: 2px solid #2f9e44; box-shadow: 0 0 0 6px rgba(47,158,68,0.06); }
+#soql-editor.soql-editor--error { border: 2px solid #c92a2a; box-shadow: 0 0 0 6px rgba(201,42,42,0.05); }
+
+/* Slight pulsing affordance when in progress to match header status-dot animation */
+@keyframes soql-editor-pulse {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(1,118,211,0.06); }
+  50% { box-shadow: 0 0 0 10px rgba(1,118,211,0.03); }
+}
+#soql-editor.soql-editor--progress { animation: soql-editor-pulse 2s infinite; }
+
+/* SOQL validation messages */
+.soql-valid { color: #2f9e44; font-size: 13px; padding: 8px 0; }
+.soql-error-list { color: #c92a2a; }
+.soql-messages { margin: 8px 0 0 18px; padding: 0; }
+.soql-messages li { margin-bottom: 6px; font-size: 13px; }
+
+/* --- SOQL results styling (added) --- */
+.soql-results-container { margin-top: 8px; }
+.soql-table-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.soql-results-table { width: 100%; border-collapse: collapse; min-width: 560px; font-size: 13px; }
+.soql-results-table thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 2; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-weight: 600; }
+.soql-results-table tbody td { padding: 10px 12px; border-bottom: 1px solid #f1f3f5; vertical-align: top; max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.soql-results-table tbody tr:nth-child(odd) { background: #ffffff; }
+.soql-results-table tbody tr:nth-child(even) { background: #fbfcfd; }
+.soql-cell-pre { white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; font-family: ui-monospace, Menlo, Monaco, monospace; font-size: 12px; padding: 8px; background: #fbfbfc; border-radius: 6px; }
+
+/* Hide action buttons by default to declutter; reveal on hover over the results container */
+.soql-results-container .actions { display: none; align-items: center; gap: 8px; margin-bottom: 8px; }
