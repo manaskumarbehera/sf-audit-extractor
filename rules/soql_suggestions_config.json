@@ -74,7 +74,7 @@
       "severity": "warn",
       "matchOn": "query",
       "matchRegex": "\\bGROUP\\s+BY\\b",
-      "notMatchRegex": "",
+      "notMatchRegex": "(\\(\\s*select\\b|\\bFROM\\b)",
       "message": "Add `HAVING` to filter grouped results (only after `GROUP BY`)."
     },
     {
@@ -795,12 +795,13 @@
       "severity": "tip",
       "message": "Optionally add ASC or DESC, then NULLS FIRST/LAST, or start another field with ', '.",
       "followups": ["ASC", "DESC", "NULLS FIRST", "NULLS LAST", ", "]
-    },  {
+    },
+    {
       "id": "limit-suggestion",
       "type": "add_limit",
       "enabled": true,
       "priority": 90,
-      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING"],
+      "phaseAllow": ["SELECTING_FIELDS","IDLE"],
       "mutexGroup": "limit",
       "guard": "Top-level query has no LIMIT; not inside SUBQUERY; no blocking syntax errors.",
       "fireOncePer": "query",
@@ -809,8 +810,8 @@
       "severity": "tip",
       "defaultLimit": 200,
       "matchOn": "query",
-      "matchRegex": "\\bSELECT\\b[\\s\\S]*\\bFROM\\b",
-      "notMatchRegex": "\\bLIMIT\\b\\s*\\d+|\\(\\s*select\\b",
+      "matchRegex": "\\bFIELDS\\b\\s*\\(\\s*(ALL|STANDARD|CUSTOM)\\s*\\)",
+      "notMatchRegex": "(\\bLIMIT\\b\\s*\\d+|\\(\\s*select\\b)",
       "message": "Add a LIMIT to avoid large result sets",
       "example": "LIMIT 200"
     },
