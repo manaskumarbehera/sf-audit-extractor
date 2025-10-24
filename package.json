@@ -1,12 +1,50 @@
 {
-  "name": "sf-audit-extractor-tests",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
+  "name": "sf-audit-extractor",
+  "version": "1.0.0",
+  "description": "Salesforce SOQL Builder / Audit Extractor Chrome Extension",
+  "main": "background.js",
   "scripts": {
-    "test:suggest": "node test_soql_suggester.js"
+    "test": "jest --runInBand --detectOpenHandles",
+    "lint": "eslint . --ext .js",
+    "start": "echo 'This is a Chrome extension project — load via chrome://extensions'"
   },
+  "keywords": [
+    "salesforce",
+    "soql",
+    "chrome-extension",
+    "jest",
+    "testing"
+  ],
+  "author": "Manas Kumar Behera",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {},
   "devDependencies": {
-    "jest": "^29.6.1"
+    "@babel/preset-env": "^7.26.0",
+    "babel-jest": "^29.7.0",
+    "eslint": "^9.13.0",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.jsx?$": "babel-jest"
+    },
+    "transformIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "moduleFileExtensions": [
+      "js",
+      "json"
+    ],
+    "testMatch": [
+      "**/?(*.)+(spec|test).[jt]s"
+    ],
+    "verbose": true
+  },
+  "babel": {
+    "presets": [
+      "@babel/preset-env"
+    ]
   }
 }

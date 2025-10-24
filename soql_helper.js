@@ -35,9 +35,9 @@ async function loadRules(){
   };
 
   const candidates = [
-    'soqlRules.json',
-    'soql_builder_tips.json',
-    'soql_suggestions_config.json'
+    // Prefer the structured suggestions policy first so the suggester finds it before other tips
+    'soql_suggestions_config.json',
+    'soql_builder_tips.json'
   ];
 
   // Try fetching in browser/extension environment
@@ -110,10 +110,77 @@ const els = {
 
 function qs(id) { return document.getElementById(id); }
 
+// Attempt to find a suitable editor host element in a variety of environments.
+function findEditorElement() {
+  try {
+    // Preferred: explicit id
+    let el = document.getElementById('soql-editor');
+    if (el) return el;
+
+    // Common tag/component variants (note: querySelector lowercases tag names)
+    el = document.querySelector('soqleditor, soql-editor');
+    if (el) return resolveEditorHost(el);
+
+    // Data attributes / classes that some integrations may use
+    el = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
+    if (el) return resolveEditorHost(el);
+
+    // As a last-resort, find a visible textarea or contenteditable element that looks like an editor
+    const candidate = Array.from(document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]')).find(c => {
+      try {
+        const t = (c.value || c.textContent || '').toString();
+        // prefer elements that contain SQL keywords or are empty (likely editor)
+        return /\bselect\b|\bfrom\b/i.test(t) || t.trim().length === 0;
+      } catch { return false; }
+    });
+    if (candidate) return resolveEditorHost(candidate);
+  } catch (e) { /* ignore and return null below */ }
+  return null;
+}
+
+// Given a host element (could be a custom element), resolve the actual input-like element that carries `.value`
+function resolveEditorHost(host) {
+  try {
+    if (!host) return null;
+    // If the host already exposes a value property, use it directly
+    if ('value' in host && (typeof host.value === 'string' || typeof host.value === 'number')) return host;
+
+    // If host has a property that looks like an internal editor (common in some frameworks)
+    if (host.editor && ('value' in host.editor)) return host.editor;
+    if (host.input && ('value' in host.input)) return host.input;
+
+    // Search inside shadow root for a textarea/input/contenteditable
+    if (host.shadowRoot) {
+      const inner = host.shadowRoot.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+      if (inner) return inner;
+    }
+
+    // Search children DOM
+    if (host.querySelector) {
+      const inner = host.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+      if (inner) return inner;
+    }
+
+    // fallback: return host itself (consumer may still attempt to read/assign .value)
+    return host;
+  } catch (e) { return host; }
+}
+
 // Suggestion subsystem state (added)
 let suggesterModule = null;
 let suggestionDebounce = null;
 const SUGGEST_DEBOUNCE_MS = 250;
+// Add a short hide timeout to prevent flicker when suggestions briefly clear
+let _suggestHideTimeout = null;
+// Sticky suggestion support: remember last shown suggestions and keep UI until a new non-empty set arrives
+let _lastShownSuggestions = null;
+let _suggestionsSticky = false;
+// Editor snapshot used to decide whether changes are significant enough to re-run suggester
+let _lastEditorSnapshot = null;
+// Threshold of character differences to consider a change "significant" (tunable)
+const SUGGEST_STICKY_CHAR_THRESHOLD = 3;
+// New: suppression flag — when true, block further suggestion recompute until cleared by user action
+let _suppressFurtherRecompute = false;
 
 async function loadSuggester() {
   if (suggesterModule) return suggesterModule;
@@ -140,30 +207,158 @@ async function computeAndRenderSuggestions() {
   try {
     if (!els || !els.editor || !els.hints) return;
     const q = els.editor.value || '';
+    const objName = (els.obj && els.obj.value) ? String(els.obj.value) : null;
+
+    // If suppression is active, skip recompute entirely (user opted to keep suggestions)
+    try {
+      if (_suppressFurtherRecompute) {
+        console.debug && console.debug('computeAndRenderSuggestions -> suppressed (no recompute)');
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    // NOTE: strict suppression policy — once non-empty suggestions are shown we rely on
+    // `_suppressFurtherRecompute` to block further recomputes. This avoids noisy recomputes
+    // triggered by small edits or caret moves; user can force recompute via Ctrl/Cmd+Space
+    // or by applying/hiding suggestions which clears suppression.
+
     const mod = await loadSuggester();
     if (!mod || typeof mod.suggestSoql !== 'function') { renderSuggestions([]); return; }
-    // Best-effort describe: none in popup module; pass null
-    let suggestions;
+
+    // Debug: log input query, selected object, and initial describe info
     try {
-      suggestions = await mod.suggestSoql(q, null, 'soqlEditor') || [];
+      const qSample = (q || '').length > 500 ? (q || '').slice(0,500) + '...[truncated]' : (q || '');
+      console.debug && console.debug('computeAndRenderSuggestions -> input', { querySample: qSample, queryLength: (q||'').length, selectedObject: objName, describeProvided: false });
+    } catch (e) { /* ignore logging errors */ }
+
+    // Best-effort describe: none in this helper; pass null
+    let describe = null;
+    let suggestions = [];
+    try {
+      // Prefer the API that returns all candidate suggestions so the popup can render multiple
+      if (typeof mod.suggestSoqlAll === 'function') {
+        console.debug && console.debug('computeAndRenderSuggestions -> calling suggester.suggestSoqlAll');
+        try {
+          suggestions = await mod.suggestSoqlAll(q, describe, 'soqlEditor') || [];
+          const rawPreview = Array.isArray(suggestions) ? suggestions.slice(0,20) : suggestions;
+          console.debug && console.debug('computeAndRenderSuggestions -> suggester.suggestSoqlAll returned', { count: Array.isArray(suggestions) ? suggestions.length : (typeof suggestions), preview: rawPreview });
+        } catch (e) {
+          console.debug && console.debug('computeAndRenderSuggestions -> suggester.suggestSoqlAll threw', e && (e.message || e));
+          suggestions = [];
+        }
+        // If the verbose API produced nothing, fall back to the single-item API
+        if ((!Array.isArray(suggestions) || suggestions.length === 0) && typeof mod.suggestSoql === 'function') {
+          console.debug && console.debug('computeAndRenderSuggestions -> falling back to suggester.suggestSoql (single)');
+          try {
+            const top = await mod.suggestSoql(q, describe, 'soqlEditor');
+            const preview = Array.isArray(top) ? top.slice(0,20) : (top ? [top] : []);
+            console.debug && console.debug('computeAndRenderSuggestions -> suggester.suggestSoql (fallback) returned', { type: Array.isArray(top) ? 'array' : (top ? typeof top : 'none'), preview });
+            if (Array.isArray(top)) suggestions = top.slice(0, 10);
+            else if (top) suggestions = [top];
+            else suggestions = [];
+          } catch (e) { console.debug && console.debug('computeAndRenderSuggestions -> suggester.suggestSoql (fallback) threw', e && (e.message || e)); suggestions = []; }
+        }
+      } else {
+        console.debug && console.debug('computeAndRenderSuggestions -> calling suggester.suggestSoql (single)');
+        // Only the single-suggestion API available — normalize to array so UI can iterate
+        try {
+          const s = await mod.suggestSoql(q, describe, 'soqlEditor');
+          const preview = Array.isArray(s) ? s.slice(0,20) : (s ? [s] : []);
+          console.debug && console.debug('computeAndRenderSuggestions -> suggester.suggestSoql returned', { type: Array.isArray(s) ? 'array' : (s ? typeof s : 'none'), preview });
+          suggestions = Array.isArray(s) ? s : (s ? [s] : []);
+        } catch (e) { console.debug && console.debug('computeAndRenderSuggestions -> suggester.suggestSoql threw', e && (e.message || e)); suggestions = []; }
+      }
     } catch (e) { suggestions = []; }
+
+    // Debug: final surface of suggestions (limited preview)
+    try { console.debug && console.debug('computeAndRenderSuggestions -> final suggestions.length=', Array.isArray(suggestions) ? suggestions.length : typeof suggestions, Array.isArray(suggestions) ? suggestions.slice(0,20) : suggestions); } catch (e) {}
+
+    // If we have any non-empty suggestions, suppress further recompute immediately to prevent races
+    try {
+      if (Array.isArray(suggestions) && suggestions.length > 0) {
+        _suppressFurtherRecompute = true;
+      } else {
+        _suppressFurtherRecompute = false;
+      }
+    } catch (e) { /* ignore */ }
+
     // store latest and render
     try { els.hints._latestSuggestions = suggestions; } catch {}
     renderSuggestions(Array.isArray(suggestions) ? suggestions.slice(0, 10) : []);
   } catch (e) { console.warn && console.warn('computeAndRenderSuggestions error', e); renderSuggestions([]); }
 }
 
-function scheduleSuggestionCompute() {
-  if (suggestionDebounce) clearTimeout(suggestionDebounce);
-  suggestionDebounce = setTimeout(() => { computeAndRenderSuggestions().catch(()=>{}); }, SUGGEST_DEBOUNCE_MS);
+function scheduleSuggestionCompute(force = false) {
+  try {
+    if (!force && _suppressFurtherRecompute) {
+      // Suppressed: do not schedule a recompute while user opted to keep current suggestions
+      console.debug && console.debug('scheduleSuggestionCompute -> suppressed, not scheduling');
+      return;
+    }
+    if (suggestionDebounce) clearTimeout(suggestionDebounce);
+    suggestionDebounce = setTimeout(() => { computeAndRenderSuggestions().catch(()=>{}); }, SUGGEST_DEBOUNCE_MS);
+  } catch (e) { /* ignore scheduling errors */ }
 }
 
 function renderSuggestions(items) {
   try {
     if (!els || !els.hints) return;
     const ul = els.hints;
+    // If new items arrived, cancel any pending hide timeout
+    try { if (_suggestHideTimeout) { clearTimeout(_suggestHideTimeout); _suggestHideTimeout = null; } } catch(e){}
+
+    // If items is empty: respect sticky behavior — keep previous suggestions visible until new non-empty arrives
+    if (!items || items.length === 0) {
+      if (_suggestionsSticky && Array.isArray(_lastShownSuggestions) && _lastShownSuggestions.length > 0) {
+        // Do nothing: keep existing UI intact
+        return;
+      }
+      // Schedule hide after short debounce (200ms). If new suggestions appear before that, cancel.
+      _suggestHideTimeout = setTimeout(() => {
+        try {
+          ul.innerHTML = '';
+          ul.classList.add('hidden');
+          _lastShownSuggestions = null;
+          _suggestionsSticky = false;
+          _lastEditorSnapshot = null;
+          // Also clear suppression when hints actually hide
+          _suppressFurtherRecompute = false;
+        } catch (e) { /* ignore */ }
+        _suggestHideTimeout = null;
+      }, 200);
+      return;
+    }
+
+    // There are items — if they are identical to what is already shown, do nothing
+    try {
+      const same = (Array.isArray(_lastShownSuggestions) && _lastShownSuggestions.length === items.length && items.every((it, idx) => {
+        const prev = _lastShownSuggestions[idx];
+        try {
+          if (!prev || !it) return false;
+          // Compare by id/text/apply.text if present
+          const a = (prev.id || prev.text || (prev.apply && prev.apply.text) || '').toString();
+          const b = (it.id || it.text || (it.apply && it.apply.text) || '').toString();
+          return a === b;
+        } catch (e) { return false; }
+      }));
+      if (same) {
+        // cancel any pending hide and keep sticky
+        _suggestionsSticky = true;
+        if (ul.classList.contains('hidden')) ul.classList.remove('hidden');
+        // Update editor snapshot so the sticky window remains anchored to the latest caret/text
+        try {
+          const currText = (els.editor && typeof els.editor.value === 'string') ? els.editor.value : '';
+          const currCaret = (typeof els.editor.selectionStart === 'number') ? els.editor.selectionStart : currText.length;
+          _lastEditorSnapshot = { text: currText, caret: currCaret };
+        } catch(e){}
+        // Keep suppression active when same suggestions persist
+        _suppressFurtherRecompute = true;
+        return;
+      }
+    } catch (e) { /* ignore comparison errors */ }
+
+    // New/different items: render immediately and ensure visible
     ul.innerHTML = '';
-    if (!items || items.length === 0) { ul.classList.add('hidden'); return; }
     const frag = document.createDocumentFragment();
     items.forEach((s, idx) => {
       try {
@@ -183,6 +378,18 @@ function renderSuggestions(items) {
     });
     ul.appendChild(frag);
     ul.classList.remove('hidden');
+
+    // Update sticky state and remember last shown suggestions
+    try { _lastShownSuggestions = Array.isArray(items) ? items.slice() : null; } catch (e) { _lastShownSuggestions = null; }
+    _suggestionsSticky = true;
+    // Capture current editor snapshot so we can decide when to recompute next time
+    try {
+      const currText = (els.editor && typeof els.editor.value === 'string') ? els.editor.value : '';
+      const currCaret = (typeof els.editor.selectionStart === 'number') ? els.editor.selectionStart : currText.length;
+      _lastEditorSnapshot = { text: currText, caret: currCaret };
+    } catch(e) { _lastEditorSnapshot = null; }
+    // New non-empty suggestions shown: suppress further recompute until user clears or applies
+    _suppressFurtherRecompute = true;
   } catch (e) { console.warn && console.warn('renderSuggestions error', e); }
 }
 
@@ -201,19 +408,29 @@ function applySuggestionByIndex(idx) {
       const cur = editor.value || '';
       const app = s.apply || {};
       let next = cur;
+      // Helper: clamp numeric index into [0, cur.length]
+      const clamp = (n) => { if (typeof n !== 'number' || Number.isNaN(n)) return null; return Math.max(0, Math.min(cur.length, Math.floor(n))); };
       if (app.type === 'append') {
         next = cur + (app.text || '');
       } else if (app.type === 'replace') {
-        if (typeof app.start === 'number' && typeof app.end === 'number' && app.start >= 0 && app.end > app.start && app.end <= cur.length) {
-          next = cur.slice(0, app.start) + (app.text || '') + cur.slice(app.end);
+        // Allow replace ranges where start === end (insert at position), and clamp out-of-bounds values
+        const startRaw = (app.start == null) ? null : app.start;
+        const endRaw = (app.end == null) ? null : app.end;
+        const start = clamp(startRaw);
+        const end = clamp(endRaw);
+        if (start != null && end != null && start >= 0 && end >= start && end <= cur.length) {
+          next = cur.slice(0, start) + (app.text || '') + cur.slice(end);
         } else if (app.text) {
+          // fallback: try simple heuristic replace of first '*' occurrence
           const star = cur.indexOf('*');
           if (star >= 0) next = cur.slice(0, star) + app.text + cur.slice(star+1);
           else next = cur + app.text;
         }
       } else if (app.type === 'insert') {
-        if (typeof app.pos === 'number' && app.pos >= 0 && app.pos <= cur.length) {
-          next = cur.slice(0, app.pos) + (app.text || '') + cur.slice(app.pos);
+        const posRaw = app.pos;
+        const pos = clamp(posRaw);
+        if (pos != null && pos >= 0 && pos <= cur.length) {
+          next = cur.slice(0, pos) + (app.text || '') + cur.slice(pos);
         } else {
           next = cur + (app.text || '');
         }
@@ -224,722 +441,26 @@ function applySuggestionByIndex(idx) {
       try { editor.focus(); } catch {}
       try { editor.setSelectionRange(editor.value.length, editor.value.length); } catch {}
       validateInline();
+      // Clear suppression since user applied a suggestion
+      _suppressFurtherRecompute = false;
       hintsHide();
       // re-run suggestions after small delay
       setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(_){} }, 80);
     } finally {
-      try { hintsEl._applying = false; } catch(_){}
+      try { hintsEl._applying = false; } catch(_){ }
     }
   } catch (e) { console.warn && console.warn('applySuggestionByIndex top error', e); }
 }
 
-function bindDom(){
-  try {
-    els.editor = qs('soql-editor');
-    els.hints = qs('soql-hints');
-    els.errors = qs('soql-errors');
-    els.obj = qs('soql-obj');
-    els.run = qs('soql-run');
-    els.clear = qs('soql-clear');
-    els.limit = qs('soql-limit');
-    els.results = qs('soql-results');
-    els.autoFill = qs('soql-auto-fill');
-    els.debug = qs('soql-debug');
-    els.debugToggle = qs('soql-debug-toggle');
-    els.useTooling = qs('soql-use-tooling');
-  } catch {}
-}
-
-function ensureInitOnce() {
-  if (initialized) {
-      return;
-  }
-  initialized = true;
-  bindDom();
-  wireEvents();
-  initSchemaAndUI();
-}
-
-async function initSchemaAndUI() {
-  await loadRules();
-  // Load persisted Tooling API preference (soqlUseTooling) if available
-  try {
-    if (els.useTooling && chrome?.storage?.local?.get) {
-      const pref = await chrome.storage.local.get({ soqlUseTooling: false });
-      els.useTooling.checked = !!pref.soqlUseTooling;
-    }
-  } catch {}
-
-  const toolingPref = !!(els.useTooling && els.useTooling.checked);
-
-  // Diagnostic: log detected instance url early so popup console shows why DESCRIBE_GLOBAL may fail
-  try {
-    const detectedInstance = await getInstanceUrl().catch(() => null);
-    console.debug && console.debug('soql_helper: initSchemaAndUI detected instance:', detectedInstance, 'toolingPref:', toolingPref);
-  } catch {}
-
-  // Try initializing the schema with a small retry loop to tolerate transient failures
-  let objs = [];
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.debug && console.debug(`soql_helper: initSchema attempt ${attempt} (useTooling=${toolingPref})`);
-      await Soql_helper_schema.initSchema(toolingPref);
-      buildKeyPrefixMap(toolingPref);
-    } catch (err) {
-      console.warn && console.warn('soql_helper: initSchema error attempt', attempt, err);
-      try { buildKeyPrefixMap(); } catch {}
-    }
-    populateObjectPicker();
-    objs = Soql_helper_schema.getObjects(toolingPref) || [];
-    console.debug && console.debug('soql_helper: objects after attempt', attempt, objs && objs.length);
-    if (objs && objs.length > 0) break;
-    // small backoff before retrying
-    if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 300 * attempt));
-  }
-
-  // If still empty, try the alternative endpoint(s) as a final fallback
-  if (!objs || objs.length === 0) {
-    try {
-      // Try standard endpoint
-      console.debug && console.debug('soql_helper: retrying initSchema with standard endpoint');
-      await Soql_helper_schema.initSchema(false);
-      buildKeyPrefixMap(false);
-      populateObjectPicker();
-      objs = Soql_helper_schema.getObjects(false) || [];
-      console.debug && console.debug('soql_helper: objects after standard retry', objs && objs.length);
-    } catch (err) { console.warn && console.warn('soql_helper: standard initSchema error', err); }
-
-    if ((!objs || objs.length === 0) && toolingPref) {
-      try {
-        // Try tooling endpoint explicitly
-        console.debug && console.debug('soql_helper: retrying initSchema with tooling endpoint');
-        await Soql_helper_schema.initSchema(true);
-        buildKeyPrefixMap(true);
-        populateObjectPicker();
-        objs = Soql_helper_schema.getObjects(true) || [];
-        console.debug && console.debug('soql_helper: objects after tooling retry', objs && objs.length);
-      } catch (err) { console.warn && console.warn('soql_helper: tooling initSchema error', err); }
-    }
-  }
-
-  if ((!objs || objs.length === 0) && els.errors) {
-    try {
-      // Attempt to give the user a diagnostic hint: do we see an instance URL/session?
-      let inst = null;
-      try { inst = await getInstanceUrl(); } catch {}
-      const instHint = inst ? `Detected instance: ${inst}` : 'No Salesforce session detected';
-      els.errors.textContent = `Warning: Could not load object list — ${instHint}. Try logging into Salesforce in a browser tab, then reopen this popup or toggle "Use Tooling API".`;
-
-      // Additional diagnostic: fetch and display raw responses (DESCRIBE_GLOBAL + GET_SESSION_INFO)
-      try { await fetchAndDisplayDiagnostics(toolingPref); } catch (e) { console.warn('soql_helper: fetchAndDisplayDiagnostics error', e); }
-    } catch (e) { console.warn && console.warn('soql_helper: error while setting error hint', e); }
-  }
-
-  // Load recent query if any
-  try {
-    const recent = await Soql_helper_storage.loadRecent();
-    if (recent && recent[0] && els.editor) els.editor.value = recent[0];
-  } catch {}
-  // Sync object picker from any pre-filled query in the editor
-  try { syncObjectPickerFromEditor(); } catch {}
-  // Load auto-fill preference
-  try {
-    if (els.autoFill && chrome?.storage?.local?.get) {
-      const pref = await chrome.storage.local.get({ soqlAutoFill: true });
-      els.autoFill.checked = !!pref.soqlAutoFill;
-    }
-  } catch {}
-  // Load debug overlay preference
-  try {
-    if (els.debugToggle && chrome?.storage?.local?.get) {
-      const pref = await chrome.storage.local.get({ soqlDebugOverlay: false });
-      els.debugToggle.checked = !!pref.soqlDebugOverlay;
-      applyDebugOverlayVisibility();
-    } else {
-      applyDebugOverlayVisibility();
-    }
-  } catch {
-    applyDebugOverlayVisibility();
-  }
-  validateInline();
-  // sync the limit dropdown from any pre-filled query
-  try { syncLimitDropdownFromEditor(); } catch {}
-  // compute initial suggestions
-  try { scheduleSuggestionCompute(); } catch {}
-}
-
-// Expose a hook for the popup fallback and initialize the module UI when loaded
-try {
-  if (typeof window !== 'undefined') {
-    window.__soql_helper_loaded = true;
-    window.__soql_helper_ensureInitOnce = ensureInitOnce;
-  }
-} catch (e) { /* ignore */ }
-
-// Auto-init when the module is loaded in the popup context
-try { ensureInitOnce(); } catch (e) { console.warn && console.warn('soql_helper auto-init failed', e); }
-
-// Diagnostic: force-tooling flag for dev/testing
-try {
-  if (typeof window !== 'undefined' && window.location) {
-    const q = window.location.search;
-    if (q.indexOf('soql_tooling=1') >= 0) {
-      const el = document.getElementById('soql-use-tooling');
-      if (el) {
-        el.checked = true;
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    }
-  }
-} catch (e) { console.warn && console.warn('soql_helper tooling flag parse error', e); }
-
-let _populateRetries = 0;
-
-async function populateObjectPicker(){
-  try {
-    // If DOM hasn't been bound yet, retry a few times with backoff
-    if (!els.obj) {
-      if (_populateRetries < 5) {
-        _populateRetries++;
-        setTimeout(populateObjectPicker, 200 * _populateRetries);
-      }
-      return;
-    }
-  } catch {}
-
-  const list = Soql_helper_schema.getObjects(!!(els.useTooling && els.useTooling.checked));
-  console.debug && console.debug('soql_helper: populateObjectPicker got list length', Array.isArray(list) ? list.length : 'null');
-  try { els.obj.innerHTML = ''; } catch { return; }
-  if (!list || list.length === 0) {
-    // Runtime fallback: attempt direct DESCRIBE_GLOBAL from background (helps when schema cache didn't populate)
-    try {
-      if (typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage) {
-        const resp = await new Promise((resolve) => {
-          try {
-            chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', useTooling: !!(els.useTooling && els.useTooling.checked) }, (r) => {
-              if (chrome.runtime.lastError) {
-                // Return structured error so UI can render a helpful diagnostic
-                console.debug('soql_helper: populateObjectPicker DESCRIBE_GLOBAL lastError', chrome.runtime.lastError);
-                resolve({ success: false, error: String(chrome.runtime.lastError && chrome.runtime.lastError.message ? chrome.runtime.lastError.message : chrome.runtime.lastError) });
-              } else {
-                resolve(r || { success: true, objects: null });
-              }
-            });
-          } catch (e) { console.debug('soql_helper: populateObjectPicker sendMessage exception', e); resolve({ success: false, error: String(e) }); }
-        });
-        // If the background returned a structured failure, show it to the user for diagnostics
-        if (resp && resp.success === false && resp.error) {
-          try { if (els.errors) els.errors.textContent = `Could not load objects: ${resp.error}`; } catch {}
-        }
-        if (resp && resp.success && Array.isArray(resp.objects) && resp.objects.length > 0) {
-          // Populate directly from background response
-          try { els.obj.innerHTML = ''; } catch {}
-          resp.objects.forEach(it => {
-            try {
-              const name = it.name || it.label || it.keyPrefix || '';
-              if (!name) return;
-              const o = document.createElement('option');
-              o.value = name;
-              o.textContent = `${it.label || name} (${name})`;
-              try { if (String(name || '').toLowerCase().endsWith('__mdt')) o.dataset.isMdt = '1'; } catch {}
-              els.obj.appendChild(o);
-            } catch {}
-          });
-          try { if (els.obj.options && els.obj.options.length > 0) { els.obj.selectedIndex = 0; try { els.obj.dispatchEvent(new Event('change', { bubbles: true })); } catch {} } } catch {}
-          // Clear any previous object-load errors
-          try { if (els.errors) els.errors.textContent = ''; } catch {}
-          return;
-        }
-      }
-    } catch (e) { console.debug('soql_helper: populateObjectPicker fallback failed', e); }
-     // show a disabled placeholder and a clear error hint so the user knows why objects are empty
-     const o = document.createElement('option');
-     o.textContent = '\u2014 none (objects not loaded) \u2014';
-     o.disabled = true;
-     o.selected = true;
-     try { els.obj.appendChild(o); } catch {}
-    try {
-      if (els.errors) {
-        // Clear previous content and render a retry UI
-        els.errors.textContent = '';
-        // If the last DESCRIBE_GLOBAL response explicitly said the instance URL wasn't detected,
-        // show a prominent action to open/sign-in to Salesforce and retry; otherwise fall back to the generic UI.
-        try {
-          const lastResp = (Soql_helper_schema && typeof Soql_helper_schema.getLastDescribeGlobalResponse === 'function') ? Soql_helper_schema.getLastDescribeGlobalResponse() : null;
-          const instUrlErr = lastResp && lastResp.success === false && typeof lastResp.error === 'string' && /instance\s*url\s*not\s*detected/i.test(lastResp.error);
-
-          if (instUrlErr) {
-            const wrap = document.createElement('div');
-            wrap.style.display = 'flex';
-            wrap.style.flexDirection = 'column';
-            wrap.style.gap = '8px';
-            wrap.style.padding = '8px 6px';
-
-            const header = document.createElement('div');
-            header.style.fontWeight = '600';
-            header.style.marginBottom = '4px';
-            header.textContent = 'Salesforce session not detected';
-            wrap.appendChild(header);
-
-            const msg = document.createElement('div');
-            msg.textContent = 'The extension could not detect a Salesforce instance or session. Open a Salesforce tab and sign in, then retry loading objects.';
-            wrap.appendChild(msg);
-
-            const actionsRow = document.createElement('div');
-            actionsRow.style.display = 'flex';
-            actionsRow.style.gap = '8px';
-
-            const openSfPrimary = document.createElement('button');
-            openSfPrimary.type = 'button';
-            openSfPrimary.textContent = 'Open Salesforce';
-            openSfPrimary.style.padding = '8px 12px';
-            openSfPrimary.style.background = 'var(--accent, #0070d2)';
-            openSfPrimary.style.color = '#fff';
-            openSfPrimary.style.border = 'none';
-            openSfPrimary.style.borderRadius = '4px';
-            openSfPrimary.addEventListener('click', async () => {
-              try {
-                openSfPrimary.disabled = true;
-                const tabs = await new Promise((resolve) => {
-                  try { chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] }, (arr) => resolve(arr || [])); }
-                  catch { resolve([]); }
-                });
-                if (Array.isArray(tabs) && tabs.length > 0) {
-                  const t = tabs[0];
-                  try { chrome.tabs.update(t.id, { active: true }); } catch {}
-                  try { chrome.windows.update(t.windowId, { focused: true }); } catch {}
-                } else {
-                  try { chrome.tabs.create({ url: 'https://login.salesforce.com/' }); } catch {}
-                }
-                // Give user a moment to sign in, then enable retry
-                setTimeout(() => { try { openSfPrimary.disabled = false; } catch {} }, 1500);
-              } catch (e) { console.warn('openSfPrimary error', e); try { openSfPrimary.disabled = false; } catch {} }
-            });
-            actionsRow.appendChild(openSfPrimary);
-
-            const retryBtn = document.createElement('button');
-            retryBtn.type = 'button';
-            retryBtn.textContent = 'Retry detection';
-            retryBtn.addEventListener('click', async () => {
-              try { retryBtn.disabled = true; await reloadObjects(); } catch {} finally { try { retryBtn.disabled = false; } catch {} }
-            });
-            actionsRow.appendChild(retryBtn);
-
-            const diagBtn = document.createElement('button');
-            diagBtn.type = 'button';
-            diagBtn.id = 'soql-show-diagnostics';
-            diagBtn.textContent = 'Show diagnostics';
-            diagBtn.addEventListener('click', async () => {
-              try { diagBtn.disabled = true; await fetchAndDisplayDiagnostics(!!(els.useTooling && els.useTooling.checked)); } catch (e) { console.warn('diagnostics button error', e); } finally { try { diagBtn.disabled = false; } catch {} }
-            });
-            actionsRow.appendChild(diagBtn);
-
-            wrap.appendChild(actionsRow);
-
-            els.errors.appendChild(wrap);
-            return; // done — we rendered the instance-URL-missing UI
-          }
-        } catch (e) { console.debug('soql_helper: failed to render last describe resp', e); }
-
-        // Fallback: render the previous generic UI when instance URL isn't the clear cause
-        const p = document.createElement('div');
-        p.textContent = 'Could not load objects. Ensure you have an active Salesforce session.';
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.id = 'soql-retry-objects';
-        btn.textContent = 'Retry loading objects';
-        btn.style.marginLeft = '8px';
-        btn.addEventListener('click', async () => {
-          try { btn.disabled = true; await reloadObjects(); } catch {} finally { try { btn.disabled = false; } catch {} }
-        });
-        const diagBtn = document.createElement('button');
-        diagBtn.type = 'button';
-        diagBtn.id = 'soql-show-diagnostics';
-        diagBtn.textContent = 'Show diagnostics';
-        diagBtn.style.marginLeft = '8px';
-        diagBtn.addEventListener('click', async () => {
-          try { diagBtn.disabled = true; await fetchAndDisplayDiagnostics(!!(els.useTooling && els.useTooling.checked)); } catch (e) { console.warn('diagnostics button error', e); } finally { try { diagBtn.disabled = false; } catch {} }
-        });
-        const openSfBtn = document.createElement('button');
-        openSfBtn.type = 'button';
-        openSfBtn.id = 'soql-open-salesforce';
-        openSfBtn.textContent = 'Open Salesforce tab';
-        openSfBtn.style.marginLeft = '8px';
-        openSfBtn.addEventListener('click', async () => {
-          try {
-            openSfBtn.disabled = true;
-            const tabs = await new Promise((resolve) => { try { chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] }, (arr) => { resolve(arr || []); }); } catch (e) { resolve([]); } });
-            if (Array.isArray(tabs) && tabs.length > 0) {
-              const t = tabs[0];
-              try { chrome.tabs.update(t.id, { active: true }); } catch (e) {}
-              try { chrome.windows.update(t.windowId, { focused: true }); } catch (e) {}
-            } else {
-              try { chrome.tabs.create({ url: 'https://login.salesforce.com/' }); } catch (e) {}
-            }
-          } catch (e) { console.warn('openSfBtn error', e); }
-          try { openSfBtn.disabled = false; } catch {}
-        });
-        els.errors.appendChild(p);
-        els.errors.appendChild(btn);
-        els.errors.appendChild(diagBtn);
-        els.errors.appendChild(openSfBtn);
-       }
-     } catch {}
-  }
-  // Clear any previous object-load errors when we do have objects
-  try { if (els.errors) els.errors.textContent = ''; } catch {}
-  list.forEach(it => {
-    try {
-      const o = document.createElement('option');
-      o.value = it.name;
-      // show both label and an indicator when the object looks like tooling or metadata
-      o.textContent = `${it.label || it.name} (${it.name})`;
-      // mark custom metadata types so we can auto-select Tooling API
-      try { if (String(it.name || '').toLowerCase().endsWith('__mdt')) o.dataset.isMdt = '1'; } catch {}
-      els.obj.appendChild(o);
-    } catch {}
-  });
-
-  // Make sure the select shows a selection (choose first) and trigger change so other UI updates run
-  try {
-    if (els.obj.options && els.obj.options.length > 0) {
-      els.obj.selectedIndex = 0;
-      // update any listeners
-      try { els.obj.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
-    }
-  } catch {}
-}
-
-// Allow manual retry of schema/object loading from the UI
-async function reloadObjects() {
-  try {
-    if (!els.errors) return;
-    try { els.errors.textContent = 'Reloading objects...'; } catch {}
-    const tooling = !!(els.useTooling && els.useTooling.checked);
-    try { await Soql_helper_schema.initSchema(tooling); } catch {}
-    try { buildKeyPrefixMap(tooling); } catch {}
-    try { populateObjectPicker(); } catch {}
-    const objs = Soql_helper_schema.getObjects(tooling) || [];
-    if (objs && objs.length > 0) {
-      try { els.errors.textContent = ''; } catch {}
-    } else {
-      try {
-        let inst = null;
-        try { inst = await getInstanceUrl(); } catch {}
-        const instHint = inst ? `Detected instance: ${inst}` : 'No Salesforce session detected';
-        // Enhanced diagnostics: try to get raw DESCRIBE_GLOBAL response from background
-        let rawResp = null;
-        try {
-          rawResp = await new Promise((resolve) => {
-            try {
-              chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', instanceUrl: inst || undefined, useTooling: tooling }, (r) => {
-                if (chrome.runtime.lastError) {
-                  console.warn('soql_helper: reloadObjects DESCRIBE_GLOBAL lastError', chrome.runtime.lastError);
-                  resolve({ success: false, error: String(chrome.runtime.lastError) });
-                } else {
-                  resolve(r || null);
-                }
-              });
-            } catch (e) { console.warn('soql_helper: reloadObjects sendMessage exception', e); resolve({ success: false, error: String(e) }); }
-          });
-        } catch (e) { console.warn('soql_helper: reloadObjects DESCRIBE_GLOBAL promise error', e); }
-
-        // Also fetch session info from background for diagnostics
-        let sessionResp = null;
-        try {
-          sessionResp = await new Promise((resolve) => {
-            try {
-              chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO', url: inst || undefined }, (r) => {
-                if (chrome.runtime.lastError) {
-                  console.warn('soql_helper: reloadObjects GET_SESSION_INFO lastError', chrome.runtime.lastError);
-                  resolve({ success: false, error: String(chrome.runtime.lastError) });
-                } else {
-                  resolve(r || null);
-                }
-              });
-            } catch (e) { console.warn('soql_helper: reloadObjects GET_SESSION_INFO exception', e); resolve({ success: false, error: String(e) }); }
-          });
-        } catch (e) { console.warn('soql_helper: reloadObjects GET_SESSION_INFO promise error', e); }
-
-        try {
-          const detail = rawResp ? JSON.stringify(rawResp, null, 2) : 'No response from background (runtime.lastError or blocked)';
-          const sessionDetail = sessionResp ? JSON.stringify(sessionResp, null, 2) : 'No session info available';
-          els.errors.textContent = `Reload failed — ${instHint}.\n\nRaw DESCRIBE_GLOBAL response:\n${detail}\n\nGET_SESSION_INFO response:\n${sessionDetail}`;
-          console.warn('soql_helper: raw DESCRIBE_GLOBAL response', rawResp, 'GET_SESSION_INFO', sessionResp);
-        } catch (e) { console.warn('soql_helper: failed to render DESCRIBE_GLOBAL diagnostic', e); }
-      } catch {}
-    }
-  } catch {}
-}
-
-function wireEvents(){
-  if (!els.editor) return;
-  els.editor.addEventListener('keydown', onKeyDown);
-  // On input, validate, update suggestions/debug overlay and keep object picker synced if a FROM clause exists
-  els.editor.addEventListener('input', () => {
-    try { validateInline(); suggestFromContext(); updateDebugOverlay(); syncObjectPickerFromEditor(); scheduleSuggestionCompute(); } catch {}
-  });
-  els.editor.addEventListener('focus', () => {
-      suggestFromContext();
-      updateDebugOverlay();
-      scheduleSuggestionCompute();
-  });
-  els.editor.addEventListener('keyup', () => { updateDebugOverlay(); });
-  els.editor.addEventListener('click', () => { updateDebugOverlay(); });
-  els.editor.addEventListener('mouseup', () => { updateDebugOverlay(); });
-  els.hints.addEventListener('mousedown', (e)=>{ e.preventDefault(); });
-  els.run.addEventListener('click', runQuery);
-  els.clear.addEventListener('click', () => { els.editor.value=''; clearResults(); hintsHide(); els.errors.textContent=''; setEditorStatus(''); updateDebugOverlay(); });
-  els.obj.addEventListener('change', async () => { await handleObjectChange(); updateDebugOverlay(); });
-  // Keep the LIMIT input (with datalist) and editor synchronized
-  els.limit?.addEventListener('input', () => { applyLimitFromDropdown(); });
-  els.editor.addEventListener('input', () => { try { syncLimitDropdownFromEditor(); } catch {} });
-  if (els.useTooling) {
-    els.useTooling.addEventListener('change', async () => {
-      // Re-init schema against the selected endpoint and refresh object picker
-      try { await Soql_helper_schema.initSchema(!!els.useTooling.checked); } catch {}
-      try { buildKeyPrefixMap(!!els.useTooling.checked); } catch {}
-      // Persist the user's choice
-      try { await chrome?.storage?.local?.set?.({ soqlUseTooling: !!els.useTooling.checked }); } catch {}
-      populateObjectPicker();
-      // Clear any previous results since schema/objects changed
-      try { clearResults(); hintsHide(); clearLimit(); } catch {}
-      suggestFromContext();
-    });
-  }
-  if (els.autoFill) {
-    els.autoFill.addEventListener('change', async () => {
-      try { await chrome?.storage?.local?.set?.({ soqlAutoFill: !!els.autoFill.checked }); } catch {}
-    });
-  }
-  if (els.debugToggle) {
-    els.debugToggle.addEventListener('change', async () => {
-      applyDebugOverlayVisibility();
-      try { await chrome?.storage?.local?.set?.({ soqlDebugOverlay: !!els.debugToggle.checked }); } catch {}
-    });
-  }
-}
-
-async function handleObjectChange(){
-  if (!els.obj || !els.editor) return;
-  const obj = (els.obj.value || '').trim();
-  if (!obj) { suggestFromContext(); return; }
-  try {
-    const sel = els.obj.selectedOptions && els.obj.selectedOptions[0];
-    if (sel && sel.dataset && sel.dataset.isMdt) {
-      if (els.useTooling && !els.useTooling.checked) {
-        // Do NOT auto-enable or persist the Tooling API. Require explicit user action.
-        try { els.errors.textContent = 'Note: custom metadata types require the Tooling API — enable "Use Tooling API" to view them.'; } catch {}
-      }
-    }
-  } catch {}
-  // Remove previous results when the user changes the selected object
-  try { clearResults(); hintsHide(); clearLimit(); } catch {}
-  const current = (els.editor.value || '').trim();
-  const autoRe = /^select\s+id\s+from\s+[A-Za-z_][A-Za-z0-9_]*(?:__(?:c|kav|x))?\s*;?$/i;
-  const template = `SELECT Id FROM ${obj}`;
-  const force = !!(els.autoFill && els.autoFill.checked);
-  if (force || !current || autoRe.test(current)) {
-    els.editor.value = template;
-    const caret = els.editor.value.length;
-    els.editor.focus();
-    try { els.editor.setSelectionRange(caret, caret); } catch {}
-  }
-  validateInline();
-  suggestFromContext();
-}
-
-// Module initialization helpers and lightweight UI implementations
-
-function validateInline() {
-  try {
-    if (!els || !els.editor) return false;
-    const q = String(els.editor.value || '');
-    const macroErr = validateFieldsMacro ? validateFieldsMacro(q) : null;
-    if (macroErr) {
-      try { if (els.errors) els.errors.textContent = macroErr; } catch {}
-      setEditorStatus('error');
-      return false;
-    }
-    try {
-      const inline = Array.isArray(rules.inlineValidators) ? rules.inlineValidators : [];
-      for (const v of inline) {
-        try {
-          const re = new RegExp(v.pattern, 'i');
-          const match = re.test(q);
-          const ok = v.negate ? !match : match;
-          if (!ok) {
-            try { if (els.errors) els.errors.textContent = v.message || ''; } catch {}
-            setEditorStatus(v.level === 'error' ? 'error' : '');
-            return false;
-          }
-        } catch {}
-      }
-    } catch {}
-    try { if (els.errors) els.errors.textContent = ''; } catch {}
-    setEditorStatus('success');
-    return true;
-  } catch (e) { console.warn && console.warn('validateInline error', e); return false; }
-}
-
-function suggestFromContext() {
-  try {
-    if (!els || !els.editor || !els.hints) return;
-    const txt = els.editor.value || '';
-    const pos = (els.editor.selectionStart == null) ? txt.length : els.editor.selectionStart;
-    let clause;
-    try { clause = getClauseAtCursor ? getClauseAtCursor(txt, pos) : null; } catch { clause = null; }
-    els.hints.innerHTML = '';
-    if (clause === 'FROM') {
-      const objs = Soql_helper_schema.getObjects(!!(els.useTooling && els.useTooling.checked)) || [];
-      const frag = document.createDocumentFragment();
-      objs.slice(0, 30).forEach(o => {
-        try {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'soql-hint';
-          btn.textContent = o.name || o.label || '';
-          btn.addEventListener('click', () => {
-            try {
-              const upTo = txt.slice(0, pos);
-              const after = txt.slice(pos);
-              const m = upTo.match(/FROM\s+([A-Za-z0-9_\u007F-]*)$/i);
-              const prefix = m ? m[1] : '';
-              const newUp = upTo.replace(new RegExp(prefix + '$'), (o.name || ''));
-              els.editor.value = newUp + after;
-              els.editor.focus();
-              try { els.editor.setSelectionRange(newUp.length, newUp.length); } catch {}
-              validateInline();
-              hintsHide();
-              syncObjectPickerFromEditor();
-            } catch (e) { console.warn && console.warn('suggest click error', e); }
-          });
-          frag.appendChild(btn);
-        } catch {}
-      });
-      els.hints.appendChild(frag);
-    }
-  } catch (e) { console.warn && console.warn('suggestFromContext error', e); }
-}
-
-function updateDebugOverlay() {
-  try {
-    if (!els || !els.debug || !els.editor) return;
-    const q = els.editor.value || '';
-    const pos = (els.editor.selectionStart == null) ? q.length : els.editor.selectionStart;
-    const info = {
-      clause: (getClauseAtCursor ? getClauseAtCursor(q, pos) : null),
-      selectPhase: (getSelectPhase ? getSelectPhase(q, pos) : null),
-      fromPhase: (getFromPhase ? getFromPhase(q, pos) : null),
-      pos
-    };
-    els.debug.textContent = JSON.stringify(info, null, 2);
-  } catch (e) { console.warn && console.warn('updateDebugOverlay error', e); }
-}
-
-function syncObjectPickerFromEditor(){
-  try {
-    if (!els || !els.editor || !els.obj) return;
-    const q = (els.editor.value || '');
-    const m = q.match(/\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:__(?:c|kav|x))?)/i);
-    if (!m) return;
-    const name = m[1];
-    Array.from(els.obj.options || []).forEach((opt, idx) => {
-      try { if ((opt.value || '').toLowerCase() === (name || '').toLowerCase()) els.obj.selectedIndex = idx; } catch {}
-    });
-  } catch (e) { console.warn && console.warn('syncObjectPickerFromEditor error', e); }
-}
-
-function syncLimitDropdownFromEditor(){
-  try {
-    if (!els || !els.editor || !els.limit) return;
-    const q = els.editor.value || '';
-    const m = q.match(/\bLIMIT\s+(\d+)/i);
-    const val = m ? m[1] : '';
-    els.limit.value = val;
-    try {
-      if (val) els.limit.setAttribute('data-applied', String(val)); else els.limit.removeAttribute('data-applied');
-    } catch (e) { /* ignore attribute errors */ }
-    try { console.debug && console.debug('syncLimitDropdownFromEditor -> limit value set to', val, 'data-applied=', els.limit.getAttribute && els.limit.getAttribute('data-applied')); } catch (e) {}
-  } catch (e) { console.warn && console.warn('syncLimitDropdownFromEditor error', e); }
-}
-
-function applyDebugOverlayVisibility(){
-  try {
-    if (!els || !els.debug) return;
-    const show = !!(els.debugToggle && els.debugToggle.checked);
-    els.debug.style.display = show ? '' : 'none';
-  } catch (e) { console.warn && console.warn('applyDebugOverlayVisibility error', e); }
-}
-
-async function fetchAndDisplayDiagnostics(toolingPref){
-  try {
-    if (!els || !els.errors) return;
-    const inst = await getInstanceUrl().catch(() => null);
-    const instHint = inst ? `Detected instance: ${inst}` : 'No Salesforce session detected';
-    let rawResp;
-    try {
-      rawResp = await new Promise((resolve) => {
-        try { chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', instanceUrl: inst || undefined, useTooling: !!toolingPref }, (r) => { if (chrome.runtime.lastError) resolve({ success: false, error: String(chrome.runtime.lastError) }); else resolve(r || null); }); } catch (e) { resolve({ success: false, error: String(e) }); }
-      });
-    } catch (e) { rawResp = { success: false, error: String(e) }; }
-
-    let sessionResp;
-    try {
-      sessionResp = await new Promise((resolve) => {
-        try { chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO', url: inst || undefined }, (r) => { if (chrome.runtime.lastError) resolve({ success: false, error: String(chrome.runtime.lastError) }); else resolve(r || null); }); } catch (e) { resolve({ success: false, error: String(e) }); }
-      });
-    } catch (e) { sessionResp = { success: false, error: String(e) }; }
-
-    try {
-      const detail = rawResp ? JSON.stringify(rawResp, null, 2) : 'No response from background';
-      const sessionDetail = sessionResp ? JSON.stringify(sessionResp, null, 2) : 'No session info available';
-      els.errors.textContent = `${instHint}\n\nRaw DESCRIBE_GLOBAL response:\n${detail}\n\nGET_SESSION_INFO response:\n${sessionDetail}`;
-    } catch (e) { console.warn && console.warn('diagnostics render failed', e); }
-  } catch (e) { console.warn && console.warn('fetchAndDisplayDiagnostics error', e); }
-}
-
-function clearResults(){ try { if (els && els.results) els.results.innerHTML = ''; } catch {} }
-function hintsHide(){ try { if (els && els.hints) els.hints.innerHTML = ''; } catch {} }
-function clearLimit(){ try { if (els && els.limit) els.limit.value = ''; } catch {} }
-// New: update editor visual status and validator top area
-function setEditorStatus(status) {
-  try {
-    // Update textarea visual styles
-    const editorEl = (els && els.editor) ? els.editor : qs('soql-editor');
-    if (editorEl && editorEl.classList) {
-      editorEl.classList.remove('soql-editor--progress','soql-editor--success','soql-editor--error');
-      if (status === 'progress') editorEl.classList.add('soql-editor--progress');
-      else if (status === 'success') editorEl.classList.add('soql-editor--success');
-      else if (status === 'error') editorEl.classList.add('soql-editor--error');
-    }
-
-    // Update validator area above editor (helps screen readers and inline feedback)
-    const validatorEl = qs('soql-validator-top');
-    if (validatorEl) {
-      if (status === 'progress') {
-        validatorEl.textContent = 'Running...';
-        validatorEl.className = 'soql-validator placeholder-note';
-        validatorEl.setAttribute('aria-live', 'polite');
-      } else if (status === 'success') {
-        const msg = (els && els.errors && els.errors.textContent) ? els.errors.textContent : '';
-        validatorEl.textContent = msg || 'OK';
-        validatorEl.className = msg ? 'soql-validator soql-valid' : 'soql-validator placeholder-note';
-      } else if (status === 'error') {
-        const msg = (els && els.errors && els.errors.textContent) ? els.errors.textContent : 'Error';
-        validatorEl.textContent = msg;
-        validatorEl.className = 'soql-validator soql-error-list';
-      } else {
-        validatorEl.textContent = '';
-        validatorEl.className = 'soql-validator placeholder-note';
-      }
-    }
-  } catch (e) { console.warn && console.warn('setEditorStatus error', e); }
-}
+function hintsHide(){ try { if (els && els.hints) { els.hints.innerHTML = ''; els.hints.classList.add('hidden'); } _lastShownSuggestions = null; _suggestionsSticky = false; _lastEditorSnapshot = null; _suppressFurtherRecompute = false; } catch {} }
 
 function onKeyDown(ev){
   try {
+    // Force recompute on Ctrl/Cmd+Space: clear suppression and run suggestions immediately
+    if ((ev.ctrlKey || ev.metaKey) && (ev.code === 'Space' || ev.key === ' ')) {
+      try { ev.preventDefault(); _suppressFurtherRecompute = false; computeAndRenderSuggestions().catch(()=>{}); } catch(e){}
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); runQuery(); return; }
     if (ev.key === 'Escape') { hintsHide(); }
   } catch (e) { console.warn && console.warn('onKeyDown error', e); }

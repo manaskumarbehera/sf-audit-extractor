@@ -103,6 +103,13 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
   if (!sessionContext.phase || sessionContext.phase === 'IDLE' || (typeof sessionContext.phase === 'string' && sessionContext.phase.toUpperCase() !== sessionContext.phase)) {
     sessionContext.phase = detectPhase(query);
   }
+
+  // Diagnostic: log phase and rules count to help trace state across multiple calls
+  if (typeof process !== 'undefined' && process && process.env && process.env.SUGGEST_DEBUG === '1') {
+    try {
+      console.log(`[DIAG] generateSuggestions: phase=${sessionContext.phase} rules_count=${Array.isArray(rules)?rules.length:0}`);
+    } catch (e) { /* ignore */ }
+  }
   const suggestions = [];
 
   const testRegex = (rx, input) => {
@@ -114,6 +121,12 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
     if (!rule) { suggestions.push(suggestion); return true; }
     // ensure suggestion id reflects rule
     suggestion.id = suggestion.id || rule.id || rule.type || suggestion.__ruleId || 'rule-suggest';
+    // Diagnostic: show whether the rule is allowed to emit
+    if (typeof process !== 'undefined' && process && process.env && process.env.SUGGEST_DEBUG === '1') {
+      try {
+        console.log(`[DIAG] canEmit check for rule=${suggestion.id} -> ${canEmitRule(rule, sessionContext)}`);
+      } catch (e) {}
+    }
     if (!canEmitRule(rule, sessionContext)) return false;
     if (Array.isArray(rule.conflictsWith) && rule.conflictsWith.length > 0) {
       for (let i = suggestions.length - 1; i >= 0; i--) {
@@ -126,7 +139,12 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
         const s = suggestions[i];
         const existingRuleId = s.__ruleId || s.id;
         const existingRule = (rules || []).find(r => r && (r.id === existingRuleId || r.type === existingRuleId));
+        // If the existing suggestion was produced by the same rule, allow both to coexist
         if (existingRule && existingRule.mutexGroup === rule.mutexGroup) {
+          if (existingRule.id === (rule.id || rule.type)) {
+            // same originating rule: don't treat as a mutex conflict
+            continue;
+          }
           const prNew = rule.priority || 0;
           const prOld = existingRule.priority || 0;
           if (prNew >= prOld) suggestions.splice(i, 1);
@@ -145,26 +163,79 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
   try {
     for (const r of rules) {
       try {
-        if (!r || !r.enabled || !r.matchOn) continue;
+        // Per-rule diagnostics to show why a rule may be blocked from emitting
+        if (typeof process !== 'undefined' && process && process.env && process.env.SUGGEST_DEBUG === '1') {
+          try {
+            const rid = r && (r.id || r.type) ? (r.id || r.type) : JSON.stringify(r);
+            const lastEm = sessionContext.lastEmittedAt && sessionContext.lastEmittedAt[rid];
+            console.log(`[DIAG] evaluating rule=${rid} enabled=${!!(r && r.enabled)} fireOncePer=${r && r.fireOncePer} cooldownMs=${r && r.cooldownMs} lastEmittedAt=${lastEm || 'none'} canEmit=${canEmitRule(r, sessionContext)}`);
+          } catch (de) { /* ignore per-rule diag errors */ }
+        }
+        if (!r || !r.enabled) continue;
         let matched = false;
-        if (r.matchOn === 'query') {
+        let matchReason = '';
+        // Respect explicit matchOn behavior. Do NOT implicitly treat matchRegex as a query-match
+        // unless matchOn === 'query'. For rules without matchOn, only auto-match when they
+        // declare phaseAllow or state (i.e., are phase/state-only rules).
+        if (!r.matchOn) {
+          // Only auto-match rules without an explicit matchOn if they provide an explicit matcher
+          // (matchRegex or matchDescribeFieldType), or if they are explicitly a clause sequencer.
+          if (r.matchRegex) {
+            matched = testRegex(r.matchRegex, query);
+            matchReason = 'matchRegex';
+            if (matched && r.notMatchRegex) matched = !testRegex(r.notMatchRegex, query);
+          } else if (r.matchDescribeFieldType) {
+            if (!describe || !Array.isArray(describe.fields)) matched = false;
+            else matched = describe.fields.some(f => String(f.type || '').toLowerCase() === String(r.matchDescribeFieldType || '').toLowerCase());
+            matchReason = 'matchDescribeFieldType';
+            if (matched && r.notMatchRegex) matched = !testRegex(r.notMatchRegex, query);
+          } else if (r.type === 'clause_sequencer') {
+            // sequencer rules are explicitly allowed to auto-match by phase
+            matched = true;
+            matchReason = 'clause_sequencer';
+          } else {
+            matched = false;
+            matchReason = 'noMatcher';
+          }
+        } else if (r.matchOn === 'query') {
           matched = testRegex(r.matchRegex, query);
+          matchReason = 'query';
           if (matched && r.notMatchRegex) matched = !testRegex(r.notMatchRegex, query);
         } else if (r.matchOn === 'selectSegment') {
           const seg = getSelectSegment(query);
           matched = testRegex(r.matchRegex, seg);
+          matchReason = 'selectSegment';
           if (matched && r.notMatchRegex) matched = !testRegex(r.notMatchRegex, seg);
         } else if (r.matchOn === 'describe') {
           if (!describe || !Array.isArray(describe.fields)) matched = false;
           else if (r.matchDescribeFieldType) matched = describe.fields.some(f => String(f.type || '').toLowerCase() === String(r.matchDescribeFieldType || '').toLowerCase());
           else matched = true;
+          matchReason = 'describe';
           if (matched && r.notMatchRegex) matched = !testRegex(r.notMatchRegex, query);
         }
+        if (typeof process !== 'undefined' && process && process.env && process.env.SUGGEST_DEBUG === '1') {
+          try { console.log(`[SUGGEST_DEBUG] rule=${r.id||r.type} matched=${matched} reason=${matchReason} phaseAllow=${JSON.stringify(r.phaseAllow||[])} matchOn=${r.matchOn||''}`); } catch(e){}
+        }
         if (!matched) continue;
-        // Phase check: if phase disallows this rule, normally skip — but allow query-matched rules to fire regardless of phaseAllow
+        // Enforce phaseAllow/state checks for all rules. A rule that specifies phaseAllow must
+        // include the current session phase (or a general 'global'/'any'). Similarly respect state.
         const phase = sessionContext.phase;
-        if (r.phaseAllow && !(Array.isArray(r.phaseAllow) && r.phaseAllow.includes(phase))) {
-          if (r.matchOn !== 'query') continue; // only allow query-match rules to bypass phaseAllow
+        if (r.phaseAllow) {
+          const allow = Array.isArray(r.phaseAllow) ? r.phaseAllow : [r.phaseAllow];
+          if (!allow.includes(phase) && !allow.includes('global') && !allow.includes('any')) {
+            // Special-case: many "after FROM" rules declare phaseAllow: ["CHOOSING_OBJECT"].
+            // If the rule matched by query (matchOn === 'query') and the current query contains
+            // a FROM token, allow the rule to run even if detectPhase returned 'IDLE'. This
+            // keeps phase restrictions otherwise strict but fixes cases like
+            // "SELECT Id FROM Account " which should suggest a WHERE.
+            if (!(r.matchOn === 'query' && allow.includes('CHOOSING_OBJECT') && /\bfrom\b/i.test(query))) {
+              continue;
+            }
+          }
+        }
+        if (r.state) {
+          const st = Array.isArray(r.state) ? r.state : [r.state];
+          if (!st.includes(phase) && !st.includes('global') && !st.includes('any')) continue;
         }
         let suggestion = { id: r.id || r.type || 'rule-suggest', text: r.message || (r.id || r.type), reason: r.guard || r.message || '', severity: r.severity || 'info' };
         if (r.apply && r.apply.type) {
@@ -181,8 +252,28 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
         } else {
           if (r.type === 'add_limit' || r.type === 'add_offset') { const limitVal = r.defaultLimit || 200; suggestion.apply = { type: 'append', text: ` LIMIT ${limitVal}` }; }
           else if (r.type === 'replace_select_star') { const starPos = query.indexOf('*'); const repl = r.replacement || r.replacementText || 'Id, Name'; if (starPos >= 0) suggestion.apply = { type: 'replace', start: starPos, end: starPos + 1, text: repl }; else suggestion.apply = { type: 'append', text: ` ${repl}` }; }
-          else if (r.type === 'fields_helpers') { const selIdx = indexOfWordInsensitive(query, 'select'); const pos = selIdx >= 0 ? selIdx + 'select'.length : 0; suggestion.apply = { type: 'insert', pos: pos, text: ' FIELDS(ALL) ' }; }
-          else if (r.type === 'next_keyword') suggestion.apply = { type: 'append', text: ' FROM ' };
+          else if (r.type === 'fields_helpers') {
+            // Emit multiple FIELDS(...) variants for declarative rules.
+            const selIdx = indexOfWordInsensitive(query, 'select');
+            const pos = selIdx >= 0 ? selIdx + 'select'.length : 0;
+            const variants = [
+              { text: 'FIELDS(ALL)', insert: ' FIELDS(ALL) ' },
+              { text: 'FIELDS(STANDARD)', insert: ' FIELDS(STANDARD) ' },
+              { text: 'FIELDS(CUSTOM)', insert: ' FIELDS(CUSTOM) ' }
+            ];
+            const ruleId = r.id || r.type || JSON.stringify(r);
+            const key = `${ruleId}::${sessionContext.phase}`;
+            for (const v of variants) {
+              const s = { id: r.id || r.type || 'rule-suggest', text: v.text, reason: r.message || r.guard || '', severity: r.severity || 'info', apply: { type: 'insert', pos: pos, text: v.insert } };
+              // Ensure canEmitRule won't block by clearing emitted markers for this rule temporarily.
+              sessionContext.emittedSuggestions = (sessionContext.emittedSuggestions || []).filter(x => x !== ruleId && x !== key);
+              if (sessionContext.lastEmittedAt && sessionContext.lastEmittedAt[ruleId]) delete sessionContext.lastEmittedAt[ruleId];
+              // Use centralized push to get mutex/conflict behavior
+              declarePushSuggestion(s, r);
+            }
+            // Skip the default single suggestion path for this rule
+            continue;
+          } else if (r.type === 'next_keyword') suggestion.apply = { type: 'append', text: ' FROM ' };
         }
         // Use the centralized push to apply mutex/conflict/cooldown semantics
         declarePushSuggestion(suggestion, r);
@@ -233,7 +324,12 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
           const s = suggestions[i];
           const existingRuleId = s.__ruleId || s.id;
           const existingRule = (rules || []).find(r => r && (r.id === existingRuleId || r.type === existingRuleId));
+          // If the existing suggestion was produced by the same rule, allow both to coexist
           if (existingRule && existingRule.mutexGroup === rule.mutexGroup) {
+            if (existingRule.id === (rule.id || rule.type)) {
+              // same originating rule: don't treat as a mutex conflict
+              continue;
+            }
             const prNew = rule.priority || 0;
             const prOld = existingRule.priority || 0;
             if (prNew >= prOld) suggestions.splice(i, 1);
@@ -407,6 +503,12 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
         }
       }
     }
+  }
+
+  if (typeof process !== 'undefined' && process && process.env && process.env.SUGGEST_DEBUG === '1') {
+    try {
+      console.log('[SUGGEST_DEBUG] final_suggestions =', JSON.stringify(suggestions.map(s => ({ id: s.id, text: s.text, apply: s.apply && s.apply.text, __ruleId: s.__ruleId })), null, 2));
+    } catch (e) { /* ignore stringify errors */ }
   }
 
   return suggestions;

@@ -51,7 +51,7 @@
       "type": "clause_sequencer",
       "enabled": true,
       "priority": 99,
-      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING","LIMITING","OFFSETTING"],
+      "phaseAllow": ["IDLE","SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING","LIMITING","OFFSETTING"],
       "mutexGroup": "sequencer",
       "guard": "Suggest only the next valid clause in canonical order.",
       "fireOncePer": "phase",

@@ -1,6 +1,33 @@
 (function() {
     'use strict';
 
+    // Global fallback: ensure a `findPopupEditor` identifier exists even if
+    // the richer `soql_helper` module defers the popup-level fallback. This
+    // prevents ReferenceError when other code dispatches `soql-load` or calls
+    // helper functions before the local popup handler is initialized.
+    try {
+        if (typeof window !== 'undefined') {
+            window.findPopupEditor = window.findPopupEditor || function() {
+                try {
+                    // Prefer explicit id
+                    let el = document.getElementById('soql-editor');
+                    if (el) return el;
+                    // Common alternate selectors
+                    el = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
+                    if (el) return el;
+                    // Last-resort: first textarea/input/contenteditable
+                    const candidate = document.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+                    return candidate || null;
+                } catch (e) { return null; }
+            };
+            // Minimal process shim for browser popup: some modules check `process.env.SUGGEST_DEBUG`.
+            // Defining a tiny `process` object prevents ReferenceError while keeping behavior inert.
+            if (typeof window.process === 'undefined') {
+                try { window.process = { env: {} }; } catch (e) { /* ignore */ }
+            }
+        }
+    } catch (e) { /* ignore */ }
+
     let sessionInfo = null;
     const statusEl = document.getElementById('status');
     const statusText = statusEl ? statusEl.querySelector('.status-text') : null;
@@ -422,7 +449,14 @@
         } catch(e) {}
         // If the full helper loads later, let it initialize the UI; listen for the event and call its init
         function onSoqlHelperLoaded() {
-            try { if (window.__soql_helper_ensureInitOnce) window.__soql_helper_ensureInitOnce(); } catch(e) {}
+            try {
+                // Let the real helper perform initialization
+                if (window.__soql_helper_ensureInitOnce) window.__soql_helper_ensureInitOnce();
+            } catch(e) {}
+            try {
+                // Cleanup popup fallback listeners/timers to avoid double-handling suggestions
+                cleanupFallbackListeners();
+            } catch(e) {}
             try { document.removeEventListener('soql-helper-loaded', onSoqlHelperLoaded); } catch(e) {}
         }
         try { document.addEventListener('soql-helper-loaded', onSoqlHelperLoaded); } catch(e) {}
@@ -575,28 +609,123 @@
             }
         }
 
-        async function computeAndRenderSuggestions() {
-            const editor = document.getElementById('soql-editor');
-            const objSel = document.getElementById('soql-obj');
-            if (!editor) return;
-            const q = editor.value || '';
-            const mod = await loadSuggester();
-            if (!mod || typeof mod.suggestSoql !== 'function') {
-                renderSuggestions([]);
-                return;
-            }
-            let describe = null;
+        // Popup-specific: attempt to find the editor element in a variety of DOM/host scenarios.
+        function findPopupEditor() {
             try {
-                const validatorMod = await loadValidator();
-                const parts = (validatorMod && typeof validatorMod.parseQueryParts === 'function') ? validatorMod.parseQueryParts(q) : null;
-                const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
-                if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
-                    describe = demoAccountDescribe;
+                // Preferred: explicit id
+                let el = document.getElementById('soql-editor');
+                if (el) return el;
+
+                // Custom element tags
+                let host = document.querySelector('soqleditor, soql-editor');
+                if (host) return resolvePopupEditorHost(host);
+
+                // Data-attribute/class/legacy ids
+                host = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
+                if (host) return resolvePopupEditorHost(host);
+
+                // Last resort: visible textarea/input/contenteditable that looks like an editor
+                const candidate = Array.from(document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]')).find(c => {
+                    try {
+                        const t = (c.value || c.textContent || '').toString();
+                        return /\bselect\b|\bfrom\b/i.test(t) || t.trim().length === 0;
+                    } catch { return false; }
+                });
+                if (candidate) return resolvePopupEditorHost(candidate);
+            } catch (e) { /* ignore */ }
+            return null;
+        }
+
+        function resolvePopupEditorHost(host) {
+            try {
+                if (!host) return null;
+                if ('value' in host && (typeof host.value === 'string' || typeof host.value === 'number')) return host;
+                if (host.editor && ('value' in host.editor)) return host.editor;
+                if (host.input && ('value' in host.input)) return host.input;
+                if (host.shadowRoot) {
+                    const inner = host.shadowRoot.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+                    if (inner) return inner;
                 }
-            } catch {}
+                if (host.querySelector) {
+                    const inner = host.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+                    if (inner) return inner;
+                }
+                return host;
+            } catch (e) { return host; }
+        }
+
+        // Debounced wrapper to run validateAndRender without running on every keystroke
+        function scheduleValidation() {
             try {
-                const suggestions = await mod.suggestSoql(q, describe, 'soqlEditor') || [];
+                if (debounceTimer) clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => { try { validateAndRender().catch(()=>{}); } catch(_){} }, DEBOUNCE_MS);
+            } catch (e) { /* ignore */ }
+        }
+
+        // Cleanup function to remove popup-level fallback listeners and timers when the full helper loads
+        function cleanupFallbackListeners() {
+            try {
+                // Cancel timers
+                if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+                if (suggestionDebounce) { clearTimeout(suggestionDebounce); suggestionDebounce = null; }
+                // Remove editor listeners if present
+                const editor = findPopupEditor();
+                if (editor) {
+                    try { editor.removeEventListener('blur', scheduleValidation); } catch(e){}
+                    try { editor.removeEventListener('input', scheduleSuggestionCompute); } catch(e){}
+                    try { editor.removeEventListener('keyup', scheduleSuggestionCompute); } catch(e){}
+                    try { editor.removeEventListener('focus', scheduleSuggestionCompute); } catch(e){}
+                    try { editor.removeEventListener('click', scheduleSuggestionCompute); } catch(e){}
+                }
+                const runBtn = document.getElementById('soql-run');
+                const objSel = document.getElementById('soql-obj');
+                if (runBtn) {
+                    try { runBtn.removeEventListener('click', scheduleValidation); } catch(e){}
+                    try { runBtn.removeEventListener('click', scheduleSuggestionCompute); } catch(e){}
+                }
+                if (objSel) {
+                    try { objSel.removeEventListener('change', scheduleValidation); } catch(e){}
+                    try { objSel.removeEventListener('change', scheduleSuggestionCompute); } catch(e){}
+                }
+                // Clear any UI hints the fallback may have left
+                try { const hintsEl = document.getElementById('soql-hints'); if (hintsEl) { hintsEl._latestSuggestions = null; hintsEl.innerHTML = ''; hintsEl.classList.add('hidden'); } } catch(e){}
+                initialized = false; // mark fallback as not initialized
+            } catch (e) { /* ignore cleanup errors */ }
+        }
+
+        async function computeAndRenderSuggestions() {
+             // If the full helper is active, bail out and let it handle suggestions
+             try {
+                if (window && window.__soql_helper_loaded) {
+                    try { if (typeof cleanupFallbackListeners === 'function') cleanupFallbackListeners(); } catch (e) {}
+                    try { if (window.__soql_helper_ensureInitOnce) window.__soql_helper_ensureInitOnce(); } catch (e) {}
+                    return;
+                }
+             } catch (e) { /* ignore */ }
+             // Robust editor lookup: prefer id but accept custom elements
+             const editor = findPopupEditor();
+             const objSel = document.getElementById('soql-obj');
+             if (!editor) return;
+             const q = editor.value || '';
+             const mod = await loadSuggester();
+             if (!mod || typeof mod.suggestSoql !== 'function') {
+                 renderSuggestions([]);
+                 return;
+             }
+             let describe = null;
+             try {
+                 const validatorMod = await loadValidator();
+                 const parts = (validatorMod && typeof validatorMod.parseQueryParts === 'function') ? validatorMod.parseQueryParts(q) : null;
+                 const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
+                 if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
+                     describe = demoAccountDescribe;
+                 }
+             } catch {}
+             try {
+                 const suggestions = await mod.suggestSoql(q, describe, 'soqlEditor') || [];
                  // normalize suggestions array
+                 // Debug: surface suggestions in popup console to help diagnose missing hints
+                 try { console.debug && console.debug('computeAndRenderSuggestions -> suggester returned', Array.isArray(suggestions) ? suggestions.length : typeof suggestions, suggestions); } catch (e) {}
                  renderSuggestions(suggestions.slice(0, 10));
                  // store latest suggestions on the element so apply can access them
                  const hintsEl = document.getElementById('soql-hints');
@@ -604,11 +733,6 @@
              } catch (e) {
                  renderSuggestions([]);
              }
-        }
-
-        function scheduleSuggestionCompute() {
-            if (suggestionDebounce) clearTimeout(suggestionDebounce);
-            suggestionDebounce = setTimeout(() => { computeAndRenderSuggestions().catch(()=>{}); }, SUGGEST_DEBOUNCE_MS);
         }
 
         function applySuggestionByIndex(idx) {
@@ -619,7 +743,7 @@
             const suggestions = hintsEl._latestSuggestions || [];
             const s = suggestions[idx];
             if (!s) return;
-            const editor = document.getElementById('soql-editor');
+            const editor = findPopupEditor();
             if (!editor) return;
             try {
                 // mark that we are applying to prevent other handlers from doing the same
@@ -627,11 +751,17 @@
                  const cur = editor.value || '';
                  const app = s.apply || {};
                  let next = cur;
+                 // helper clamp
+                 const clamp = (n) => { if (typeof n !== 'number' || Number.isNaN(n)) return null; return Math.max(0, Math.min(cur.length, Math.floor(n))); };
                  if (app.type === 'append') {
                      next = cur + (app.text || '');
                  } else if (app.type === 'replace') {
-                     if (typeof app.start === 'number' && typeof app.end === 'number' && app.start >= 0 && app.end > app.start && app.end <= cur.length) {
-                         next = cur.slice(0, app.start) + (app.text || '') + cur.slice(app.end);
+                     const startRaw = (app.start == null) ? null : app.start;
+                     const endRaw = (app.end == null) ? null : app.end;
+                     const start = clamp(startRaw);
+                     const end = clamp(endRaw);
+                     if (start != null && end != null && start >= 0 && end >= start && end <= cur.length) {
+                         next = cur.slice(0, start) + (app.text || '') + cur.slice(end);
                      } else if (app.text) {
                         // fallback: try simple heuristic replace of first '*' occurrence
                         const star = cur.indexOf('*');
@@ -639,8 +769,10 @@
                         else next = cur + app.text;
                      }
                  } else if (app.type === 'insert') {
-                     if (typeof app.pos === 'number' && app.pos >= 0 && app.pos <= cur.length) {
-                         next = cur.slice(0, app.pos) + (app.text || '') + cur.slice(app.pos);
+                     const posRaw = app.pos;
+                     const pos = clamp(posRaw);
+                     if (pos != null && pos >= 0 && pos <= cur.length) {
+                         next = cur.slice(0, pos) + (app.text || '') + cur.slice(pos);
                      } else {
                          next = cur + (app.text || '');
                      }
@@ -656,13 +788,39 @@
                  hintsEl._applying = false;
              } catch (e) {
                  // ignore
-                 try { hintsEl._applying = false; } catch(_){}
+                 try { hintsEl._applying = false; } catch(_){ }
              }
          }
 
-        function scheduleValidation() {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => { validateAndRender().catch(()=>{}); }, DEBOUNCE_MS);
+        function renderSuggestions(items) {
+            try {
+                const ul = document.getElementById('soql-hints');
+                if (!ul) return;
+                ul.innerHTML = '';
+                if (!items || items.length === 0) { ul.classList.add('hidden'); return; }
+                const frag = document.createDocumentFragment();
+                items.forEach((s, idx) => {
+                    try {
+                        const li = document.createElement('li');
+                        li.className = 'soql-suggestion';
+                        li.tabIndex = 0;
+                        li.textContent = String(s.text || s.message || (s.apply && s.apply.text) || s.id || 'Suggestion');
+                        li.addEventListener('click', (ev) => { try { ev.preventDefault(); applySuggestionByIndex(idx); } catch (e) { console.warn && console.warn('suggest click error', e); } });
+                        li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); applySuggestionByIndex(idx); } });
+                        frag.appendChild(li);
+                    } catch (e) { /* ignore per-item errors */ }
+                });
+                ul.appendChild(frag);
+                ul.classList.remove('hidden');
+            } catch (e) { console.warn && console.warn('renderSuggestions (popup) error', e); }
+        }
+
+        // Debounced scheduling wrapper for computeAndRenderSuggestions (popup fallback)
+        function scheduleSuggestionCompute() {
+            try {
+                if (suggestionDebounce) clearTimeout(suggestionDebounce);
+                suggestionDebounce = setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(_){} }, SUGGEST_DEBOUNCE_MS);
+            } catch (e) { /* ignore */ }
         }
 
         document.addEventListener('soql-load', async () => {
@@ -674,7 +832,7 @@
                 if (typeof loadSuggester === 'function') loadSuggester().catch(()=>{});
                 if (typeof loadValidator === 'function') loadValidator().catch(()=>{});
 
-                const editor = document.getElementById('soql-editor');
+                const editor = findPopupEditor();
                 const runBtn = document.getElementById('soql-run');
                 const objSel = document.getElementById('soql-obj');
 
@@ -698,7 +856,5 @@
                 try { console.error('soql-load handler error', err); } catch(e) { /* ignore */ }
             }
         });
-
     })();
-
 })();
