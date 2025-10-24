@@ -1,5 +1,5 @@
 {
-  "meta": { "name": "soql-editor-suggestions-policy", "version": "1.3.0", "updatedAt": "2025-10-23" },
+  "meta": { "name": "soql-editor-suggestions-policy", "version": "1.3.1", "updatedAt": "2025-10-24" },
   "declarativeOnly": true,
   "lifecycle": {
     "states": ["IDLE","SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","GROUPING","HAVING_AGG","ORDERING","LIMITING","OFFSETTING","SUBQUERY","ERROR_RECOVERY"],
@@ -32,10 +32,10 @@
       "id": "starter_suggestions",
       "type": "starter",
       "enabled": true,
-      "priority": 50,
+      "priority": 100,
       "phaseAllow": ["IDLE","SELECTING_FIELDS"],
       "mutexGroup": "starter",
-      "guard": "Offer starter snippets when the editor is empty or whitespace",
+      "guard": "Offer only SELECT when the editor is empty",
       "fireOncePer": "query",
       "cooldownMs": 0,
       "visibility": "inline-hint",
@@ -153,7 +153,6 @@
       "message": "Append `FOR UPDATE` at the very end to lock rows."
     },
 
-
     {
       "id": "select-star",
       "type": "replace_select_star",
@@ -171,85 +170,55 @@
       "matchRegex": "\\bSELECT\\b[\\s\\S]*\\*[^\\S\\n]*\\bFROM\\b",
       "message": "Replace '*' with explicit fields to avoid invalid SOQL"
     },
-    {
-      "id": "boolean-filter",
-      "type": "suggest_boolean_filter",
-      "enabled": true,
-      "priority": 40,
-      "phaseAllow": ["FILTERING"],
-      "mutexGroup": "filter-hints",
-      "guard": "Cursor after WHERE; base object has at least one boolean field.",
-      "fireOncePer": "phase",
-      "cooldownMs": 15000,
-      "visibility": "inline-hint",
-      "severity": "tip",
-      "matchOn": "describe",
-      "matchDescribeFieldType": "boolean",
-      "notMatchRegex": "\\bWHERE\\b",
-      "message": "Consider filtering by a boolean field (e.g., IsActive__c = TRUE)",
-      "note": "Uses the first boolean field from the describe object"
-    },
-    {
-      "id": "space-after-keyword",
-      "type": "spacing_hint",
-      "enabled": true,
-      "priority": 80,
-      "phaseAllow": ["SELECTING_FIELDS","CHOOSING_OBJECT","FILTERING","ORDERING","GROUPING","HAVING_AGG","LIMITING","OFFSETTING"],
-      "mutexGroup": "whitespace",
-      "guard": "Missing single space after major keyword (e.g., SELECT, FROM, WHERE, ORDER BY, GROUP BY, LIMIT, OFFSET).",
-      "fireOncePer": "phase",
-      "cooldownMs": 10000,
-      "visibility": "inline-hint",
-      "severity": "tip",
-      "message": "Use exactly one space after keywords (e.g., `SELECT Id`, `FROM Account`)."
-    },
-    {
-      "id": "comma-between-fields",
-      "type": "comma_hint",
-      "enabled": true,
-      "priority": 85,
-      "phaseAllow": ["SELECTING_FIELDS","SUBQUERY"],
-      "mutexGroup": "list-separators",
-      "guard": "Two adjacent identifiers in a field list without a comma (e.g., `Id Name`).",
-      "fireOncePer": "phase",
-      "cooldownMs": 10000,
-      "visibility": "inline-hint",
-      "severity": "warn",
-      "matchOn": "selectSegment",
-      "matchRegex": "([A-Za-z_][\\w.]*)\\s+([A-Za-z_][\\w.]*)",
-      "message": "Separate fields with a comma and a space (e.g., `Id, Name`)."
-    },
-    {
-      "id": "no-trailing-comma",
-      "type": "comma_hint",
-      "enabled": true,
-      "priority": 60,
-      "phaseAllow": ["SELECTING_FIELDS","SUBQUERY","ORDERING","GROUPING"],
-      "mutexGroup": "list-separators",
-      "guard": "Trailing comma before a clause keyword or closing paren.",
-      "fireOncePer": "phase",
-      "cooldownMs": 8000,
-      "visibility": "inline-hint",
-      "severity": "tip",
-      "matchOn": "selectSegment",
-      "matchRegex": ",+\\s*$",
-      "message": "Remove the trailing comma before the next clause."
-    },
+
     {
       "id": "fields-macro-helpers",
       "type": "fields_helpers",
       "enabled": true,
-      "priority": 40,
+      "priority": 100,
       "phaseAllow": ["SELECTING_FIELDS"],
       "mutexGroup": "field-list-shape",
-      "guard": "Suggest FIELDS(ALL|STANDARD|CUSTOM) when the user has typed `SELECT` (not for an empty editor).",
+      "guard": "Offer FIELDS(...) only right after typing SELECT ",
       "fireOncePer": "phase",
       "cooldownMs": 0,
       "visibility": "inline-hint",
       "severity": "info",
+      "matchOn": "selectSegment",
+      "matchRegex": "^\\s*$",
+      "notMatchRegex": "\\bFIELDS\\s*\\("
+    },
+    {
+      "id": "suppress-fields-when-macro-present",
+      "type": "suppress_keyword",
+      "enabled": true,
+      "priority": 101,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "field-list-shape",
+      "guard": "Hide FIELDS(...) helpers once a FIELDS macro exists",
+      "fireOncePer": "phase",
+      "cooldownMs": 0,
+      "visibility": "hidden",
+      "severity": "block",
       "matchOn": "query",
-      "matchRegex": "^\\s*SELECT\\s+",
-      "message": "Suggest FIELDS(...) macros when user typed `SELECT` or `SELECT `"
+      "matchRegex": "\\bFIELDS\\s*\\(",
+      "message": "FIELDS macro already present."
+    },
+    {
+      "id": "from-after-fields-macro",
+      "type": "next_keyword",
+      "enabled": true,
+      "priority": 95,
+      "phaseAllow": ["SELECTING_FIELDS"],
+      "mutexGroup": "next-keyword",
+      "guard": "Add FROM after FIELDS(...)",
+      "fireOncePer": "query",
+      "cooldownMs": 0,
+      "visibility": "inline-hint",
+      "severity": "tip",
+      "matchOn": "query",
+      "matchRegex": "\\bSELECT\\b[\\s\\S]*\\bFIELDS\\s*\\(\\s*(ALL|STANDARD|CUSTOM)\\s*\\)\\s*$",
+      "notMatchRegex": "\\bFROM\\b",
+      "message": "Add `FROM` to choose the base object."
     },
 
     {
@@ -720,6 +689,7 @@
       "severity": "block",
       "message": "Close all open `(` and `'` before continuing."
     },
+
     {
       "id": "order-by-after-where",
       "type": "next_keyword",
@@ -777,7 +747,6 @@
         "noTrailingComma": true
       }
     },
-
     {
       "id": "order-by-followups",
       "type": "order_hint",
@@ -796,11 +765,12 @@
       "message": "Optionally add ASC or DESC, then NULLS FIRST/LAST, or start another field with ', '.",
       "followups": ["ASC", "DESC", "NULLS FIRST", "NULLS LAST", ", "]
     },
+
     {
       "id": "limit-suggestion",
       "type": "add_limit",
       "enabled": true,
-      "priority": 90,
+      "priority": 92,
       "phaseAllow": ["SELECTING_FIELDS","IDLE"],
       "mutexGroup": "limit",
       "guard": "Top-level query has no LIMIT; not inside SUBQUERY; no blocking syntax errors.",
@@ -816,8 +786,6 @@
       "example": "LIMIT 200"
     },
 
-
-
     {
       "id": "suggest-from-after-select",
       "type": "next_keyword",
@@ -825,13 +793,13 @@
       "priority": 70,
       "phaseAllow": ["SELECTING_FIELDS"],
       "mutexGroup": "next-keyword",
-      "guard": "Top-level SELECT list present and no FROM present.",
+      "guard": "Only suggest FROM once the SELECT list is formed (FIELDS or explicit fields).",
       "fireOncePer": "query",
       "cooldownMs": 0,
       "visibility": "inline-hint",
       "severity": "tip",
       "matchOn": "query",
-      "matchRegex": "\\bSELECT\\b",
+      "matchRegex": "\\bSELECT\\b[\\s\\S]+\\S\\s*$",
       "notMatchRegex": "\\bFROM\\b",
       "message": "Add `FROM` to choose the base object."
     }

@@ -182,6 +182,135 @@ const SUGGEST_STICKY_CHAR_THRESHOLD = 3;
 // New: suppression flag — when true, block further suggestion recompute until cleared by user action
 let _suppressFurtherRecompute = false;
 
+// Track the most recent object list request so outdated async resolutions can be ignored
+let _objectListRequestId = 0;
+// Remember last selected object separately for standard vs tooling endpoints so we can restore selection after reloads
+const _lastSelectedObjectByEndpoint = { standard: '', tooling: '' };
+
+function isToolingModeEnabled() {
+  try { return !!(els && els.useTooling && els.useTooling.checked); }
+  catch (_) { return false; }
+}
+
+function setObjectPickerStatus(message, { disabled = true } = {}) {
+  try {
+    if (!els || !els.obj) return;
+    const select = els.obj;
+    select.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = String(message || '');
+    if (disabled) opt.disabled = true;
+    opt.selected = true;
+    select.appendChild(opt);
+    select.disabled = !!disabled;
+  } catch (e) { /* ignore status update errors */ }
+}
+
+async function ensureObjectOptions(forceRefresh = false) {
+  try {
+    if (!els || !els.obj) return;
+    const select = els.obj;
+    const useTooling = isToolingModeEnabled();
+    const endpointKey = useTooling ? 'tooling' : 'standard';
+    const currentValue = (typeof select.value === 'string') ? select.value : '';
+    const rememberedValue = _lastSelectedObjectByEndpoint[endpointKey] || '';
+    const desiredValue = (rememberedValue || currentValue || '').trim();
+    const desiredLower = desiredValue.toLowerCase();
+    const requestId = ++_objectListRequestId;
+
+    const applyListToSelect = (list) => {
+      if (requestId !== _objectListRequestId) return;
+      if (!Array.isArray(list) || list.length === 0) {
+        setObjectPickerStatus('No queryable objects found', { disabled: true });
+        try { select.removeAttribute('aria-busy'); } catch {}
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Select an object';
+      placeholder.disabled = true;
+      frag.appendChild(placeholder);
+
+      let matchedValue = '';
+      for (const obj of list) {
+        if (!obj || !obj.name) continue;
+        const opt = document.createElement('option');
+        opt.value = String(obj.name);
+        try {
+          const label = obj.label ? String(obj.label) : '';
+          if (label && label.toLowerCase() !== String(obj.name).toLowerCase()) {
+            opt.textContent = `${label} (${obj.name})`;
+          } else {
+            opt.textContent = String(obj.name);
+          }
+        } catch (e) {
+          opt.textContent = String(obj.name);
+        }
+        if (!matchedValue && desiredLower && opt.value.toLowerCase() === desiredLower) {
+          matchedValue = opt.value;
+          opt.selected = true;
+        }
+        frag.appendChild(opt);
+      }
+
+      select.innerHTML = '';
+      select.appendChild(frag);
+      select.disabled = false;
+      try { select.removeAttribute('aria-busy'); } catch {}
+
+      if (matchedValue) {
+        placeholder.selected = false;
+        select.value = matchedValue;
+        _lastSelectedObjectByEndpoint[endpointKey] = matchedValue;
+        try { persistSelectedObjects().catch(()=>{}); } catch(e){}
+      } else {
+        placeholder.selected = true;
+      }
+      // After populating, emit a synthetic change so sync/validation handlers run
+      try { select.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+    };
+
+    let cachedList = [];
+    try {
+      if (!forceRefresh && Soql_helper_schema && typeof Soql_helper_schema.getObjects === 'function') {
+        cachedList = Soql_helper_schema.getObjects(useTooling) || [];
+      }
+    } catch (e) { cachedList = []; }
+
+    if (Array.isArray(cachedList) && cachedList.length > 0 && !forceRefresh) {
+      applyListToSelect(cachedList);
+      return;
+    }
+
+    setObjectPickerStatus('Loading objects...', { disabled: true });
+    try { select.setAttribute('aria-busy', 'true'); } catch {}
+
+    try {
+      await Soql_helper_schema.initSchema(useTooling);
+    } catch (err) {
+      if (requestId !== _objectListRequestId) return;
+      try { console.warn && console.warn('soql_helper: failed to initialize schema', err); } catch {}
+      setObjectPickerStatus('Unable to load objects', { disabled: false });
+      try { select.removeAttribute('aria-busy'); } catch {}
+      return;
+    }
+
+    if (requestId !== _objectListRequestId) return;
+
+    let list = [];
+    try {
+      if (Soql_helper_schema && typeof Soql_helper_schema.getObjects === 'function') {
+        list = Soql_helper_schema.getObjects(useTooling) || [];
+      }
+    } catch (e) { list = []; }
+
+    applyListToSelect(list);
+  } catch (e) { /* ignore ensureObjectOptions errors */ }
+}
+
 async function loadSuggester() {
   if (suggesterModule) return suggesterModule;
   try {
@@ -551,6 +680,42 @@ function onKeyDown(ev){
   } catch (e) { console.warn && console.warn('onKeyDown error', e); }
 }
 
+// Safe helper to update the editor UI status used by runQuery and other workflows.
+function setEditorStatus(state, message) {
+  try {
+    if (!els) return;
+    // Update editor attributes to reflect status
+    try {
+      if (els.editor && typeof els.editor.setAttribute === 'function') {
+        try { els.editor.setAttribute('data-status', String(state || '') ); } catch(e){}
+        if (state === 'progress') {
+          try { els.editor.setAttribute('aria-busy', 'true'); } catch(e){}
+        } else {
+          try { els.editor.removeAttribute('aria-busy'); } catch(e){}
+        }
+      }
+    } catch(e){}
+
+    // Update a small errors area when in error state
+    try {
+      if (els.errors && typeof els.errors.textContent === 'string') {
+        if (state === 'error') {
+          try { els.errors.textContent = (message == null) ? (els.errors.textContent || 'Error') : String(message); } catch(e){}
+        } else if (state === 'success') {
+          try { els.errors.textContent = ''; } catch(e){}
+        }
+      }
+    } catch(e){}
+
+    // Optionally set a visual marker on results area
+    try {
+      if (els.results && typeof els.results.setAttribute === 'function') {
+        try { els.results.setAttribute('data-status', String(state || '')); } catch(e){}
+      }
+    } catch(e){}
+  } catch (e) { /* swallow */ }
+}
+
 async function runQuery(){
   try {
     if (!els || !els.editor || !els.results) return;
@@ -844,6 +1009,7 @@ async function renderSoqlResults(records, totalSize){
       if (typeof window !== 'undefined') {
         try { window.__soql_helper_loaded = true; } catch(e){}
         try { window.__soql_helper_ensureInitOnce = ensureInitOnce; } catch(e){}
+        try { if (typeof setEditorStatus === 'function') window.setEditorStatus = setEditorStatus; } catch(e){}
       }
       if (initialized) return;
       initialized = true;
@@ -867,7 +1033,9 @@ async function renderSoqlResults(records, totalSize){
         if (els.editor) {
           try { els.editor.addEventListener('blur', scheduleValidation); } catch(e){}
           try { els.editor.addEventListener('input', scheduleSuggestionCompute); } catch(e){}
+          try { els.editor.addEventListener('input', scheduleSyncFromEditor); } catch(e){}
           try { els.editor.addEventListener('keyup', scheduleSuggestionCompute); } catch(e){}
+          try { els.editor.addEventListener('keyup', scheduleSyncFromEditor); } catch(e){}
           try { els.editor.addEventListener('focus', scheduleSuggestionCompute); } catch(e){}
           try { els.editor.addEventListener('click', scheduleSuggestionCompute); } catch(e){}
           try { els.editor.addEventListener('keydown', onKeyDown); } catch(e){}
@@ -879,6 +1047,17 @@ async function renderSoqlResults(records, totalSize){
       try { if (els.clear) { els.clear.addEventListener('click', () => { try { if (els.editor) { els.editor.value = ''; scheduleValidation(); scheduleSuggestionCompute(true); } } catch(e){} }); } } catch(e){}
       try { if (els.limit) els.limit.addEventListener('change', applyLimitFromDropdown); } catch(e){}
 
+      // Switching between standard and tooling endpoints requires a fresh object list and validation
+      try {
+        if (els.useTooling) {
+          els.useTooling.addEventListener('change', () => {
+            try { ensureObjectOptions(true); } catch (e) { /* ignore */ }
+            try { scheduleValidation(); } catch (e) { /* ignore */ }
+            try { scheduleSuggestionCompute(true); } catch (e) { /* ignore */ }
+          });
+        }
+      } catch (e) { /* ignore */ }
+
       // Object-picker: clear suppression and force recompute on change so suggerstions update promptly
       try {
         if (els.obj) {
@@ -886,22 +1065,36 @@ async function renderSoqlResults(records, totalSize){
             try {
               // Always clear suppression when object picker changes
               _suppressFurtherRecompute = false;
-              // Optionally auto-fill a basic query when the small checkbox is enabled and editor is empty
               try {
-                if (els.autoFill && els.autoFill.checked && els.editor && els.obj && els.obj.value) {
-                  const name = String(els.obj.value || '').trim();
-                  if (name && ((els.editor.value || '').trim().length === 0)) {
+                const key = isToolingModeEnabled() ? 'tooling' : 'standard';
+                _lastSelectedObjectByEndpoint[key] = String(els.obj.value || '');
+                try { persistSelectedObjects().catch(()=>{}); } catch(e){}
+              } catch (e) { /* ignore */ }
+              // If the editor already contains a FROM clause, replace it; otherwise optionally auto-fill
+              try {
+                const name = String(els.obj.value || '').trim();
+                if (name && els.editor) {
+                  const hasFrom = /\bfrom\b/i.test(String(els.editor.value || ''));
+                  if (hasFrom) {
+                    replaceFromObjectInEditor(name);
+                  } else if (els.autoFill && els.autoFill.checked && (els.editor.value || '').trim().length === 0) {
                     els.editor.value = `SELECT Id, Name FROM ${name}`;
+                    try { els.editor.dispatchEvent(new Event('input', { bubbles: true })); } catch(e){}
                   }
                 }
               } catch(e){}
-              // Re-run validation and force suggestion recompute
-              try { scheduleValidation(); } catch(e){}
-              try { scheduleSuggestionCompute(true); } catch(e){}
+               // Re-run validation and force suggestion recompute
+               try { scheduleValidation(); } catch(e){}
+               try { scheduleSuggestionCompute(true); } catch(e){}
             } catch (e) { /* ignore */ }
           });
         }
       } catch (e) { /* ignore */ }
+
+      // Ensure the object dropdown is populated on first load
+      try { ensureObjectOptions(); } catch (e) { /* ignore */ }
+      // Sync controls from initial editor content (limit, object) after elements wired
+      try { scheduleSyncFromEditor(true); } catch (e) { /* ignore */ }
 
       // Kick off an initial suggestion compute so UI populates quickly
       try { scheduleSuggestionCompute(); } catch(e){}
@@ -920,3 +1113,346 @@ async function renderSoqlResults(records, totalSize){
   } catch (e) { /* ignore */ }
 })();
 
+// Persistence for last selected object per endpoint
+async function loadPersistedSelectedObjects() {
+  try {
+    // Try Chrome storage first
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && typeof chrome.storage.local.get === 'function') {
+      const res = await new Promise((resolve) => {
+        try { chrome.storage.local.get('soql_last_selected_object_by_endpoint', (r) => resolve(r || {})); }
+        catch (e) { resolve({}); }
+      });
+      const saved = res && res['soql_last_selected_object_by_endpoint'] ? res['soql_last_selected_object_by_endpoint'] : null;
+      if (saved && typeof saved === 'object') {
+        try { _lastSelectedObjectByEndpoint.standard = String(saved.standard || ''); } catch(e){}
+        try { _lastSelectedObjectByEndpoint.tooling = String(saved.tooling || ''); } catch(e){}
+      }
+      return;
+    }
+    // Fallback: window.localStorage if available
+    if (typeof localStorage !== 'undefined') {
+      const s = localStorage.getItem('soql_last_selected_object_by_endpoint');
+      if (s) {
+        try {
+          const parsed = JSON.parse(s);
+          if (parsed && typeof parsed === 'object') {
+            _lastSelectedObjectByEndpoint.standard = String(parsed.standard || '');
+            _lastSelectedObjectByEndpoint.tooling = String(parsed.tooling || '');
+          }
+        } catch (e) { /* ignore JSON errors */ }
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function persistSelectedObjects() {
+  try {
+    const payload = { standard: _lastSelectedObjectByEndpoint.standard || '', tooling: _lastSelectedObjectByEndpoint.tooling || '' };
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && typeof chrome.storage.local.set === 'function') {
+      try {
+        await new Promise((resolve) => {
+          try { chrome.storage.local.set({ 'soql_last_selected_object_by_endpoint': payload }, () => resolve(true)); }
+          catch (e) { resolve(false); }
+        });
+        return;
+      } catch (e) { /* ignore chrome set error */ }
+    }
+    if (typeof localStorage !== 'undefined') {
+      try { localStorage.setItem('soql_last_selected_object_by_endpoint', JSON.stringify(payload)); } catch (e) { /* ignore */ }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Validation helpers
+let validatorModule = null;
+let _validationDebounceTimer = null;
+const VALIDATION_DEBOUNCE_MS = 300;
+
+async function loadValidator() {
+  if (validatorModule) return validatorModule;
+  try {
+    const mod = await import('./soql_semantic_validator.js');
+    validatorModule = mod;
+    return validatorModule;
+  } catch (e) {
+    console.warn && console.warn('soql_helper: failed to load validator', e);
+    validatorModule = null;
+    return null;
+  }
+}
+
+function escapeHtml(s) {
+  try {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  } catch (e) { return String(s); }
+}
+
+function renderValidatorAreas(messages) {
+  try {
+    // Deduplicate and sanitize messages while preserving order
+    const seen = new Set();
+    const out = [];
+    for (const m of (messages || [])) {
+      try {
+        const s = typeof m === 'string' ? m : JSON.stringify(m);
+        const trimmed = s.trim();
+        if (!trimmed) continue;
+        if (seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        out.push(trimmed);
+      } catch (e) { /* ignore per-message errors */ }
+    }
+
+    // Render into the inline errors panel (#soql-errors) if present
+    try {
+      if (els && els.errors) {
+        const el = els.errors;
+        if (!out || out.length === 0) {
+          el.innerHTML = '';
+          el.classList.remove('soql-error-list');
+          el.classList.remove('soql-valid');
+        } else {
+          el.classList.remove('soql-valid');
+          el.classList.add('soql-error-list');
+          const lis = out.map(m => `<li>${escapeHtml(m)}</li>`).join('\n');
+          el.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
+        }
+      }
+    } catch (e) { /* ignore render errors */ }
+
+    // Also render to the top validator area if present (#soql-validator-top)
+    try {
+      const topEl = document.getElementById('soql-validator-top');
+      if (topEl) {
+        if (!out || out.length === 0) {
+          topEl.innerHTML = '';
+          topEl.classList.remove('soql-error-list');
+          topEl.classList.remove('soql-valid');
+        } else {
+          topEl.classList.remove('soql-valid');
+          topEl.classList.add('soql-error-list');
+          const lis = out.map(m => `<li>${escapeHtml(m)}</li>`).join('\n');
+          topEl.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
+        }
+      }
+    } catch (e) { /* ignore */ }
+  } catch (e) { /* ignore */ }
+}
+
+function validateInline() {
+  try {
+    if (!els || !els.editor) return;
+    const q = String(els.editor.value || '');
+    const msgs = [];
+
+    // Quick: FIELDS() macro guard from utils
+    try {
+      const fm = validateFieldsMacro(q);
+      if (fm) msgs.push(fm);
+    } catch (e) { /* ignore field-macro errors */ }
+
+    // Load rules in background if not already loaded so future inline validators run
+    try { if (!rules || Object.keys(rules).length === 0) { loadRules().catch(() => {}); } } catch (e) {}
+
+    // Run lightweight inline validators from rules.inlineValidators (if present)
+    try {
+      const inline = (rules && Array.isArray(rules.inlineValidators)) ? rules.inlineValidators : [];
+      for (const v of inline) {
+        try {
+          const pattern = v && v.pattern ? String(v.pattern) : null;
+          if (!pattern) continue;
+          const negate = !!v.negate;
+          let re = null;
+          try { re = new RegExp(pattern, 'i'); } catch (e) { re = null; }
+          const matches = re ? re.test(q) : false;
+          // If negate=false then message is shown when pattern DOES NOT match
+          // If negate=true then message is shown when pattern DOES match
+          const shouldReport = (!negate && !matches) || (negate && matches);
+          if (shouldReport) {
+            const m = v.message || v.msg || v.id || 'Validation failed';
+            msgs.push(String(m));
+          }
+        } catch (e) { /* ignore per-validator */ }
+      }
+    } catch (e) { /* ignore */ }
+
+    // Deduplicate and sanitize messages before rendering
+    try { renderValidatorAreas(msgs); } catch (e) { /* ignore */ }
+
+    // Also schedule full async validation (which may show richer messages) shortly
+    try { scheduleValidation(); } catch (e) { /* ignore */ }
+  } catch (e) { /* swallow */ }
+}
+
+async function validateAndRender() {
+  try {
+    if (!els || !els.editor) return;
+    const q = els.editor.value || '';
+
+    const mod = await loadValidator();
+    if (!mod || typeof mod.validateSoql !== 'function') {
+      renderValidatorAreas([`Failed to load validator module`]);
+      return;
+    }
+
+    // Provide a best-effort describe when Account is selected and query mentions Account
+    let describe = null;
+    try {
+      const parts = (typeof mod.parseQueryParts === 'function') ? mod.parseQueryParts(q) : null;
+      const obj = (els.obj && els.obj.value) ? String(els.obj.value).trim() : '';
+      if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
+        // Attempt to use demo describe from popup fallback if available
+        try { if (typeof window !== 'undefined' && window.demoAccountDescribe) describe = window.demoAccountDescribe; } catch(e){}
+        // Otherwise, leave describe null (validator may still run)
+      }
+    } catch(e){}
+
+    try {
+      const res = mod.validateSoql(q, describe) || {};
+      const rawMsgs = Array.isArray(res.messages) ? res.messages.slice() : [];
+      const describeMsgRe = /^Failed to retrieve describe for\s+'?.+?'?$/i;
+      // Filter out describe-failure noise and the specific 'SELECT list is empty' message which conflicts with suggester
+      const nonDescribeMsgs = rawMsgs.filter(m => !describeMsgRe.test(String(m || '')));
+      const filteredMsgs = nonDescribeMsgs.filter(m => !/^\s*SELECT list is empty\s*$/i.test(String(m || '')));
+      renderValidatorAreas(filteredMsgs);
+    } catch (e) {
+      renderValidatorAreas([`Validator exception: ${String(e)}`]);
+    }
+  } catch (e) { /* ignore top-level validation errors */ }
+}
+
+function scheduleValidation() {
+  try {
+    if (_validationDebounceTimer) clearTimeout(_validationDebounceTimer);
+    _validationDebounceTimer = setTimeout(() => { try { validateAndRender().catch(()=>{}); } catch(_){} }, VALIDATION_DEBOUNCE_MS);
+  } catch (e) { /* ignore */ }
+}
+
+function clearResults() {
+  try {
+    if (els && els.results) {
+      try { els.results.innerHTML = ''; } catch(e){}
+      try { els.results.textContent = ''; } catch(e){}
+      try { els.results.removeAttribute('data-status'); } catch(e){}
+    }
+    try { if (els && els.errors) { els.errors.textContent = ''; els.errors.innerHTML = ''; } } catch(e){}
+    try { const topEl = document.getElementById('soql-validator-top'); if (topEl) { topEl.textContent = ''; topEl.innerHTML = ''; } } catch(e){}
+    try { setEditorStatus(''); } catch(e){}
+  } catch (e) { /* ignore */ }
+}
+
+// Editor <-> controls synchronization helpers
+let _syncDebounceTimer = null;
+const SYNC_DEBOUNCE_MS = 200;
+
+function parseObjectNameFromQuery(q) {
+  try {
+    if (!q || typeof q !== 'string') return null;
+    // Simple heuristic: find first top-level FROM <identifier>
+    // This will pick up subquery FROMs too, but it's acceptable for a best-effort sync.
+    const m = q.match(/\bFROM\s+([A-Za-z0-9_.]+)/i);
+    if (m && m[1]) return m[1];
+    return null;
+  } catch (e) { return null; }
+}
+
+function parseLimitFromQuery(q) {
+  try {
+    if (!q || typeof q !== 'string') return null;
+    const m = q.match(/\bLIMIT\s+(\d+)/i);
+    if (m && m[1]) return Number(m[1]);
+    return null;
+  } catch (e) { return null; }
+}
+
+function setSelectValueIgnoreCase(select, value) {
+  try {
+    if (!select || !value) return false;
+    const v = String(value);
+    // Try exact first
+    for (const opt of Array.from(select.options || [])) {
+      try { if (opt.value === v) { select.value = v; return true; } } catch(e){}
+    }
+    // Fallback: case-insensitive match
+    for (const opt of Array.from(select.options || [])) {
+      try { if (String(opt.value).toLowerCase() === v.toLowerCase()) { select.value = opt.value; return true; } } catch(e){}
+    }
+    return false;
+  } catch (e) { return false; }
+}
+
+function syncEditorControls(force = false) {
+  try {
+    if (!els || !els.editor) return;
+    const q = String(els.editor.value || '');
+    const objName = parseObjectNameFromQuery(q);
+    const limitVal = parseLimitFromQuery(q);
+
+    // Sync object select
+    try {
+      if (els.obj && objName) {
+        const changed = setSelectValueIgnoreCase(els.obj, objName);
+        if (changed) {
+          try { const key = isToolingModeEnabled() ? 'tooling' : 'standard'; _lastSelectedObjectByEndpoint[key] = String(els.obj.value || ''); } catch(e){}
+        }
+      }
+    } catch (e) {}
+
+    // Sync limit control
+    try {
+      if (els && els.limit) {
+        if (Number.isFinite(limitVal) && limitVal > 0) {
+          try { els.limit.value = String(limitVal); } catch(e){}
+          try { els.limit.setAttribute('data-applied', String(limitVal)); } catch(e){}
+        } else {
+          // No explicit limit in query -> clear applied data attribute but don't clear user's typed value
+          try { els.limit.removeAttribute('data-applied'); } catch(e){}
+        }
+      }
+    } catch (e) {}
+
+  } catch (e) { /* ignore */ }
+}
+
+function scheduleSyncFromEditor(force = false) {
+  try {
+    if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+    if (force) {
+      try { syncEditorControls(true); } catch(e){}
+      return;
+    }
+    _syncDebounceTimer = setTimeout(() => { try { syncEditorControls(false); } catch(e){} }, SYNC_DEBOUNCE_MS);
+  } catch (e) { /* ignore */ }
+}
+
+function replaceFromObjectInEditor(newName) {
+  try {
+    if (!els || !els.editor) return false;
+    const q = String(els.editor.value || '');
+    if (!/\bfrom\b/i.test(q)) return false;
+    // Replace the first occurrence of FROM <identifier> with FROM <newName>
+    const replaced = q.replace(/(\bFROM\s+)([A-Za-z0-9_.]+)/i, function(_, p1) {
+      return p1 + newName;
+    });
+    if (replaced !== q) {
+      try {
+        els.editor.value = replaced;
+        // Dispatch input event so other listeners react
+        try { els.editor.dispatchEvent(new Event('input', { bubbles: true })); } catch(e){}
+      } catch(e){}
+      return true;
+    }
+    return false;
+  } catch (e) { return false; }
+}
+
+// Initialization: load persisted state and then rules, to avoid flicker
+(async function initPersistedStateAndRules() {
+  try {
+    // Load persisted last-selected objects (if any)
+    await loadPersistedSelectedObjects();
+
+    // Then load rules (which may depend on persisted state for initial suggestions)
+    await loadRules();
+  } catch (e) { /* ignore */ }
+})();
