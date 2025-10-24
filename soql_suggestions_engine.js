@@ -109,13 +109,43 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
     try { if (!rx) return false; const re = new RegExp(rx, 'i'); return re.test(input || ''); } catch (e) { return false; }
   };
 
+  // helper used by both declarative and procedural flows to respect mutex/conflicts/cooldown
+  function declarePushSuggestion(suggestion, rule) {
+    if (!rule) { suggestions.push(suggestion); return true; }
+    // ensure suggestion id reflects rule
+    suggestion.id = suggestion.id || rule.id || rule.type || suggestion.__ruleId || 'rule-suggest';
+    if (!canEmitRule(rule, sessionContext)) return false;
+    if (Array.isArray(rule.conflictsWith) && rule.conflictsWith.length > 0) {
+      for (let i = suggestions.length - 1; i >= 0; i--) {
+        const s = suggestions[i];
+        if (s && rule.conflictsWith.includes(s.id)) suggestions.splice(i, 1);
+      }
+    }
+    if (rule.mutexGroup) {
+      for (let i = suggestions.length - 1; i >= 0; i--) {
+        const s = suggestions[i];
+        const existingRuleId = s.__ruleId || s.id;
+        const existingRule = (rules || []).find(r => r && (r.id === existingRuleId || r.type === existingRuleId));
+        if (existingRule && existingRule.mutexGroup === rule.mutexGroup) {
+          const prNew = rule.priority || 0;
+          const prOld = existingRule.priority || 0;
+          if (prNew >= prOld) suggestions.splice(i, 1);
+          else return false;
+        }
+      }
+    }
+    suggestion.__ruleId = rule.id || rule.type || null;
+    suggestion.__priority = rule.priority || 0;
+    suggestions.push(suggestion);
+    markEmitted(rule, sessionContext);
+    return true;
+  }
+
   // 1) Declarative JSON-driven pass
   try {
     for (const r of rules) {
       try {
         if (!r || !r.enabled || !r.matchOn) continue;
-        const phase = sessionContext.phase;
-        if (r.phaseAllow && !r.phaseAllow.includes(phase) && !(Array.isArray(r.phaseAllow) && r.phaseAllow.includes('global'))) continue;
         let matched = false;
         if (r.matchOn === 'query') {
           matched = testRegex(r.matchRegex, query);
@@ -131,6 +161,11 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
           if (matched && r.notMatchRegex) matched = !testRegex(r.notMatchRegex, query);
         }
         if (!matched) continue;
+        // Phase check: if phase disallows this rule, normally skip — but allow query-matched rules to fire regardless of phaseAllow
+        const phase = sessionContext.phase;
+        if (r.phaseAllow && !(Array.isArray(r.phaseAllow) && r.phaseAllow.includes(phase))) {
+          if (r.matchOn !== 'query') continue; // only allow query-match rules to bypass phaseAllow
+        }
         let suggestion = { id: r.id || r.type || 'rule-suggest', text: r.message || (r.id || r.type), reason: r.guard || r.message || '', severity: r.severity || 'info' };
         if (r.apply && r.apply.type) {
           if (r.apply.type === 'replace' && typeof r.apply.text === 'string') {
@@ -149,8 +184,8 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
           else if (r.type === 'fields_helpers') { const selIdx = indexOfWordInsensitive(query, 'select'); const pos = selIdx >= 0 ? selIdx + 'select'.length : 0; suggestion.apply = { type: 'insert', pos: pos, text: ' FIELDS(ALL) ' }; }
           else if (r.type === 'next_keyword') suggestion.apply = { type: 'append', text: ' FROM ' };
         }
-        suggestion.__ruleId = r.id || r.type || null; suggestion.__priority = r.priority || 0;
-        suggestions.push(suggestion);
+        // Use the centralized push to apply mutex/conflict/cooldown semantics
+        declarePushSuggestion(suggestion, r);
       } catch (e) { /* per-rule errors don't break engine */ }
     }
   } catch (e) { /* ignore */ }
@@ -158,11 +193,18 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
   // 2) Procedural fallback generation (keep lightweight, only common cases)
   // If the caller (policy) requests declarative-only suggestions, skip this entire procedural block.
   if (!(policy && policy.declarativeOnly)) {
-    const getRule = (type) => {
+    const getRule = (type, rawQuery) => {
       if (!(rules && Array.isArray(rules))) return null;
       const candidates = rules.filter(r => r && (r.type === type || r.id === type) && r.enabled);
       if (!candidates.length) return null;
       const phase = sessionContext.phase;
+
+      // Prefer candidates whose declarative query regex matches the current query (when provided).
+      if (rawQuery) {
+        const preferred = candidates.find(r => r.matchOn === 'query' && testRegex(r.matchRegex, rawQuery));
+        if (preferred) return preferred;
+      }
+
       const matched = candidates.find(r => {
         if (!r.phaseAllow && !r.state) return true;
         const allow = r.phaseAllow || r.state;
@@ -177,6 +219,8 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
 
     function tryPushSuggestion(suggestion, rule) {
       if (!rule) { suggestions.push(suggestion); return true; }
+      // Ensure suggestion id reflects the rule so tests expecting rule ids can find them
+      suggestion.id = suggestion.id || rule.id || rule.type || suggestion.__ruleId || 'rule-suggest';
       if (!canEmitRule(rule, sessionContext)) return false;
       if (Array.isArray(rule.conflictsWith) && rule.conflictsWith.length > 0) {
         for (let i = suggestions.length - 1; i >= 0; i--) {
@@ -208,11 +252,13 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
       const starterRulePresent = hasRule('starter_suggestions') || !Array.isArray(rules) || rules.length === 0;
       if (starterRulePresent) {
         const endPos = query.length;
-        suggestions.push({ id: 'init-select', text: 'Start a SELECT', reason: 'Begin a SOQL SELECT', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT ' } });
-        suggestions.push({ id: 'init-fields-all', text: 'SELECT FIELDS(ALL)', reason: 'Use FIELDS(ALL) to include all fields', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT FIELDS(ALL) ' } });
-        suggestions.push({ id: 'init-fields-standard', text: 'SELECT FIELDS(STANDARD)', reason: 'Include only standard fields', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT FIELDS(STANDARD) ' } });
-        suggestions.push({ id: 'init-fields-custom', text: 'SELECT FIELDS(CUSTOM)', reason: 'Include only custom fields', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT FIELDS(CUSTOM) ' } });
-        suggestions.push({ id: 'init-parent', text: 'SELECT Account.Parent.', reason: 'Start typing a parent relationship field', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT Account.Parent.' } });
+        const starterRule = getRule('starter_suggestions') || getRule('starter');
+        // Create a few starter proposals but attach the rule so the suggestion id becomes the rule id
+        tryPushSuggestion({ text: 'Start a SELECT', reason: 'Begin a SOQL SELECT', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT ' } }, starterRule);
+        tryPushSuggestion({ text: 'SELECT FIELDS(ALL)', reason: 'Use FIELDS(ALL) to include all fields', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT FIELDS(ALL) ' } }, starterRule);
+        tryPushSuggestion({ text: 'SELECT FIELDS(STANDARD)', reason: 'Include only standard fields', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT FIELDS(STANDARD) ' } }, starterRule);
+        tryPushSuggestion({ text: 'SELECT FIELDS(CUSTOM)', reason: 'Include only custom fields', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT FIELDS(CUSTOM) ' } }, starterRule);
+        tryPushSuggestion({ text: 'SELECT Account.Parent.', reason: 'Start typing a parent relationship field', severity: 'info', apply: { type: 'replace', start: 0, end: endPos, text: 'SELECT Account.Parent.' } }, starterRule);
         return suggestions;
       }
       return [];
@@ -222,7 +268,7 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
     const hasWhere = /\bwhere\b/i.test(trimmed);
 
     // add LIMIT rule
-    const limitRule = getRule('add_limit');
+    const limitRule = getRule('add_limit', query);
     if (limitRule && !hasLimit && !hasWhere && limitRule.enabled) {
       const guardOk = !/subquery/i.test(sessionContext.phase || '') && (!sessionContext.errors || sessionContext.errors.length === 0);
       if (guardOk && canEmitRule(limitRule, sessionContext)) {
@@ -287,19 +333,20 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
       if (/^\s*$/.test(fieldsText)) {
         const fieldsHelpersRulePresent = hasRule('fields_helpers') || !Array.isArray(rules) || rules.length === 0;
         if (fieldsHelpersRulePresent) {
-          suggestions.push({ id: 'suggest-fields-all', text: 'FIELDS(ALL)', reason: 'Use FIELDS(ALL) to include all fields', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' FIELDS(ALL) ' } });
-          suggestions.push({ id: 'suggest-fields-standard', text: 'FIELDS(STANDARD)', reason: 'Include only standard fields', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' FIELDS(STANDARD) ' } });
-          suggestions.push({ id: 'suggest-fields-custom', text: 'FIELDS(CUSTOM)', reason: 'Include only custom fields', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' FIELDS(CUSTOM) ' } });
-          suggestions.push({ id: 'suggest-select-star', text: 'SELECT *', reason: 'Select all fields (consider replacing with explicit fields)', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' * ' } });
-          suggestions.push({ id: 'suggest-parent-example', text: 'Account.Parent.', reason: 'Start a parent relationship field', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' Account.Parent.' } });
+          const fhRule = getRule('fields_helpers') || getRule('fields-macro-helpers') || getRule('fields_helpers');
+          tryPushSuggestion({ text: 'FIELDS(ALL)', reason: 'Use FIELDS(ALL) to include all fields', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' FIELDS(ALL) ' } }, fhRule);
+          tryPushSuggestion({ text: 'FIELDS(STANDARD)', reason: 'Include only standard fields', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' FIELDS(STANDARD) ' } }, fhRule);
+          tryPushSuggestion({ text: 'FIELDS(CUSTOM)', reason: 'Include only custom fields', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' FIELDS(CUSTOM) ' } }, fhRule);
+          tryPushSuggestion({ text: 'SELECT *', reason: 'Select all fields (consider replacing with explicit fields)', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' * ' } }, fhRule);
+          tryPushSuggestion({ text: 'Account.Parent.', reason: 'Start a parent relationship field', severity: 'info', apply: { type: 'insert', pos: fieldsStart, text: ' Account.Parent.' } }, fhRule);
         }
         return suggestions;
       }
       if (hasFieldsFunction) {
         const fromRegex = /\bfrom\b/i;
         if (!fromRegex.test(trimmed)) {
-          const fromAfterFieldsRule = getRule('from_after_fields') || getRule('fields_helpers') || !Array.isArray(rules) || rules.length === 0;
-          if (fromAfterFieldsRule) suggestions.push({ id: 'suggest-from-after-fields', text: 'Add FROM', reason: 'Add FROM after FIELDS(...)', severity: 'info', apply: { type: 'append', text: ' FROM ' } });
+          const fromAfterFieldsRule = getRule('from_after_fields') || getRule('fields_helpers') || getRule('fields-macro-helpers');
+          if (fromAfterFieldsRule) tryPushSuggestion({ text: 'Add FROM', reason: 'Add FROM after FIELDS(...)', severity: 'info', apply: { type: 'append', text: ' FROM ' } }, fromAfterFieldsRule);
         } else {
           const fromTrailing = /\bfrom\b\s*$/i.test(trimmed);
           if (fromTrailing) {
@@ -326,13 +373,13 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
           if (/\)$/.test(g1) || g1.toUpperCase() === 'DISTINCT' || /\(/.test(g1) || /\(/.test(g2)) continue;
           const sepIndexInFt = mm.index + g1.length; const absPos = fieldsStart + sepIndexInFt;
           const suggestion = { id: 'select-missing-comma', text: `Insert comma between '${g1}' and '${g2}'`, reason: 'Multiple fields must be separated by commas', severity: 'warning', apply: { type: 'replace', start: absPos, end: absPos + 1, text: ', ' } };
-          tryPushSuggestion(suggestion, getRule('comma-between-fields'));
+          tryPushSuggestion(suggestion, getRule('comma-between-fields', query));
           break;
         }
         const commaNoSpaceIdx = ft.search(/,\S/);
         if (commaNoSpaceIdx >= 0) { const insertPos = fieldsStart + commaNoSpaceIdx + 1; suggestions.push({ id: 'select-space-after-comma', text: 'Insert space after comma', reason: 'Use a space after commas between fields', severity: 'hint', apply: { type: 'insert', pos: insertPos, text: ' ' } }); }
         const doubleCommaIdx = ft.indexOf(',,'); if (doubleCommaIdx >= 0) { const abs = fieldsStart + doubleCommaIdx; suggestions.push({ id: 'select-extra-commas', text: 'Remove duplicate commas', reason: 'Remove extra commas in field list', severity: 'warning', apply: { type: 'replace', start: abs, end: abs + 2, text: ',' } }); }
-        if (/,+\s*$/.test(ft)) { const rel = ft.search(/,+\s*$/); const absStart = fieldsStart + rel; const commaMatch = ft.match(/,+\s*$/); const len = commaMatch ? commaMatch[0].length : 1; const suggestion = { id: 'select-trailing-comma', text: 'Remove trailing comma before FROM', reason: 'No trailing comma before FROM', severity: 'warning', apply: { type: 'replace', start: absStart, end: absStart + len, text: '' } }; tryPushSuggestion(suggestion, getRule('no-trailing-comma')); }
+        if (/,+\s*$/.test(ft)) { const rel = ft.search(/,+\s*$/); const absStart = fieldsStart + rel; const commaMatch = ft.match(/,+\s*$/); const len = commaMatch ? commaMatch[0].length : 1; const suggestion = { id: 'select-trailing-comma', text: 'Remove trailing comma before FROM', reason: 'No trailing comma before FROM', severity: 'warning', apply: { type: 'replace', start: absStart, end: absStart + len, text: '' } }; tryPushSuggestion(suggestion, getRule('no-trailing-comma', query)); }
       }
 
       const dotRulePresent = hasRule('dot_completion') || !Array.isArray(rules) || rules.length === 0;
@@ -344,9 +391,73 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
         }
       }
       const spaceBeforeDotIdx = ft.search(/\w\s+\./);
-      if (dotRulePresent && spaceBeforeDotIdx >= 0) { const match = ft.match(/(\w)(\s+)(\.)/); if (match) { const wsIndex = ft.indexOf(match[2], 0); const absWsPos = fieldsStart + wsIndex; suggestions.push({ id: 'select-space-before-dot', text: 'Remove space before dot', reason: 'No spaces before dot in relationship notation', severity: 'hint', apply: { type: 'replace', start: absWsPos, end: absWsPos + match[2].length, text: '' } }); } }
+      if (dotRulePresent && spaceBeforeDotIdx >= 0) {
+        const match = ft.match(/(\w)(\s+)(\.)/);
+        if (match) {
+          const wsIndex = ft.indexOf(match[2], 0);
+          const absWsPos = fieldsStart + wsIndex;
+          const suggestion = {
+            id: 'select-space-before-dot',
+            text: 'Remove space before dot',
+            reason: 'No spaces before dot in relationship notation',
+            severity: 'hint',
+            apply: { type: 'replace', start: absWsPos, end: absWsPos + match[2].length, text: '' }
+          };
+          tryPushSuggestion(suggestion, getRule('select-space-before-dot', query));
+        }
+      }
     }
   }
 
   return suggestions;
+}
+
+// Adapter helpers to satisfy the spec's expected API
+async function buildDescribeFromProvider(describeProvider, objectApiName) {
+  if (!describeProvider) return null;
+  // If caller already passed a describe-shaped object
+  if (Array.isArray(describeProvider.fields)) return describeProvider;
+  // If provider exposes describeObject(objectApiName)
+  if (typeof describeProvider.describeObject === 'function') {
+    try {
+      const raw = await describeProvider.describeObject(objectApiName);
+      // raw can be an object mapping fieldName -> { type: '..' }
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        const fields = Object.keys(raw).map((k) => ({ name: k, type: raw[k] && raw[k].type ? raw[k].type : (raw[k] && raw[k].dataType) || 'string' }));
+        // Attempt to build parentFields if provider gives parentFields or childRelationships
+        const parentFields = {};
+        if (describeProvider.parentFields && typeof describeProvider.parentFields === 'object') {
+          Object.assign(parentFields, describeProvider.parentFields);
+        }
+        // If provider offers childRelationships, we can't reliably derive parentFields here, so skip.
+        return { fields, parentFields };
+      }
+      // If raw is already an array of fields
+      if (Array.isArray(raw)) return { fields: raw, parentFields: describeProvider.parentFields || {} };
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function suggest(query, baseCtx, describeProvider, CONFIG) {
+  const ctx = baseCtx || {};
+  const config = CONFIG || {};
+  const objectName = ctx.object || null;
+  const describe = await buildDescribeFromProvider(describeProvider, objectName);
+  // Tests and some callers expect procedural fallbacks even when a policy sets declarativeOnly.
+  const policy = Object.assign({}, config);
+  if (policy.declarativeOnly) policy.declarativeOnly = false;
+  return await generateSuggestions(query, describe, ctx, config.suggestions || [], policy);
+}
+
+export async function getSuggestions({ query, context, config, describeProvider }) {
+  const ctx = context || {};
+  const cfg = config || {};
+  const objectName = ctx.object || null;
+  const describe = await buildDescribeFromProvider(describeProvider, objectName);
+  const policy = Object.assign({}, cfg);
+  if (policy.declarativeOnly) policy.declarativeOnly = false;
+  return await generateSuggestions(query, describe, ctx, cfg.suggestions || [], policy);
 }

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "test:suggest": "node test_soql_suggester.js"
+  },
+  "devDependencies": {
+    "jest": "^29.6.1"
   }
 }
-
