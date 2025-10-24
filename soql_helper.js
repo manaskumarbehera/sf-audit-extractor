@@ -290,14 +290,99 @@ async function computeAndRenderSuggestions() {
 
 function scheduleSuggestionCompute(force = false) {
   try {
+    // When used as an event handler, the first argument will be the event object.
+    // Treat any non-boolean argument as "no force" while still inspecting the event later.
+    let evt = null;
+    if (typeof force === 'object' && force) {
+      evt = force;
+      force = false;
+    }
+    if (typeof force !== 'boolean') force = false;
+
+    if (!els || !els.editor) return;
+
     if (!force && _suppressFurtherRecompute) {
-      // Suppressed: do not schedule a recompute while user opted to keep current suggestions
-      console.debug && console.debug('scheduleSuggestionCompute -> suppressed, not scheduling');
-      return;
+      const shouldOverride = shouldUnsuppressSuggestions(evt);
+      if (!shouldOverride) {
+        console.debug && console.debug('scheduleSuggestionCompute -> suppressed, not scheduling');
+        return;
+      }
+      _suppressFurtherRecompute = false;
     }
     if (suggestionDebounce) clearTimeout(suggestionDebounce);
     suggestionDebounce = setTimeout(() => { computeAndRenderSuggestions().catch(()=>{}); }, SUGGEST_DEBOUNCE_MS);
   } catch (e) { /* ignore scheduling errors */ }
+}
+
+function shouldUnsuppressSuggestions(evt) {
+  try {
+    if (!els || !els.editor) return false;
+    const editor = els.editor;
+    const snapshot = _lastEditorSnapshot;
+    const currText = (editor && typeof editor.value === 'string') ? editor.value : '';
+    const currCaret = (editor && typeof editor.selectionStart === 'number') ? editor.selectionStart : currText.length;
+
+    if (!snapshot) return true;
+
+    const prevText = (snapshot && typeof snapshot.text === 'string') ? snapshot.text : '';
+    const prevCaret = (snapshot && typeof snapshot.caret === 'number') ? snapshot.caret : prevText.length;
+
+    const lengthDelta = Math.abs(currText.length - prevText.length);
+    const caretDelta = Math.abs(currCaret - prevCaret);
+    const changeMagnitude = estimateTextChangeMagnitude(prevText, currText);
+
+    const threshold = Math.max(1, Number.isFinite(SUGGEST_STICKY_CHAR_THRESHOLD) ? SUGGEST_STICKY_CHAR_THRESHOLD : 3);
+
+    // Pointer interactions are intentional context switches; resume suggestions even for small caret moves
+    if (evt && typeof evt === 'object') {
+      const type = evt.type || '';
+      if (type === 'click' || type === 'mouseup') {
+        return caretDelta > 0 || changeMagnitude > 0;
+      }
+      if (type === 'keyup') {
+        const key = evt.key || evt.code || '';
+        if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(key)) {
+          return caretDelta > 0;
+        }
+      }
+      if (type === 'focus') {
+        return caretDelta > 0 || changeMagnitude > 0;
+      }
+    }
+
+    if (lengthDelta >= threshold) return true;
+    if (changeMagnitude >= threshold) return true;
+    if (caretDelta >= threshold) return true;
+
+    return false;
+  } catch (e) {
+    // In case of unexpected errors, err on the side of recomputing to avoid stale suggestions
+    return true;
+  }
+}
+
+function estimateTextChangeMagnitude(prevText, currText) {
+  try {
+    const prev = typeof prevText === 'string' ? prevText : '';
+    const curr = typeof currText === 'string' ? currText : '';
+    if (prev === curr) return 0;
+
+    const prevLen = prev.length;
+    const currLen = curr.length;
+    const minLen = Math.min(prevLen, currLen);
+
+    let prefix = 0;
+    while (prefix < minLen && prev.charCodeAt(prefix) === curr.charCodeAt(prefix)) prefix++;
+
+    let suffix = 0;
+    while (suffix < (minLen - prefix) && prev.charCodeAt(prevLen - 1 - suffix) === curr.charCodeAt(currLen - 1 - suffix)) {
+      suffix++;
+    }
+
+    return Math.max(prevLen, currLen) - prefix - suffix;
+  } catch (e) {
+    return Math.max(1, Number.isFinite(SUGGEST_STICKY_CHAR_THRESHOLD) ? SUGGEST_STICKY_CHAR_THRESHOLD : 3);
+  }
 }
 
 function renderSuggestions(items) {
@@ -750,3 +835,88 @@ async function renderSoqlResults(records, totalSize){
     els.results.appendChild(container);
    } catch (e) { console.warn && console.warn('renderSoqlResults failed', e); try { els.results.textContent = JSON.stringify(records, null, 2); } catch {} }
 }
+
+// Initialization: populate `els` and wire DOM handlers. Also expose an ensureInitOnce function
+// so popup fallback can call into the real helper and clean up its listeners.
+(function(){
+  function ensureInitOnce(){
+    try {
+      if (typeof window !== 'undefined') {
+        try { window.__soql_helper_loaded = true; } catch(e){}
+        try { window.__soql_helper_ensureInitOnce = ensureInitOnce; } catch(e){}
+      }
+      if (initialized) return;
+      initialized = true;
+
+      // Populate element references (best-effort)
+      try { els.editor = qs('soql-editor') || findEditorElement(); } catch(e) { els.editor = els.editor || null; }
+      try { els.hints = qs('soql-hints'); } catch(e) { els.hints = els.hints || null; }
+      try { els.errors = qs('soql-errors'); } catch(e) { els.errors = els.errors || null; }
+      try { els.obj = qs('soql-obj'); } catch(e) { els.obj = els.obj || null; }
+      try { els.run = qs('soql-run'); } catch(e) { els.run = els.run || null; }
+      try { els.clear = qs('soql-clear'); } catch(e) { els.clear = els.clear || null; }
+      try { els.limit = qs('soql-limit'); } catch(e) { els.limit = els.limit || null; }
+      try { els.results = qs('soql-results'); } catch(e) { els.results = els.results || null; }
+      try { els.autoFill = qs('soql-auto-fill'); } catch(e) { els.autoFill = els.autoFill || null; }
+      try { els.debug = qs('soql-debug'); } catch(e) { els.debug = els.debug || null; }
+      try { els.debugToggle = qs('soql-debug-toggle'); } catch(e) { els.debugToggle = els.debugToggle || null; }
+      try { els.useTooling = qs('soql-use-tooling'); } catch(e) { els.useTooling = els.useTooling || null; }
+
+      // Wire editor events
+      try {
+        if (els.editor) {
+          try { els.editor.addEventListener('blur', scheduleValidation); } catch(e){}
+          try { els.editor.addEventListener('input', scheduleSuggestionCompute); } catch(e){}
+          try { els.editor.addEventListener('keyup', scheduleSuggestionCompute); } catch(e){}
+          try { els.editor.addEventListener('focus', scheduleSuggestionCompute); } catch(e){}
+          try { els.editor.addEventListener('click', scheduleSuggestionCompute); } catch(e){}
+          try { els.editor.addEventListener('keydown', onKeyDown); } catch(e){}
+        }
+      } catch(e){}
+
+      // Run / clear / limit handlers
+      try { if (els.run) { els.run.addEventListener('click', runQuery); els.run.addEventListener('click', scheduleSuggestionCompute); } } catch(e){}
+      try { if (els.clear) { els.clear.addEventListener('click', () => { try { if (els.editor) { els.editor.value = ''; scheduleValidation(); scheduleSuggestionCompute(true); } } catch(e){} }); } } catch(e){}
+      try { if (els.limit) els.limit.addEventListener('change', applyLimitFromDropdown); } catch(e){}
+
+      // Object-picker: clear suppression and force recompute on change so suggerstions update promptly
+      try {
+        if (els.obj) {
+          els.obj.addEventListener('change', (ev) => {
+            try {
+              // Always clear suppression when object picker changes
+              _suppressFurtherRecompute = false;
+              // Optionally auto-fill a basic query when the small checkbox is enabled and editor is empty
+              try {
+                if (els.autoFill && els.autoFill.checked && els.editor && els.obj && els.obj.value) {
+                  const name = String(els.obj.value || '').trim();
+                  if (name && ((els.editor.value || '').trim().length === 0)) {
+                    els.editor.value = `SELECT Id, Name FROM ${name}`;
+                  }
+                }
+              } catch(e){}
+              // Re-run validation and force suggestion recompute
+              try { scheduleValidation(); } catch(e){}
+              try { scheduleSuggestionCompute(true); } catch(e){}
+            } catch (e) { /* ignore */ }
+          });
+        }
+      } catch (e) { /* ignore */ }
+
+      // Kick off an initial suggestion compute so UI populates quickly
+      try { scheduleSuggestionCompute(); } catch(e){}
+
+    } catch (e) { /* ignore */ }
+  }
+
+  // Auto-init when DOM is ready and also respond to custom soql-load events from the popup fallback
+  try {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(ensureInitOnce, 0);
+    } else {
+      document.addEventListener('DOMContentLoaded', ensureInitOnce);
+    }
+    document.addEventListener('soql-load', ensureInitOnce);
+  } catch (e) { /* ignore */ }
+})();
+
