@@ -213,4 +213,58 @@ describe("soql_suggestions_engine + config integration (smoke tests)", () => {
         expect(Array.isArray(res)).toBe(true);
         expect(calls).toEqual(["Account"]);
     });
+    test("derives object describe from query when context omits object", async () => {
+        const calls = [];
+        const mockProvider = {
+            async describeObject(name) {
+                calls.push(name);
+                return [
+                    { name: "Id", type: "id" },
+                    { name: "Name", type: "string" },
+                ];
+            },
+        };
+
+        const res = await engine({
+            query: "SELECT Name FROM Account ",
+            context: {},
+            config,
+            describeProvider: mockProvider,
+        });
+
+        expect(Array.isArray(res)).toBe(true);
+        expect(calls).toEqual(["Account"]);
+    });
+});
+
+describe("soql_suggestions_engine compatibility shims", () => {
+    test("accepts raw describe arrays when context omits object", async () => {
+        const { mod } = await importEngine();
+        const customConfig = {
+            suggestions: [
+                {
+                    id: "suggest_boolean_filter",
+                    enabled: true,
+                    message: "Filter boolean field",
+                },
+            ],
+        };
+        const describeFields = [
+            { name: "Id", type: "id" },
+            { name: "IsActive__c", type: "boolean" },
+        ];
+
+        const res = await mod.suggest(
+            "SELECT Name FROM Account ",
+            {},
+            describeFields,
+            customConfig
+        );
+
+        expect(Array.isArray(res)).toBe(true);
+        const hasBooleanSuggestion = res.some((s) =>
+            /Filter by IsActive__c/i.test(s.text || "")
+        );
+        expect(hasBooleanSuggestion).toBe(true);
+    });
 });

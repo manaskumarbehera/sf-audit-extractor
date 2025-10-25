@@ -52,6 +52,34 @@ const tests = [
   { q: "SELECT Id FROM Account WHERE Name = NULL LIMIT 10", expectedOk: false },
   { q: "SELECT Id FROM Account WHERE IsDeleted = 'false' LIMIT 10", expectedOk: false }
 ];
+const demoAccountDescribe = {
+    name: 'Account',
+    __demo: true,
+    fields: [
+        { name: 'Id', type: 'reference' },
+        { name: 'Name', type: 'string' },
+        { name: 'Industry', type: 'string' },
+        { name: 'CreatedDate', type: 'date' },
+        { name: 'IsDeleted', type: 'boolean' },
+        { name: 'LastModifiedDate', type: 'date' },
+        { name: 'ShippingState', type: 'string' },
+        { name: 'BillingCountry', type: 'string' },
+        { name: 'NumberOfEmployees', type: 'number' },
+        { name: 'Type', type: 'string' },
+        { name: 'Active__c', type: 'boolean' },
+        { name: 'RecordType.DeveloperName', type: 'string' },
+        { name: 'Owner.UserType', type: 'string' }
+    ]
+};
+
+function escapeHtml(str){
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 let passed = 0;
 for (const t of tests) {

@@ -1179,16 +1179,3 @@ async function validateAndRender() {
   } catch (e) { /* ignore top-level validation errors */ }
 }
 
-// Update scheduleValidation to run both rule-backed quick checks and the heavier semantic validator
-function scheduleValidation() {
-  try {
-    if (_validateTimer) clearTimeout(_validateTimer);
-    _validateTimer = setTimeout(() => {
-      _validateTimer = null;
-      try { validateInline(); } catch (e) { try { console.warn && console.warn('validateInline error', e); } catch (_) {} }
-      try { validateAndRender().catch(()=>{}); } catch(e){}
-    }, VALIDATE_DEBOUNCE_MS);
-    ensureRulesRequested();
-  } catch (e) { /* ignore */ }
-}
-

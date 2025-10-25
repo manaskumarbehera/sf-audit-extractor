@@ -565,20 +565,22 @@ async function buildDescribeFromProvider(describeProvider, objectApiName) {
 export async function suggest(query, baseCtx, describeProvider, CONFIG) {
   const ctx = baseCtx || {};
   const config = CONFIG || {};
-  const objectName = ctx.object || inferObjectFromQuery(query) || null;
-  const describe = await buildDescribeFromProvider(describeProvider, objectName);
+    const objectName = ctx.object || inferObjectFromQuery(query) || null;
+    const describe = await buildDescribeFromProvider(describeProvider, objectName);
+    const effectiveCtx = ctx.object || !objectName ? ctx : Object.assign({}, ctx, { object: objectName });
   // Tests and some callers expect procedural fallbacks even when a policy sets declarativeOnly.
   const policy = Object.assign({}, config);
   if (policy.declarativeOnly) policy.declarativeOnly = false;
-  return await generateSuggestions(query, describe, ctx, config.suggestions || [], policy);
+    return await generateSuggestions(query, describe, effectiveCtx, config.suggestions || [], policy);
 }
 
 export async function getSuggestions({ query, context, config, describeProvider }) {
   const ctx = context || {};
   const cfg = config || {};
-  const objectName = ctx.object || inferObjectFromQuery(query) || null;
-  const describe = await buildDescribeFromProvider(describeProvider, objectName);
-  const policy = Object.assign({}, cfg);
+    const objectName = ctx.object || inferObjectFromQuery(query) || null;
+    const describe = await buildDescribeFromProvider(describeProvider, objectName);
+    const effectiveCtx = ctx.object || !objectName ? ctx : Object.assign({}, ctx, { object: objectName });
+    const policy = Object.assign({}, cfg);
   if (policy.declarativeOnly) policy.declarativeOnly = false;
-  return await generateSuggestions(query, describe, ctx, cfg.suggestions || [], policy);
+    return await generateSuggestions(query, describe, effectiveCtx, cfg.suggestions || [], policy);
 }
