@@ -6,7 +6,8 @@
   "scripts": {
     "test": "jest --runInBand --detectOpenHandles",
     "lint": "eslint . --ext .js",
-    "start": "echo 'This is a Chrome extension project — load via chrome://extensions'"
+    "start": "echo 'This is a Chrome extension project — load via chrome://extensions'",
+    "build:ext": "rm -rf dist && mkdir -p dist && rsync -av --exclude='__tests__' --exclude='test_*.js' --exclude='test-*.js' --exclude='*.spec.js' --exclude='*.test.js' --exclude='.git' --exclude='.idea' --exclude='node_modules' --exclude='test-results' ./ dist/"
   },
   "keywords": [
     "salesforce",
@@ -38,7 +39,8 @@
       "json"
     ],
     "testMatch": [
-      "**/?(*.)+(spec|test).[jt]s"
+      "**/__tests__/run_existing_scripts.test.js",
+      "**/__tests__/**/*.spec.js"
     ],
     "verbose": true
   },

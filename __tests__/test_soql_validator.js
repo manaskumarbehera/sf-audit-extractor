@@ -1,6 +1,7 @@
-// Quick test harness for soql_semantic_validator.js
-const fs = require('fs');
-const vm = require('vm');
+// Copied test harness (moved from repo root) — converted to ESM
+// Original: test_soql_validator.js
+import fs from 'fs';
+import vm from 'vm';
 const path = './soql_semantic_validator.js';
 let src = fs.readFileSync(path,'utf8');
 src = src.replace(/export \{\s*parseQueryParts\s*,\s*validateSoql\s*\};?\s*$/m, 'module.exports = { parseQueryParts, validateSoql };');

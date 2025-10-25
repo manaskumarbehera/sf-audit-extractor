@@ -1,12 +1,12 @@
-// Run the validator against queries you flagged as invalid and assert they fail
-const fs = require('fs');
-const vm = require('vm');
-const path = './soql_semantic_validator.js';
-let src = fs.readFileSync(path,'utf8');
+// Moved from repo root: test_soql_expected_failures.js
+import fs from 'fs';
+import vm from 'vm';
+const path = '../soql_semantic_validator.js';
+let src = fs.readFileSync(path.replace('../',''), 'utf8');
 src = src.replace(/export \{\s*parseQueryParts\s*,\s*validateSoql\s*\};?\s*$/m, 'module.exports = { parseQueryParts, validateSoql };');
 const sandbox = { module: {}, console };
 vm.createContext(sandbox);
-vm.runInContext(src, sandbox, { filename: path });
+vm.runInContext(src, sandbox, { filename: path.replace('../','') });
 const { validateSoql } = sandbox.module.exports;
 
 const accountDescribe = { name: 'Account', fields: [
@@ -62,4 +62,3 @@ for (const q of tests) {
   }
 }
 console.log('\nSummary: ' + passed + '/' + tests.length + ' expected failures matched');
-

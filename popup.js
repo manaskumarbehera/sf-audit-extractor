@@ -28,126 +28,282 @@
         }
     } catch (e) { /* ignore */ }
 
-    let sessionInfo = null;
-    const statusEl = document.getElementById('status');
-    const statusText = statusEl ? statusEl.querySelector('.status-text') : null;
+    class PopupController {
+        constructor() {
+            this.sessionInfo = null;
+            this.statusEl = document.getElementById('status');
+            this.statusText = this.statusEl ? this.statusEl.querySelector('.status-text') : null;
+            this.pePinBtn = document.getElementById('pe-pin');
+            this.apiVersionSel = document.getElementById('api-version');
+            this.auditFetched = false;
+        }
 
-    const pePinBtn = document.getElementById('pe-pin');
-    const apiVersionSel = document.getElementById('api-version');
+        async init() {
+            const apiVersion = await this.loadAndBindApiVersion();
 
-    let auditFetched = false;
-
-    init();
-
-    async function init() {
-        const apiVersion = await loadAndBindApiVersion();
-
-        await checkSalesforceConnection();
-        try {
-            const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-            if (fresh && fresh.success && fresh.isLoggedIn) {
-                sessionInfo = fresh;
-                const accessToken = getAccessToken();
-                const instanceUrl = fresh.instanceUrl;
-                if (accessToken && instanceUrl) {
-                    try {
-                        const orgName = await fetchOrgName(instanceUrl, accessToken, apiVersion);
-                        updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
-                    } catch {
-                        updateStatus(true, 'Connected to Salesforce');
+            await this.checkSalesforceConnection();
+            try {
+                const fresh = await this.sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                if (fresh && fresh.success && fresh.isLoggedIn) {
+                    this.sessionInfo = fresh;
+                    const accessToken = this.getAccessToken();
+                    const instanceUrl = fresh.instanceUrl;
+                    if (accessToken && instanceUrl) {
+                        try {
+                            const orgName = await this.fetchOrgName(instanceUrl, accessToken, apiVersion);
+                            this.updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
+                        } catch {
+                            this.updateStatus(true, 'Connected to Salesforce');
+                        }
                     }
                 }
+            } catch { /* ignore */ }
+
+            this.initLmsHelper();
+            this.initPlatformHelper(apiVersion);
+            this.initAuditHelper();
+
+            await this.setupTabs();
+
+            this.attachPinHandlers();
+        }
+
+        async loadAndBindApiVersion() {
+            let selected = '65.0';
+            try {
+                const res = await chrome.storage?.local?.get?.({ apiVersion: '65.0' });
+                if (res && res.apiVersion) selected = String(res.apiVersion);
+            } catch { /* default */ }
+            if (this.apiVersionSel) {
+                const opts = Array.from(this.apiVersionSel.options).map(o => o.value);
+                this.apiVersionSel.value = opts.includes(selected) ? selected : '65.0';
+                this.apiVersionSel.addEventListener('change', async () => {
+                    const v = this.apiVersionSel.value || '65.0';
+                    try { await chrome.storage?.local?.set?.({ apiVersion: v }); } catch {}
+                    try { window.PlatformHelper && window.PlatformHelper.updateApiVersion && window.PlatformHelper.updateApiVersion(v); } catch {}
+                });
             }
-        } catch { /* ignore */ }
+            return selected;
+        }
 
-        initLmsHelper();
-        initPlatformHelper(apiVersion);
-        initAuditHelper();
+        initPlatformHelper(apiVersion) {
+            if (!window.PlatformHelper) return;
+            try {
+                window.PlatformHelper.init({
+                    apiVersion: apiVersion || (this.apiVersionSel?.value || '65.0'),
+                    getSession: () => this.sessionInfo,
+                    setSession: (s) => { this.sessionInfo = s; },
+                    refreshSessionFromTab: async () => {
+                        try {
+                            const fresh = await this.sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                            if (fresh && fresh.success && fresh.isLoggedIn) { this.sessionInfo = fresh; return fresh; }
+                        } catch {}
+                        return null;
+                    }
+                });
+            } catch { /* no-op */ }
+        }
 
-        await setupTabs();
+        initLmsHelper() {
+            if (!window.LmsHelper) return;
+            try { window.LmsHelper.init({ getSession: () => this.sessionInfo }); } catch { /* no-op */ }
+        }
 
-        attachPinHandlers();
-    }
+        initAuditHelper() {
+            if (!window.AuditHelper) return;
+            try {
+                window.AuditHelper.init({
+                    getSession: () => this.sessionInfo,
+                    refreshSessionFromTab: async () => {
+                        try {
+                            const fresh = await this.sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                            if (fresh && fresh.success && fresh.isLoggedIn) { this.sessionInfo = fresh; return fresh; }
+                        } catch {}
+                        return null;
+                    }
+                });
+            } catch { /* no-op */ }
+        }
 
-    async function loadAndBindApiVersion() {
-        let selected = '65.0';
-        try {
-            const res = await chrome.storage?.local?.get?.({ apiVersion: '65.0' });
-            if (res && res.apiVersion) selected = String(res.apiVersion);
-        } catch { /* default */ }
-        if (apiVersionSel) {
-            const opts = Array.from(apiVersionSel.options).map(o => o.value);
-            apiVersionSel.value = opts.includes(selected) ? selected : '65.0';
-            apiVersionSel.addEventListener('change', async () => {
-                const v = apiVersionSel.value || '65.0';
-                try { await chrome.storage?.local?.set?.({ apiVersion: v }); } catch {}
-                try { window.PlatformHelper && window.PlatformHelper.updateApiVersion && window.PlatformHelper.updateApiVersion(v); } catch {}
+        attachPinHandlers() {
+            if (!this.pePinBtn) return;
+            this.pePinBtn.disabled = true;
+            chrome.runtime.sendMessage({ action: 'PLATFORM_PIN_GET' }, (resp) => {
+                if (chrome.runtime.lastError) {
+                    this.updatePinButton(false);
+                    this.pePinBtn.disabled = false;
+                    return;
+                }
+                this.updatePinButton(resp && resp.success ? resp.pinned : false);
+                this.pePinBtn.disabled = false;
+            });
+            this.pePinBtn.addEventListener('click', () => {
+                if (this.pePinBtn.disabled) return;
+                this.pePinBtn.disabled = true;
+                chrome.runtime.sendMessage({ action: 'PLATFORM_PIN_TOGGLE' }, (resp) => {
+                    if (!chrome.runtime.lastError && resp && resp.success) {
+                        this.updatePinButton(resp.pinned);
+                    }
+                    this.pePinBtn.disabled = false;
+                });
             });
         }
-        return selected;
-    }
 
-    function initPlatformHelper(apiVersion) {
-        if (!window.PlatformHelper) return;
-        try {
-            window.PlatformHelper.init({
-                apiVersion: apiVersion || (apiVersionSel?.value || '65.0'),
-                getSession: () => sessionInfo,
-                setSession: (s) => { sessionInfo = s; },
-                refreshSessionFromTab: async () => {
-                    try {
-                        const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-                        if (fresh && fresh.success && fresh.isLoggedIn) { sessionInfo = fresh; return fresh; }
-                    } catch {}
-                    return null;
+        updatePinButton(pinned) {
+            if (!this.pePinBtn) return;
+            this.pePinBtn.classList.toggle('active', !!pinned);
+            this.pePinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+            this.pePinBtn.title = pinned ? 'Unpin Platform Events window' : 'Pin Platform Events window';
+            this.pePinBtn.setAttribute('aria-label', this.pePinBtn.title);
+            this.pePinBtn.innerHTML = pinned ? svgPinOff() : svgPin();
+        }
+
+        getAccessToken() {
+            return (
+                this.sessionInfo?.accessToken ||
+                this.sessionInfo?.sessionId ||
+                this.sessionInfo?.sid ||
+                this.sessionInfo?.sessionToken ||
+                this.sessionInfo?.session_token ||
+                null
+            );
+        }
+
+        async fetchOrgName(instanceUrl, accessToken, apiVersion) {
+            if (!instanceUrl || !accessToken) return null;
+            const v = String(apiVersion || this.apiVersionSel?.value || '65.0');
+            const soql = 'SELECT+Name+FROM+Organization+LIMIT+1';
+            const url = `${instanceUrl}/services/data/v${v.replace(/^v/i, '')}/query?q=${soql}`;
+            const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error(`SF API ${res.status}: ${res.statusText}`);
+            const data = await res.json();
+            const name = data?.records?.[0]?.Name;
+            return name || null;
+        }
+
+        async setupTabs() {
+            const tabsContainer = document.querySelector('.tabs');
+            await applySavedTabOrder(tabsContainer);
+
+            const buttons = document.querySelectorAll('.tab-button');
+            const panes = document.querySelectorAll('.tab-pane');
+            const headerTitle = document.getElementById('header-title');
+
+            const showTab = (name) => {
+                panes.forEach(p => (p.style.display = p.dataset.tab === name ? 'block' : 'none'));
+                buttons.forEach(b => {
+                    const active = b.dataset.tab === name;
+                    b.classList.toggle('active', active);
+                    b.setAttribute('aria-selected', active ? 'true' : 'false');
+                });
+                const activeBtn = Array.from(buttons).find(b => b.dataset.tab === name);
+                if (headerTitle) headerTitle.textContent = (activeBtn?.textContent || 'Audit Trails').trim();
+
+                try { chrome.storage?.local?.set?.({ lastTab: name }); } catch {}
+
+                if (name === 'platform') {
+                    try { document.dispatchEvent(new CustomEvent('platform-load')); } catch {}
                 }
-            });
-        } catch { /* no-op */ }
-    }
-
-    function initLmsHelper() {
-        if (!window.LmsHelper) return;
-        try { window.LmsHelper.init({ getSession: () => sessionInfo }); } catch { /* no-op */ }
-    }
-
-    function initAuditHelper() {
-        if (!window.AuditHelper) return;
-        try {
-            window.AuditHelper.init({
-                getSession: () => sessionInfo,
-                refreshSessionFromTab: async () => {
-                    try {
-                        const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-                        if (fresh && fresh.success && fresh.isLoggedIn) { sessionInfo = fresh; return fresh; }
-                    } catch {}
-                    return null;
+                if (name === 'sf' && !this.auditFetched) {
+                    this.auditFetched = true;
+                    try { window.AuditHelper && window.AuditHelper.fetchNow && window.AuditHelper.fetchNow(); } catch {}
                 }
-            });
-        } catch { /* no-op */ }
-    }
+                if (name === 'lms') {
+                    try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
+                }
+                if (name === 'soql') {
+                    try { document.dispatchEvent(new CustomEvent('soql-load')); } catch {}
+                }
+            };
 
-    function attachPinHandlers() {
-        if (!pePinBtn) return;
-        pePinBtn.disabled = true;
-        chrome.runtime.sendMessage({ action: 'PLATFORM_PIN_GET' }, (resp) => {
-            if (chrome.runtime.lastError) {
-                updatePinButton(false);
-                pePinBtn.disabled = false;
-                return;
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const name = btn.dataset.tab;
+                    showTab(name);
+                    try { history.replaceState(null, '', `#${name}`); } catch {}
+                });
+            });
+
+            enableTabDragAndDrop(tabsContainer, () => {});
+
+            const allNames = Array.from(buttons).map(b => b.dataset.tab);
+            const rawHash = (location.hash || '').replace('#','').toLowerCase();
+
+            (async () => {
+                let initial = null;
+                try {
+                    const saved = await chrome.storage?.local?.get?.({ lastTab: '' });
+                    if (saved && saved.lastTab && allNames.includes(saved.lastTab)) initial = saved.lastTab;
+                } catch {}
+                if (!initial) initial = allNames.includes(rawHash)
+                    ? rawHash
+                    : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames.includes('soql') ? 'soql' : (allNames[0] || 'sf')));
+                showTab(initial);
+            })();
+
+            window.addEventListener('hashchange', () => {
+                const h = (location.hash || '').replace('#','').toLowerCase();
+                if (allNames.includes(h)) showTab(h);
+            });
+        }
+
+        async checkSalesforceConnection() {
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (!tab || !tab.url) { this.updateStatus(false, 'No active tab'); return; }
+
+                let isSalesforce;
+                try {
+                    const url = new URL(tab.url);
+                    const hostname = url.hostname.toLowerCase();
+                    isSalesforce = hostname.endsWith('.salesforce.com') || hostname.endsWith('.force.com') || hostname === 'salesforce.com' || hostname === 'force.com';
+                } catch { isSalesforce = false; }
+
+                if (!isSalesforce) { this.updateStatus(false, 'Not on Salesforce'); return; }
+
+                const response = await new Promise((resolve) => {
+                    chrome.tabs.sendMessage(tab.id, { action: 'getSessionInfo' }, (resp) => resolve(resp));
+                });
+                if (chrome.runtime.lastError) { this.updateStatus(false, 'Cannot access page'); return; }
+
+                if (response && response.success && response.isLoggedIn) {
+                    this.sessionInfo = response;
+                    this.updateStatus(true, 'Connected to Salesforce');
+                } else {
+                    this.updateStatus(false, 'Not logged in');
+                }
+            } catch {
+                this.updateStatus(false, 'Connection failed');
             }
-            updatePinButton(resp && resp.success ? resp.pinned : false);
-            pePinBtn.disabled = false;
-        });
-        pePinBtn.addEventListener('click', () => {
-            if (pePinBtn.disabled) return;
-            pePinBtn.disabled = true;
-            chrome.runtime.sendMessage({ action: 'PLATFORM_PIN_TOGGLE' }, (resp) => {
-                if (!chrome.runtime.lastError && resp && resp.success) {
-                    updatePinButton(resp.pinned);
-                }
-                pePinBtn.disabled = false;
+        }
+
+        updateStatus(connected, message) {
+            if (!this.statusEl || !this.statusText) return;
+            if (connected) this.statusEl.classList.add('connected'); else this.statusEl.classList.remove('connected');
+            this.statusText.textContent = message;
+        }
+
+        async findSalesforceTab() {
+            const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+            if (!Array.isArray(matches) || matches.length === 0) return null;
+            const current = await chrome.windows.getCurrent({ populate: true }).catch(() => null);
+            const currentWindowId = current?.id;
+            const activeInCurrent = matches.find(t => t.active && t.windowId === currentWindowId);
+            return activeInCurrent || matches[0] || null;
+        }
+
+        async sendMessageToSalesforceTab(message) {
+            const tab = await this.findSalesforceTab();
+            if (!tab?.id) return null;
+            return await new Promise((resolve) => {
+                try {
+                    chrome.tabs.sendMessage(tab.id, message, (resp) => {
+                        if (chrome.runtime.lastError) { resolve(null); return; }
+                        resolve(resp || null);
+                    });
+                } catch { resolve(null); }
             });
-        });
+        }
     }
 
     function svgPin() {
@@ -188,61 +344,6 @@
         return svg.outerHTML;
     }
 
-    function updatePinButton(pinned) {
-        if (!pePinBtn) return;
-        pePinBtn.classList.toggle('active', !!pinned);
-        pePinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-        pePinBtn.title = pinned ? 'Unpin Platform Events window' : 'Pin Platform Events window';
-        pePinBtn.setAttribute('aria-label', pePinBtn.title);
-        pePinBtn.innerHTML = pinned ? svgPinOff() : svgPin();
-    }
-
-    async function findSalesforceTab() {
-        const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
-        if (!Array.isArray(matches) || matches.length === 0) return null;
-        const current = await chrome.windows.getCurrent({ populate: true }).catch(() => null);
-        const currentWindowId = current?.id;
-        const activeInCurrent = matches.find(t => t.active && t.windowId === currentWindowId);
-        return activeInCurrent || matches[0] || null;
-    }
-
-    async function sendMessageToSalesforceTab(message) {
-        const tab = await findSalesforceTab();
-        if (!tab?.id) return null;
-        return await new Promise((resolve) => {
-            try {
-                chrome.tabs.sendMessage(tab.id, message, (resp) => {
-                    if (chrome.runtime.lastError) { resolve(null); return; }
-                    resolve(resp || null);
-                });
-            } catch { resolve(null); }
-        });
-    }
-
-    function getAccessToken() {
-        return (
-            sessionInfo?.accessToken ||
-            sessionInfo?.sessionId ||
-            sessionInfo?.sid ||
-            sessionInfo?.sessionToken ||
-            sessionInfo?.session_token ||
-            null
-        );
-    }
-
-    async function fetchOrgName(instanceUrl, accessToken, apiVersion) {
-        if (!instanceUrl || !accessToken) return null;
-        const v = String(apiVersion || apiVersionSel?.value || '65.0');
-        const soql = 'SELECT+Name+FROM+Organization+LIMIT+1';
-        const url = `${instanceUrl}/services/data/v${v}/query?q=${soql}`;
-        const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
-        if (!res.ok) throw new Error(`SF API ${res.status}: ${res.statusText}`);
-        const data = await res.json();
-        const name = data?.records?.[0]?.Name;
-        return name || null;
-    }
-
-    // Apply saved tab order from storage by physically re-ordering the tab buttons under the container
     async function applySavedTabOrder(container) {
         if (!container) return;
         let saved = [];
@@ -259,12 +360,10 @@
             const el = map.get(name);
             if (el) { frag.appendChild(el); map.delete(name); }
         });
-        // Append any new/unknown tabs that were not in saved order
         map.forEach(el => frag.appendChild(el));
         container.appendChild(frag);
     }
 
-    // Enable drag-and-drop reordering of tabs and persist the new order
     function enableTabDragAndDrop(container, onOrderChanged) {
         if (!container) return;
         const buttons = () => Array.from(container.querySelectorAll('.tab-button'));
@@ -278,10 +377,8 @@
             if (typeof onOrderChanged === 'function') { try { onOrderChanged(order); } catch {} }
         }
 
-        // Attach DnD handlers to each button
         buttons().forEach(btn => {
             btn.setAttribute('draggable', 'true');
-            // Make it clear you can drag
             if (!btn.title || btn.title.indexOf('Drag to reorder') === -1) {
                 btn.title = (btn.title ? btn.title + ' — ' : '') + 'Drag to reorder';
             }
@@ -321,114 +418,6 @@
         });
     }
 
-    async function setupTabs() {
-        const tabsContainer = document.querySelector('.tabs');
-        await applySavedTabOrder(tabsContainer);
-
-        const buttons = document.querySelectorAll('.tab-button');
-        const panes = document.querySelectorAll('.tab-pane');
-        const headerTitle = document.getElementById('header-title');
-
-        function showTab(name) {
-            panes.forEach(p => (p.style.display = p.dataset.tab === name ? 'block' : 'none'));
-            buttons.forEach(b => {
-                const active = b.dataset.tab === name;
-                b.classList.toggle('active', active);
-                b.setAttribute('aria-selected', active ? 'true' : 'false');
-            });
-            const activeBtn = Array.from(buttons).find(b => b.dataset.tab === name);
-            if (headerTitle) headerTitle.textContent = (activeBtn?.textContent || 'Audit Trails').trim();
-
-            // persist selection
-            try { chrome.storage?.local?.set?.({ lastTab: name }); } catch {}
-
-            if (name === 'platform') {
-                try { document.dispatchEvent(new CustomEvent('platform-load')); } catch {}
-            }
-            if (name === 'sf' && !auditFetched) {
-                auditFetched = true;
-                try { window.AuditHelper && window.AuditHelper.fetchNow && window.AuditHelper.fetchNow(); } catch {}
-            }
-            if (name === 'lms') {
-                try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
-            }
-            if (name === 'soql') {
-                try { document.dispatchEvent(new CustomEvent('soql-load')); } catch {}
-            }
-        }
-
-        buttons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const name = btn.dataset.tab;
-                showTab(name);
-                try { history.replaceState(null, '', `#${name}`); } catch {}
-            });
-        });
-
-        // Enable drag-and-drop tab reordering after listeners are attached
-        enableTabDragAndDrop(tabsContainer, /* onOrderChanged */ () => {});
-
-        const allNames = Array.from(buttons).map(b => b.dataset.tab);
-        const rawHash = (location.hash || '').replace('#','').toLowerCase();
-
-        // restore last tab or default to 'soql' if available
-        (async () => {
-            let initial = null;
-            try {
-                const saved = await chrome.storage?.local?.get?.({ lastTab: '' });
-                if (saved && saved.lastTab && allNames.includes(saved.lastTab)) initial = saved.lastTab;
-            } catch {}
-            if (!initial) initial = allNames.includes(rawHash)
-                ? rawHash
-                : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames.includes('soql') ? 'soql' : (allNames[0] || 'sf')));
-            showTab(initial);
-        })();
-
-        window.addEventListener('hashchange', () => {
-            const h = (location.hash || '').replace('#','').toLowerCase();
-            if (allNames.includes(h)) showTab(h);
-        });
-    }
-
-    async function checkSalesforceConnection() {
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab || !tab.url) { updateStatus(false, 'No active tab'); return; }
-
-            let isSalesforce;
-            try {
-                const url = new URL(tab.url);
-                const hostname = url.hostname.toLowerCase();
-                isSalesforce = hostname.endsWith('.salesforce.com') || hostname.endsWith('.force.com') || hostname === 'salesforce.com' || hostname === 'force.com';
-            } catch { isSalesforce = false; }
-
-            if (!isSalesforce) { updateStatus(false, 'Not on Salesforce'); return; }
-
-            const response = await new Promise((resolve) => {
-                chrome.tabs.sendMessage(tab.id, { action: 'getSessionInfo' }, (resp) => resolve(resp));
-            });
-            if (chrome.runtime.lastError) { updateStatus(false, 'Cannot access page'); return; }
-
-            if (response && response.success && response.isLoggedIn) {
-                sessionInfo = response;
-                updateStatus(true, 'Connected to Salesforce');
-            } else {
-                updateStatus(false, 'Not logged in');
-            }
-        } catch {
-            updateStatus(false, 'Connection failed');
-        }
-    }
-
-    function updateStatus(connected, message) {
-        if (!statusEl || !statusText) return;
-        if (connected) statusEl.classList.add('connected'); else statusEl.classList.remove('connected');
-        statusText.textContent = message;
-    }
-
-    // SOQL validation UI integration
-    // - Dynamically import the validator module when the SOQL pane is shown
-    // - Wire the editor to run validateSoql(query, describe) and render messages into #soql-errors
     (function setupSoqlValidationUI(){
         // If the richer soql_helper module is already loaded, it will own all editor wiring
         // and validation; skip the popup.js fallback to avoid duplicate listeners and conflicts.
@@ -857,4 +846,16 @@
             }
         });
     })();
+
+    // Initialize the popup controller when the DOM is ready
+    try {
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const controller = new PopupController();
+                // Expose for debugging
+                try { window.PopupControllerInstance = controller; } catch(e){}
+                try { controller.init && controller.init(); } catch (e) { console.error('Popup init failed', e); }
+            } catch (e) { console.error('Failed to construct PopupController', e); }
+        });
+    } catch (e) { /* ignore */ }
 })();

@@ -1,4 +1,6 @@
-import suggestSoql from './soql_suggester.js';
+// filepath: /Users/manas/IdeaProjects/sf-audit-extractor/__tests__/test_soql_suggester.js
+// Moved from repo root: test_soql_suggester.js
+import suggestSoql from '../soql_suggester.js';
 
 async function run() {
   const describe = {
@@ -29,3 +31,4 @@ async function run() {
 }
 
 run().catch(err => { console.error(err); process.exit(2); });
+

@@ -1,3 +1,4 @@
+// filepath: /Users/manas/IdeaProjects/sf-audit-extractor/soql_helper_schema.js
 export const Soql_helper_schema = (function(){
   const describeCache = new Map();
   // support separate global lists for standard vs tooling endpoints
@@ -26,7 +27,7 @@ export const Soql_helper_schema = (function(){
   async function initSchema(useTooling = false){
     const key = useTooling ? 'tooling' : 'standard';
     try {
-      const instanceUrl = await (await import('./src/soql/soql_helper_utils.js')).getInstanceUrl();
+      const instanceUrl = await (await import('./soql_helper_utils.js')).getInstanceUrl();
       let resp = await send({ action: 'DESCRIBE_GLOBAL', instanceUrl, useTooling });
 
       // Specific: if background returned an explicit 'Instance URL not detected.' error,
@@ -95,7 +96,7 @@ export const Soql_helper_schema = (function(){
     const cacheKey = (useTooling ? 'TOOLING|' : 'STD|') + name;
     if (describeCache.has(cacheKey)) return describeCache.get(cacheKey);
     try {
-      const instanceUrl = await (await import('./src/soql/soql_helper_utils.js')).getInstanceUrl();
+      const instanceUrl = await (await import('./soql_helper_utils.js')).getInstanceUrl();
       const resp = await send({ action: 'DESCRIBE_SOBJECT', name, instanceUrl, useTooling });
       if (resp && resp.success && resp.describe) {
         describeCache.set(cacheKey, resp.describe);
@@ -115,7 +116,7 @@ export const Soql_helper_schema = (function(){
   async function send(msg){
     const base = typeof msg === 'object' && msg ? msg : { action: String(msg || '') };
     if (!base.instanceUrl) {
-      try { base.instanceUrl = await (await import('./src/soql/soql_helper_utils.js')).getInstanceUrl(); } catch { /* ignore */ }
+      try { base.instanceUrl = await (await import('./soql_helper_utils.js')).getInstanceUrl(); } catch { /* ignore */ }
     }
     // Return structured response so callers can show diagnostics when messaging fails
     return await new Promise((resolve) => {

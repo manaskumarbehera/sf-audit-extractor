@@ -1,0 +1,118 @@
+{
+  "generatedAt": "2025-10-24T16:05:58.564Z",
+  "count": 7,
+  "failures": [
+    {
+      "title": "loads and has expected top-level shape",
+      "fullName": "soql_suggestions_config.json loads and has expected top-level shape",
+      "ancestorTitles": [
+        "soql_suggestions_config.json"
+      ],
+      "status": "failed",
+      "duration": 0,
+      "location": {
+        "column": 5,
+        "line": 75
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at Object.loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:76:32)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)\n    at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    },
+    {
+      "title": "all suggestion ids are unique and non-empty",
+      "fullName": "soql_suggestions_config.json all suggestion ids are unique and non-empty",
+      "ancestorTitles": [
+        "soql_suggestions_config.json"
+      ],
+      "status": "failed",
+      "duration": 0,
+      "location": {
+        "column": 5,
+        "line": 93
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at Object.loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:94:26)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)\n    at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    },
+    {
+      "title": "contains required core rules",
+      "fullName": "soql_suggestions_config.json contains required core rules",
+      "ancestorTitles": [
+        "soql_suggestions_config.json"
+      ],
+      "status": "failed",
+      "duration": 0,
+      "location": {
+        "column": 5,
+        "line": 106
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at Object.loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:107:26)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)\n    at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    },
+    {
+      "title": "empty editor → offers 'Start a SELECT'",
+      "fullName": "soql_suggestions_engine + config integration (smoke tests) empty editor → offers 'Start a SELECT'",
+      "ancestorTitles": [
+        "soql_suggestions_engine + config integration (smoke tests)"
+      ],
+      "status": "failed",
+      "duration": 0,
+      "location": {
+        "column": 5,
+        "line": 134
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:121:26)\n    at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at _next (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at new Promise (<anonymous>)\n    at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusHook (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:281:40)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:95:7)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    },
+    {
+      "title": "after 'SELECT ' → offers FIELDS(...) helpers",
+      "fullName": "soql_suggestions_engine + config integration (smoke tests) after 'SELECT ' → offers FIELDS(...) helpers",
+      "ancestorTitles": [
+        "soql_suggestions_engine + config integration (smoke tests)"
+      ],
+      "status": "failed",
+      "duration": 1,
+      "location": {
+        "column": 5,
+        "line": 150
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:121:26)\n    at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at _next (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at new Promise (<anonymous>)\n    at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusHook (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:281:40)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:95:7)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    },
+    {
+      "title": "after 'SELECT FIELDS(ALL) ' → suggests FROM",
+      "fullName": "soql_suggestions_engine + config integration (smoke tests) after 'SELECT FIELDS(ALL) ' → suggests FROM",
+      "ancestorTitles": [
+        "soql_suggestions_engine + config integration (smoke tests)"
+      ],
+      "status": "failed",
+      "duration": 0,
+      "location": {
+        "column": 5,
+        "line": 164
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:121:26)\n    at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at _next (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at new Promise (<anonymous>)\n    at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusHook (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:281:40)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:95:7)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    },
+    {
+      "title": "after SELECT…FROM Account → suggests WHERE (and not LIMIT yet)",
+      "fullName": "soql_suggestions_engine + config integration (smoke tests) after SELECT…FROM Account → suggests WHERE (and not LIMIT yet)",
+      "ancestorTitles": [
+        "soql_suggestions_engine + config integration (smoke tests)"
+      ],
+      "status": "failed",
+      "duration": 0,
+      "location": {
+        "column": 5,
+        "line": 179
+      },
+      "failureMessages": [
+        "Error: File not found. Tried:\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/soql_suggestions_config.json\n - /Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.json\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:13:11)\n    at findFile (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:24:18)\n    at loadJsonConfig (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:121:26)\n    at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at _next (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at new Promise (<anonymous>)\n    at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/soql_suggestions_config.spec.js:2:1)\n    at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusHook (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:281:40)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:95:7)\n    at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)"
+      ]
+    }
+  ]
+}

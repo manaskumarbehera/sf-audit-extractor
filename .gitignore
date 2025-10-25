@@ -36,3 +36,6 @@ venv/
 *.crx
 *.pem
 *.zip
+
+# Local backups and archives
+backups/

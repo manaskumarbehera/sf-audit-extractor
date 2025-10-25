@@ -4,6 +4,15 @@ const API_VERSION = 'v65.0';
 let platformWindowId = null;
 let lastInstanceUrl = null;
 
+const cookies = {
+    get: (details) => new Promise((resolve) => {
+        try { chrome.cookies.get(details, (c) => resolve(c || null)); } catch { resolve(null); }
+    }),
+    getAll: (details) => new Promise((resolve) => {
+        try { chrome.cookies.getAll(details, (arr) => resolve(arr || [])); } catch { resolve([]); }
+    })
+};
+
 chrome.runtime.onInstalled.addListener(() => {
     if (!chrome.declarativeContent?.onPageChanged) return;
     chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {
@@ -42,224 +51,307 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     chrome.action.setBadgeText({ tabId, text: isSF ? 'SF' : '' });
     if (isSF) chrome.action.setBadgeBackgroundColor({ tabId, color: '#00A1E0' });
 });
+
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg && msg.action === 'FETCH_ORG_NAME') {
-        (async () => {
+    handleRuntimeMessage(msg, sender)
+        .then((resp) => sendResponse(resp))
+        .catch((err) => {
             try {
-                const soql = 'SELECT+Name+FROM+Organization+LIMIT+1';
-                const url = `${msg.instanceUrl}/services/data/v56.0/query?q=${soql}`;
-                const res = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${msg.accessToken}`,
-                        'Accept': 'application/json'
-                    }
-                });
-                if (!res.ok) {
-                    const errMsg = `SF API ${res.status}: ${res.statusText}`;
-                    sendResponse({ success: false, error: errMsg });
-                    return;
-                }
-                const data = await res.json();
-                const name = data?.records?.[0]?.Name || null;
-                sendResponse({ success: true, orgName: name });
-            } catch (err) {
-                console.error('background FETCH_ORG_NAME error', err);
                 sendResponse({ success: false, error: String(err) });
-            }
-        })();
-        return true; // keep message channel open for async sendResponse
-    }
-});
-
-// Handle general actions and Platform Events pinning
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    (async () => {
-        try {
-            const raw = msg?.action ?? '';
-            const upper = typeof raw === 'string' ? raw.toUpperCase() : '';
-            const is = (v) => upper === v || raw === v || raw === v.toLowerCase();
-
-            if (is('PLATFORM_PIN_GET')) {
-                const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
-                return { success: true, pinned: !!platformPinned, windowId: platformWindowId };
-            }
-            if (is('PLATFORM_PIN_SET')) {
-                const pinned = !!msg?.pinned;
-                await chrome.storage.local.set({ platformPinned: pinned });
-                if (pinned) {
-                    await openPlatformWindow();
-                } else {
-                    if (platformWindowId) {
-                        try { await chrome.windows.remove(platformWindowId); } catch {}
-                        platformWindowId = null;
-                    }
-                }
-                return { success: true, pinned, windowId: platformWindowId };
-            }
-            if (is('PLATFORM_PIN_TOGGLE')) {
-                const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
-                const next = !platformPinned;
-                await chrome.storage.local.set({ platformPinned: next });
-                if (next) {
-                    await openPlatformWindow();
-                } else {
-                    if (platformWindowId) {
-                        try { await chrome.windows.remove(platformWindowId); } catch {}
-                        platformWindowId = null;
-                    }
-                }
-                return { success: true, pinned: next, windowId: platformWindowId };
-            }
-
-            if (is('CONTENT_PING') || is('CONTENT_READY') || upper === 'CONTENTREADY') {
-                // keep track of last known instance URL for extension pages
-                try {
-                    const url = sanitizeUrl(msg?.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
-                    const norm = normalizeApiBase(url);
-                    if (norm) lastInstanceUrl = norm;
-                } catch {}
-                return { ok: true };
-            }
-
-            if (is('GET_SESSION_INFO') || is('GET_SESSION')) {
-                let url = sanitizeUrl(msg.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
-                if (!url) {
-                    const fromCookies = await findInstanceFromCookies();
-                    if (fromCookies) url = sanitizeUrl(fromCookies) || fromCookies;
-                }
-                return await getSalesforceSession(url);
-            }
-
-            if (is('FETCH_AUDIT_TRAIL') || is('FETCH_AUDIT') || is('fetchAuditTrail')) {
-                const rawUrl =
-                    sanitizeUrl(msg.instanceUrl) ||
-                    sanitizeUrl(msg.url) ||
-                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) ||
-                    lastInstanceUrl ||
-                    (await findSalesforceOrigin());
-
-                const instanceUrl = normalizeApiBase(rawUrl);
-                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-
-                    // Accept sessionId passed from the caller (popup) as a hint. Fall back to cookie lookup if not provided.
-                let sessionId = msg?.sessionId || null;
-                if (!sessionId) {
-                    const sess = await getSalesforceSession(instanceUrl);
-                    sessionId = sess.sessionId || null;
-                }
-
-                if (!sessionId) return { success: false, error: 'Salesforce session not found. Log in and retry.' };
-
-                const days = Number.isFinite(msg?.days) ? Number(msg.days) : 180;
-                const limit = Number.isFinite(msg?.limit) ? Number(msg.limit) : 2000;
-
-                const result = await fetchAuditTrail(instanceUrl, sessionId, { days, limit });
-                return { success: true, totalSize: result.totalSize, data: result.records };
-            }
-
-            if (is('LMS_FETCH_CHANNELS')) {
-                const rawUrl =
-                    sanitizeUrl(msg.instanceUrl) ||
-                    sanitizeUrl(msg.url) ||
-                    (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) ||
-                    lastInstanceUrl ||
-                    (await findSalesforceOrigin());
-                const instanceUrl = normalizeApiBase(rawUrl);
-                if (!instanceUrl) {
-                    return { success: false, error: 'Instance URL not detected.' };
-                }
-                // Accept sessionId from caller when provided
-                let sessionId = msg?.sessionId || null;
-                if (!sessionId) {
-                    const sess = await getSalesforceSession(instanceUrl);
-                    sessionId = sess.sessionId || null;
-                }
-                if (!sessionId) {
-                    return { success: false, error: 'Salesforce session not found. Log in and retry.' };
-                }
-
-                const channels = await fetchLmsChannels(instanceUrl, sessionId);
-                return { success: true, channels };
-            }
-
-            //  SOQL Builder schema and run actions
-            if (is('DESCRIBE_GLOBAL')) {
-                // Try several approaches to determine the instance origin: explicit param, sender tab, last known tab,
-                // an open Salesforce tab, or derive from cookies when available.
-                let rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
-                if (!rawUrl) {
-                    const fromCookies = await findInstanceFromCookies();
-                    if (fromCookies) rawUrl = sanitizeUrl(fromCookies) || fromCookies;
-                }
-                const instanceUrl = normalizeApiBase(rawUrl);
-                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                // allow provided sessionId to be used
-                let sessionId = msg?.sessionId || null;
-                if (!sessionId) {
-                    const sess = await getSalesforceSession(instanceUrl);
-                    sessionId = sess.sessionId || null;
-                }
-                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
-                const data = await describeGlobal(instanceUrl, sessionId, msg.useTooling);
-                return { success: true, objects: data };
-            }
-
-            if (is('DESCRIBE_SOBJECT')) {
-                const name = (msg && msg.name) ? String(msg.name) : '';
-                if (!name) return { success: false, error: 'Missing sObject name' };
-                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
-                const instanceUrl = normalizeApiBase(rawUrl);
-                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                // allow provided sessionId to be used
-                let sessionId = msg?.sessionId || null;
-                if (!sessionId) {
-                    const sess = await getSalesforceSession(instanceUrl);
-                    sessionId = sess.sessionId || null;
-                }
-                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
-                try {
-                    const describe = await describeSObject(instanceUrl, sessionId, name, msg.useTooling);
-                    return describe ? { success: true, describe } : { success: false, error: 'Describe failed' };
-                } catch (e) {
-                    // Forward the underlying error message for better diagnostics (e.g., Unknown object 'X')
-                    return { success: false, error: String(e) };
-                }
-            }
-
-            if (is('RUN_SOQL')) {
-                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
-                const instanceUrl = normalizeApiBase(rawUrl);
-                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                // allow provided sessionId to be used
-                let sessionId = msg?.sessionId || null;
-                if (!sessionId) {
-                    const sess = await getSalesforceSession(instanceUrl);
-                    sessionId = sess.sessionId || null;
-                }
-                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
-                const query = String(msg?.query || '').trim();
-                if (!query) return { success: false, error: 'Empty query' };
-                const limit = Number.isFinite(msg?.limit) ? Number(msg.limit) : null;
-                const result = await runSoql(instanceUrl, sessionId, query, limit, msg.useTooling);
-                return { success: true, totalSize: result.totalSize, records: result.records, done: true };
-            }
-
-            return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL'] };
-        } catch (e) {
-            return { success: false, error: String(e) };
-        }
-    })().then((resp) => {
-        try { sendResponse(resp); } catch {}
-    });
-
+            } catch {}
+        });
     return true;
 });
+
+async function handleRuntimeMessage(msg, sender) {
+    // Normalize incoming action names from various casing/aliases
+    const rawAction = (msg && typeof msg === 'object') ? (msg.action || '') : (typeof msg === 'string' ? msg : '');
+    const action = normalizeAction(rawAction);
+
+    switch (action) {
+        case 'FETCH_ORG_NAME':
+            return await handleFetchOrgName(msg);
+        case 'PLATFORM_PIN_GET':
+            return await handlePlatformPinGet();
+        case 'PLATFORM_PIN_SET':
+            return await handlePlatformPinSet(msg);
+        case 'PLATFORM_PIN_TOGGLE':
+            return await handlePlatformPinToggle();
+        case 'CONTENT_PING':
+        case 'CONTENT_READY':
+            return await handleContentReady(msg, sender);
+        case 'GET_SESSION_INFO':
+            return await handleGetSessionInfo(msg, sender);
+        case 'FETCH_AUDIT_TRAIL':
+            return await handleFetchAuditTrail(msg, sender);
+        case 'LMS_FETCH_CHANNELS':
+            return await handleLmsFetchChannels(msg, sender);
+        case 'DESCRIBE_GLOBAL':
+            return await handleDescribeGlobal(msg, sender);
+        case 'DESCRIBE_SOBJECT':
+            return await handleDescribeSObject(msg, sender);
+        case 'RUN_SOQL':
+            return await handleRunSoql(msg, sender);
+        default:
+            return { ok: false, error: 'Unknown action', action };
+    }
+}
+
+function normalizeAction(action) {
+    if (!action) return '';
+    const raw = String(action).trim();
+    if (!raw) return '';
+    const upper = raw.toUpperCase();
+
+    const ACTION_ALIASES = {
+        FETCH_ORG_NAME: 'FETCH_ORG_NAME',
+        PLATFORM_PIN_GET: 'PLATFORM_PIN_GET',
+        PLATFORM_PIN_SET: 'PLATFORM_PIN_SET',
+        PLATFORM_PIN_TOGGLE: 'PLATFORM_PIN_TOGGLE',
+        CONTENT_PING: 'CONTENT_PING',
+        CONTENT_READY: 'CONTENT_READY',
+        CONTENTREADY: 'CONTENT_READY',
+        GET_SESSION_INFO: 'GET_SESSION_INFO',
+        GET_SESSION: 'GET_SESSION_INFO',
+        GETSESSION: 'GET_SESSION_INFO',
+        GETSESSIONINFO: 'GET_SESSION_INFO',
+        FETCH_AUDIT_TRAIL: 'FETCH_AUDIT_TRAIL',
+        FETCH_AUDIT: 'FETCH_AUDIT_TRAIL',
+        FETCHAUDITTRAIL: 'FETCH_AUDIT_TRAIL',
+        LMS_FETCH_CHANNELS: 'LMS_FETCH_CHANNELS',
+        DESCRIBE_GLOBAL: 'DESCRIBE_GLOBAL',
+        DESCRIBE_SOBJECT: 'DESCRIBE_SOBJECT',
+        RUN_SOQL: 'RUN_SOQL',
+        RUNSOQL: 'RUN_SOQL'
+    };
+
+    if (ACTION_ALIASES[upper]) {
+        return ACTION_ALIASES[upper];
+    }
+
+    const camelToSnake = raw
+        .replace(/([a-z])([A-Z])/g, '$1_$2')
+        .replace(/[\s-]+/g, '_')
+        .toUpperCase();
+
+    if (ACTION_ALIASES[camelToSnake]) {
+        return ACTION_ALIASES[camelToSnake];
+    }
+
+    return camelToSnake;
+}
+
+async function handleFetchOrgName(msg) {
+    try {
+        const instanceUrl = sanitizeUrl(msg?.instanceUrl) || msg?.instanceUrl || null;
+        const accessToken = msg?.accessToken || null;
+        if (!instanceUrl || !accessToken) {
+            return { success: false, error: 'Missing instanceUrl or accessToken' };
+        }
+        const soql = 'SELECT+Name+FROM+Organization+LIMIT+1';
+        const version = typeof msg?.apiVersion === 'string' && msg.apiVersion.trim()
+            ? `v${msg.apiVersion.replace(/^v/i, '')}`
+            : API_VERSION;
+        const url = `${instanceUrl}/services/data/${version}/query?q=${soql}`;
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                Accept: 'application/json'
+            }
+        });
+        if (!res.ok) {
+            const errMsg = `SF API ${res.status}: ${res.statusText}`;
+            return { success: false, error: errMsg };
+        }
+        const data = await res.json();
+        const name = data?.records?.[0]?.Name || null;
+        return { success: true, orgName: name };
+    } catch (err) {
+        console.error('background FETCH_ORG_NAME error', err);
+        return { success: false, error: String(err) };
+    }
+}
+
+async function handlePlatformPinGet() {
+    const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
+    return { success: true, pinned: !!platformPinned, windowId: platformWindowId };
+}
+
+async function handlePlatformPinSet(msg) {
+    const pinned = !!msg?.pinned;
+    await chrome.storage.local.set({ platformPinned: pinned });
+    if (pinned) {
+        await openPlatformWindow();
+    } else if (platformWindowId) {
+        try { await chrome.windows.remove(platformWindowId); } catch {}
+        platformWindowId = null;
+    }
+    return { success: true, pinned, windowId: platformWindowId };
+}
+
+async function handlePlatformPinToggle() {
+    const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
+    const next = !platformPinned;
+    await chrome.storage.local.set({ platformPinned: next });
+    if (next) {
+        await openPlatformWindow();
+    } else if (platformWindowId) {
+        try { await chrome.windows.remove(platformWindowId); } catch {}
+        platformWindowId = null;
+    }
+    return { success: true, pinned: next, windowId: platformWindowId };
+}
+
+async function handleContentReady(msg, sender) {
+    try {
+        const url = sanitizeUrl(msg?.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
+        const norm = normalizeApiBase(url);
+        if (norm) {
+            lastInstanceUrl = norm;
+        }
+    } catch {}
+    return { ok: true };
+}
+
+async function handleGetSessionInfo(msg, sender) {
+    const context = await resolveInstanceContext(msg, sender, { ensureSessionInfo: true });
+    return context.sessionInfo;
+}
+
+async function handleFetchAuditTrail(msg, sender) {
+    const context = await resolveInstanceContext(msg, sender, {
+        requireInstance: true,
+        requireSession: true,
+        ensureSessionInfo: false
+    });
+    const days = Number.isFinite(msg?.days) ? Number(msg.days) : 180;
+    const limit = Number.isFinite(msg?.limit) ? Number(msg.limit) : 2000;
+    const result = await fetchAuditTrail(context.instanceUrl, context.sessionId, { days, limit });
+    return { success: true, totalSize: result.totalSize, data: result.records };
+}
+
+async function handleLmsFetchChannels(msg, sender) {
+    const context = await resolveInstanceContext(msg, sender, {
+        requireInstance: true,
+        requireSession: true
+    });
+    const channels = await fetchLmsChannels(context.instanceUrl, context.sessionId);
+    return { success: true, channels };
+}
+
+async function handleDescribeGlobal(msg, sender) {
+    const context = await resolveInstanceContext(msg, sender, {
+        requireInstance: true,
+        requireSession: true
+    });
+    const data = await describeGlobal(context.instanceUrl, context.sessionId, msg.useTooling);
+    return { success: true, objects: data };
+}
+
+async function handleDescribeSObject(msg, sender) {
+    const name = msg?.name ? String(msg.name) : '';
+    if (!name) {
+        return { success: false, error: 'Missing sObject name' };
+    }
+    const context = await resolveInstanceContext(msg, sender, {
+        requireInstance: true,
+        requireSession: true
+    });
+    try {
+        const describe = await describeSObject(context.instanceUrl, context.sessionId, name, msg.useTooling);
+        return describe ? { success: true, describe } : { success: false, error: 'Describe failed' };
+    } catch (e) {
+        return { success: false, error: String(e) };
+    }
+}
+
+async function handleRunSoql(msg, sender) {
+    const context = await resolveInstanceContext(msg, sender, {
+        requireInstance: true,
+        requireSession: true
+    });
+    const query = String(msg?.query || '').trim();
+    if (!query) {
+        return { success: false, error: 'Empty query' };
+    }
+    const limit = Number.isFinite(msg?.limit) ? Number(msg.limit) : null;
+    const result = await runSoql(context.instanceUrl, context.sessionId, query, limit, msg.useTooling);
+    return { success: true, totalSize: result.totalSize, records: result.records, done: true };
+}
+
+async function resolveInstanceContext(msg, sender, options = {}) {
+    const {
+        requireInstance = false,
+        requireSession = false,
+        ensureSessionInfo = false
+    } = options;
+
+    const candidates = [msg?.instanceUrl, msg?.url, sender?.tab?.url, lastInstanceUrl];
+    let raw = null;
+    for (const candidate of candidates) {
+        const sanitized = sanitizeUrl(candidate);
+        if (sanitized) {
+            raw = sanitized;
+            break;
+        }
+    }
+    if (!raw) {
+        raw = await findSalesforceOrigin();
+    }
+    if (!raw) {
+        raw = await findInstanceFromCookies();
+    }
+
+    let instanceUrl = raw ? normalizeApiBase(raw) || sanitizeUrl(raw) : null;
+
+    let sessionInfo = null;
+    let sessionId = msg?.sessionId || null;
+
+    const sessionSource = instanceUrl || raw;
+
+    if ((ensureSessionInfo || requireSession) && sessionSource) {
+        sessionInfo = await getSalesforceSession(sessionSource);
+        if (sessionInfo?.instanceUrl) {
+            const normalized = normalizeApiBase(sessionInfo.instanceUrl);
+            if (normalized) {
+                instanceUrl = normalized;
+            }
+        }
+        if (!sessionId) {
+            sessionId = sessionInfo?.sessionId || null;
+        }
+    }
+
+    if (!sessionInfo && ensureSessionInfo) {
+        sessionInfo = {
+            success: true,
+            isSalesforce: instanceUrl ? true : false,
+            isLoggedIn: false,
+            instanceUrl,
+            sessionId: null
+        };
+    }
+
+    if (instanceUrl) {
+        lastInstanceUrl = instanceUrl;
+    }
+
+    if (requireInstance && !instanceUrl) {
+        throw new Error('Instance URL not detected.');
+    }
+    if (requireSession && !sessionId) {
+        throw new Error('Salesforce session not found. Log in and retry.');
+    }
+
+    return { instanceUrl, sessionId, sessionInfo };
+}
+
 
 async function openPlatformWindow() {
     try {
         if (platformWindowId) {
-            // if exists, try focus
             await chrome.windows.update(platformWindowId, { focused: true });
             return platformWindowId;
         }
@@ -335,16 +427,6 @@ async function findSalesforceOrigin() {
     }
 }
 
-const cookies = {
-    get: (details) => new Promise((resolve) => {
-        try { chrome.cookies.get(details, (c) => resolve(c || null)); } catch { resolve(null); }
-    }),
-    getAll: (details) => new Promise((resolve) => {
-        try { chrome.cookies.getAll(details, (arr) => resolve(arr || [])); } catch { resolve([]); }
-    })
-};
-
-// New: attempt to derive a Salesforce origin from available cookies when no tab is present.
 async function findInstanceFromCookies() {
     try {
         const all = await cookies.getAll({});
@@ -376,8 +458,7 @@ async function findInstanceFromCookies() {
         const pick = candidates[0];
         if (!pick || !pick.host) return null;
         // construct an origin
-        const origin = `https://${pick.host}`;
-        return origin;
+        return `https://${pick.host}`;
     } catch (e) {
         return null;
     }
@@ -402,7 +483,6 @@ async function getSalesforceSession(url) {
             (c) => (c.name === 'sid' || /^sid[_-]/i.test(c.name)) && (c.domain.endsWith('salesforce.com') || c.domain.endsWith('force.com')) && c.value
         );
 
-        // Prepare a masked diagnostics list (do not expose full cookie values in UI)
         inspectedCandidates = candidates.map(c => ({ domain: c.domain || null, name: c.name || null, valueLength: c.value ? String(c.value).length : 0 }));
 
         candidates.sort((a, b) => {
@@ -414,7 +494,6 @@ async function getSalesforceSession(url) {
         sid = candidates[0] || null;
     }
 
-    // Also include a lightweight count of all cookies inspected for additional context
     let allCookiesCount = null;
     try {
         const all = await cookies.getAll({});
@@ -517,18 +596,22 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
 
     async function fetchChannelMetas(baseUrl, hdrs, channels, concurrency = 5) {
         const out = new Array(channels.length).fill(null);
-        let i = 0;
 
         async function worker() {
             while (true) {
-                const idx = i++;
-                if (idx >= channels.length) break;
-                const id = channels[idx].Id;
+                const idx = out.findIndex((v) => v === null);
+                if (idx === -1) break;
+                out[idx] = undefined;
+                const channel = channels[idx];
+                if (!channel) {
+                    out[idx] = null;
+                    continue;
+                }
+                const path = `/services/data/${API_VERSION}/tooling/sobjects/LightningMessageChannel/${channel.Id}`;
+                const endpoint = `${baseUrl}${path}`;
                 try {
-                    const resp = await fetch(
-                        `${baseUrl}/services/data/${API_VERSION}/tooling/sobjects/LightningMessageChannel/${encodeURIComponent(id)}`,
-                        { method: 'GET', headers: hdrs, credentials: 'omit' }
-                    );
+                    const resp = await fetch(endpoint, { method: 'GET', headers: hdrs, credentials: 'omit' });
+
                     if (resp.ok) {
                         const json = await resp.json();
                         out[idx] = json?.Metadata || null;
@@ -547,14 +630,13 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
     }
 }
 
-// New helpers for SOQL Builder
 async function getApiVersion() {
     try {
         const { apiVersion } = await chrome.storage.local.get({ apiVersion: '65.0' });
         const v = String(apiVersion || '65.0');
         return v.startsWith('v') ? v : ('v' + v);
     } catch {
-        return API_VERSION; // fallback (already has leading 'v')
+        return API_VERSION;
     }
 }
 

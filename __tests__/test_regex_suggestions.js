@@ -1,3 +1,5 @@
+// Copied test harness (moved from repo root)
+// Original: test_regex_suggestions.js
 import fs from 'fs';
 
 function stripComments(raw) {
@@ -31,13 +33,10 @@ function info(msg) { console.log(msg); }
     ['matchRegex', 'notMatchRegex'].forEach(key => {
       if (!s[key]) return;
       const val = String(s[key]);
-      // record suspicious pattern
       if (val.includes(')\\b')) {
         warnings.push({ id: s.id, key, value: val });
       }
-      // Try to construct a RegExp
       try {
-        // Use 'i' for case-insensitive construction (many rules expect this)
         new RegExp(val, 'i');
         constructions.push({ id: s.id, key });
       } catch (e) {
@@ -46,7 +45,6 @@ function info(msg) { console.log(msg); }
     });
   }
 
-  // Specific behavioral checks for the limit-suggestion we edited
   const limit = (obj.suggestions || []).find(x => x.id === 'limit-suggestion');
   if (!limit) {
     errors.push({ id: 'limit-suggestion', error: 'not found' });
@@ -66,11 +64,10 @@ function info(msg) { console.log(msg); }
     }
   }
 
-  // Report summary
   console.log('\nRegex construction summary:');
   console.log('Total constructed regex entries:', constructions.length);
   if (warnings.length) {
-    console.log('\nWarnings (suspect ")\\b" placements):');
+    console.log('\nWarnings (suspect )\\b placements):');
     for (const w of warnings) console.log('-', w.id, w.key, JSON.stringify(w.value));
   }
   if (errors.length) {
@@ -81,8 +78,10 @@ function info(msg) { console.log(msg); }
   }
 
   console.log('\nAll regexes constructed without error.');
-  if (!warnings.length) console.log('No suspicious ")\\b" placements detected.');
+  if (!warnings.length) console.log('No suspicious )\\b placements detected.');
   else console.log('Review the warnings above and adjust patterns if necessary.');
   process.exitCode = 0;
 })();
-
+// Copied test harness (moved from repo root)
+// Original: test_soql_suggester.js
+import('../test_soql_suggester.js');
