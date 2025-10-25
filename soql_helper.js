@@ -681,325 +681,174 @@ function onKeyDown(ev){
 }
 
 // Safe helper to update the editor UI status used by runQuery and other workflows.
-function setEditorStatus(state, message) {
+function setEditorStatus(status) {
   try {
     if (!els) return;
-    // Update editor attributes to reflect status
-    try {
-      if (els.editor && typeof els.editor.setAttribute === 'function') {
-        try { els.editor.setAttribute('data-status', String(state || '') ); } catch(e){}
-        if (state === 'progress') {
-          try { els.editor.setAttribute('aria-busy', 'true'); } catch(e){}
-        } else {
-          try { els.editor.removeAttribute('aria-busy'); } catch(e){}
-        }
-      }
-    } catch(e){}
 
-    // Update a small errors area when in error state
-    try {
-      if (els.errors && typeof els.errors.textContent === 'string') {
-        if (state === 'error') {
-          try { els.errors.textContent = (message == null) ? (els.errors.textContent || 'Error') : String(message); } catch(e){}
-        } else if (state === 'success') {
-          try { els.errors.textContent = ''; } catch(e){}
-        }
-      }
-    } catch(e){}
-
-    // Optionally set a visual marker on results area
-    try {
-      if (els.results && typeof els.results.setAttribute === 'function') {
-        try { els.results.setAttribute('data-status', String(state || '')); } catch(e){}
-      }
-    } catch(e){}
-  } catch (e) { /* swallow */ }
-}
-
-async function runQuery(){
-  try {
-    if (!els || !els.editor || !els.results) return;
-    const q = (els.editor.value || '').trim();
-    if (!q) return;
-    setEditorStatus('progress');
-    try {
-      const payload = { action: 'RUN_SOQL', query: q };
-      try { if (els.useTooling) payload.useTooling = !!els.useTooling.checked; } catch {}
-
-      // debug: log payload state before attaching session/limit
-      try { console.debug && console.debug('runQuery initial payload', { query: payload.query, useTooling: payload.useTooling }); } catch (e) {}
-
-      // Attach instance/session hints when available so the background can use them directly
+    const editor = els.editor;
+    if (editor && editor.classList) {
       try {
-        const inst = await getInstanceUrl().catch(() => null);
-        if (inst) payload.instanceUrl = inst;
-      } catch {}
-
-      try {
-        // Try to get session info via the content tab (masked flow). This may return an object like { success, isLoggedIn, instanceUrl, sessionId }.
-        let sess = null;
-        try {
-          // Prefer the helper exposed on window if present (utils wrapper); fallback to utility function
-          if (typeof window !== 'undefined' && window.Utils && typeof window.Utils.sendMessageToSalesforceTab === 'function') {
-            sess = await window.Utils.sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-          } else if (typeof sendMessageToSalesforceTab === 'function') {
-            sess = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-          }
-        } catch (e) { sess = null; }
-        if (sess && sess.success && sess.isLoggedIn && sess.sessionId) {
-          // attach sessionId only when it looks valid. Background will still validate/verify it.
-          payload.sessionId = sess.sessionId;
-          // ensure instanceUrl matches if available
-          try { if (!payload.instanceUrl && sess.instanceUrl) payload.instanceUrl = sess.instanceUrl; } catch {}
+        for (const cls of EDITOR_STATUS_CLASSES) {
+          editor.classList.remove(cls);
         }
-      } catch (e) { /* non-fatal */ }
-
-      // Attach limit from the small limit input (or its data-applied) if present.
-      try {
-        let limitVal = null;
-        const applied = (els && els.limit && typeof els.limit.getAttribute === 'function') ? els.limit.getAttribute('data-applied') : null;
-        if (applied) {
-          const n = Number(applied);
-          if (Number.isFinite(n) && n > 0) limitVal = n;
-        } else if (els && els.limit) {
-          const v = (els.limit.value || '').trim();
-          const n = Number(v);
-          if (Number.isFinite(n) && n > 0) limitVal = n;
-        }
-        if (limitVal) payload.limit = limitVal;
-        try { console.debug && console.debug('runQuery -> attached limit to payload', payload.limit); } catch (e) {}
-      } catch (e) { /* ignore */ }
-
-      // Final debug: show full payload just before sending
-      try { console.debug && console.debug('RUN_SOQL payload', payload); } catch (e) {}
-
-      const resp = await new Promise((resolve) => {
-        try {
-          chrome.runtime.sendMessage(payload, (r) => {
-            if (chrome.runtime.lastError) resolve({ success: false, error: String(chrome.runtime.lastError) });
-            else resolve(r || null);
-          });
-        } catch (e) { resolve({ success: false, error: String(e) }); }
-      });
-
-      // Clear previous results
-      try { clearResults(); } catch {}
-
-      if (!resp) {
-        try { if (els.errors) els.errors.textContent = 'No response from background'; } catch {}
-        setEditorStatus('error');
-        return;
+      } catch (_) {}
+      const cls = EDITOR_STATUS_CLASS_MAP[String(status)] || null;
+      if (cls) {
+        try { editor.classList.add(cls); } catch (_) {}
       }
-
-      if (resp.success === false && resp.error) {
-        try { if (els.errors) els.errors.textContent = String(resp.error || 'Query failed'); } catch {}
-        setEditorStatus('error');
-        return;
-      }
-
-      // Normalized shape: background returns { totalSize, records }
-      const records = Array.isArray(resp.records) ? resp.records : (Array.isArray(resp.data) ? resp.data : []);
-      const total = typeof resp.totalSize === 'number' ? resp.totalSize : (Array.isArray(records) ? records.length : 0);
-
-      if (!records || records.length === 0) {
-        try { if (els.results) els.results.textContent = 'No records'; } catch {}
-        setEditorStatus('success');
-        try { if (els.errors) els.errors.textContent = ''; } catch {}
-        return;
-      }
-
-      try { await renderSoqlResults(records, total); } catch (e) { console.warn && console.warn('renderSoqlResults error', e); try { if (els.results) els.results.textContent = JSON.stringify(records, null, 2); } catch {} }
-      setEditorStatus('success');
-      try { if (els.errors) els.errors.textContent = ''; } catch {}
-
-    } catch (e) {
-      try { if (els.errors) els.errors.textContent = String(e); } catch {}
-      setEditorStatus('error');
     }
-  } catch (e) { console.warn && console.warn('runQuery top error', e); }
-}
 
-// Update the editor's LIMIT clause (or append) when the small limit input is changed
-function applyLimitFromDropdown(){
-  try {
-    if (!els || !els.editor || !els.limit) return;
-    const v = (els.limit.value || '').trim();
-    // Store the last user selection in a data attribute so other UI can show it if needed.
-    if (!v) {
-      try { els.limit.removeAttribute('data-applied'); } catch {}
-      return;
-    }
-    const n = Number(v);
-    if (!Number.isFinite(n) || n <= 0) return;
-    try { els.limit.setAttribute('data-applied', String(n)); } catch {}
-
-    // Update the editor's query to reflect the selected limit: replace existing LIMIT or insert one.
-    try {
-      const editor = els.editor;
-      let q = String(editor.value || '');
-      if (!q) return;
-      // Remove trailing semicolon for manipulation, we'll re-add if present
-      const hasSemicolon = /;\s*$/.test(q);
-      if (hasSemicolon) q = q.replace(/;\s*$/, '');
-
-      const limitRe = /\bLIMIT\s+\d+/i;
-      const offsetRe = /\bOFFSET\s+\d+/i;
-
-      if (limitRe.test(q)) {
-        // Replace existing LIMIT value
-        q = q.replace(/\bLIMIT\s+\d+/i, 'LIMIT ' + String(n));
-      } else if (offsetRe.test(q)) {
-        // If OFFSET exists, insert LIMIT before OFFSET
-        q = q.replace(offsetRe, 'LIMIT ' + String(n) + ' $&');
+    const runBtn = els.run;
+    if (runBtn) {
+      if (status === 'progress') {
+        try { runBtn.disabled = true; } catch (_) {}
+        try { runBtn.setAttribute('aria-busy', 'true'); } catch (_) {}
       } else {
-        // Append LIMIT at end
-        q = q + ' LIMIT ' + String(n);
+        try { runBtn.disabled = false; } catch (_) {}
+        try { runBtn.removeAttribute('aria-busy'); } catch (_) {}
       }
+    }
 
-      if (hasSemicolon) q = q + ';';
-      // Apply the modified query back to the editor but preserve caret position roughly at end
-      try {
-        editor.value = q;
-        // Dispatch input event so other listeners (validate/suggestions/sync) run
-        try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
-        editor.focus();
-        const pos = editor.value.length;
-        try { editor.setSelectionRange(pos, pos); } catch {}
-      } catch (e) { /* ignore editor update errors */ }
-    } catch (e) { /* ignore editor sync errors */ }
-  } catch (e) { console.warn && console.warn('applyLimitFromDropdown error', e); }
+    const results = els.results;
+    if (results) {
+      if (status === 'progress') {
+        try { results.setAttribute('aria-busy', 'true'); } catch (_) {}
+      } else {
+        try { results.removeAttribute('aria-busy'); } catch (_) {}
+      }
+    }
+  } catch (e) { /* ignore status update errors */ }
 }
 
-async function renderSoqlResults(records, totalSize){
+function clearResults(message = 'Running query...') {
   try {
     if (!els || !els.results) return;
-    els.results.innerHTML = '';
-    const container = document.createElement('div');
-    container.className = 'soql-results-container';
-
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    const appliedLimit = (els && els.limit && els.limit.getAttribute) ? els.limit.getAttribute('data-applied') : null;
-    const info = document.createElement('span');
-    const shown = Math.min(records.length, totalSize);
-    info.textContent = appliedLimit ? `Showing ${shown} of ${totalSize} records (display limit: ${appliedLimit})` : `Showing ${shown} of ${totalSize} records`;
-    info.style.marginRight = '8px';
-    actions.appendChild(info);
-
-    const copyJsonBtn = document.createElement('button');
-    copyJsonBtn.type = 'button';
-    copyJsonBtn.textContent = 'Copy JSON';
-    copyJsonBtn.addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(JSON.stringify(records, null, 2)); copyJsonBtn.textContent = 'Copied'; setTimeout(()=>copyJsonBtn.textContent='Copy JSON',1200); } catch (e) { console.warn('copy failed', e); }
-    });
-    actions.appendChild(copyJsonBtn);
-
-    const downloadCsvBtn = document.createElement('button');
-    downloadCsvBtn.type = 'button';
-    downloadCsvBtn.textContent = 'Download CSV';
-    actions.appendChild(downloadCsvBtn);
-
-    const downloadXlsBtn = document.createElement('button');
-    downloadXlsBtn.type = 'button';
-    downloadXlsBtn.textContent = 'Download Excel';
-    actions.appendChild(downloadXlsBtn);
-
-    // Linkify IDs/URLs: always enabled (restore previous behavior). No checkbox in the UI.
-    const linkifyEnabled = true;
-
-    container.appendChild(actions);
-
-    // Columns are built via utility
-    const cols = buildColumnsUnion(records || []);
-
-    const csvContent = recordsToCsv(records, cols);
-    downloadCsvBtn.addEventListener('click', async () => {
-      try { downloadCsv(`soql-results-${Date.now()}.csv`, csvContent); } catch (e) { console.warn('download csv failed', e); }
-    });
-
-    downloadXlsBtn.addEventListener('click', async () => {
-      try { downloadExcel(`soql-results-${Date.now()}.xls`, cols, records); } catch (e) { console.warn('download xls failed', e); }
-    });
-
-    // Wrap table in a dedicated wrapper for nicer styling (CSS handles scrolling, header stickiness, zebra rows)
-     const instanceBase = await getInstanceUrl().catch(()=>null);
-
-     // Ensure context menu wiring for clickable Ids is present
-     try { ensureIdContextMenuWired(); } catch {}
-
-     const tableWrap = document.createElement('div');
-     tableWrap.className = 'soql-table-wrap';
-
-     const table = document.createElement('table');
-     table.className = 'soql-results-table';
-     const thead = document.createElement('thead');
-     const thr = document.createElement('tr');
-     cols.forEach(c => { const th = document.createElement('th'); th.textContent = c; thr.appendChild(th); });
-     thead.appendChild(thr); table.appendChild(thead);
-
-     const tbody = document.createElement('tbody');
-     for (const r of (records || [])) {
-      const tr = document.createElement('tr');
-      for (const c of cols) {
-        const td = document.createElement('td');
-        const info = linkifyInfoForValue(r && r[c], instanceBase);
-        // If linkify produced an actual link (URL or SF id) and linking is enabled, render anchor
-        if (info.isLink && linkifyEnabled) {
-          const a = document.createElement('a');
-          a.href = info.href;
-          a.target = '_blank'; a.rel = 'noopener noreferrer';
-          a.textContent = info.text || '';
-          a.className = 'sf-id-link';
-          // If the link text itself is an SF Id, wire context menu to show ID actions (copy/open)
-          try {
-            const idRe = /^[a-zA-Z0-9]{15,18}$/;
-            const txt = String(info.text || '');
-            const idMatch = idRe.test(txt) ? txt : null;
-            if (idMatch) {
-              a.addEventListener('contextmenu', (e) => { try { e.preventDefault(); showIdContextMenu(idMatch, e.clientX || 0, e.clientY || 0); } catch (err) { /* ignore */ } });
-              // Also handle middle-click or ctrl/meta-click behavior via normal anchor; no extra handling needed
-            }
-          } catch (e) { /* ignore */ }
-          td.appendChild(a);
-        } else {
-          // preserve long values while keeping cell layout manageable
-          const text = info.text || '';
-          // If text looks like a Salesforce Id and we have an instance base, make it a clickable id like other parts of the UI
-          try {
-            const idRe = /^[a-zA-Z0-9]{15,18}$/;
-            if (idRe.test(String(text || '')) && instanceBase) {
-              const idStr = String(text);
-              const a = document.createElement('a');
-              a.href = (instanceBase ? instanceBase.replace(/\/+$/, '') : '') + '/' + encodeURIComponent(idStr);
-              a.target = '_blank'; a.rel = 'noopener noreferrer';
-              a.textContent = idStr;
-              a.className = 'sf-id-link';
-              a.addEventListener('contextmenu', (e) => { try { e.preventDefault(); showIdContextMenu(idStr, e.clientX || 0, e.clientY || 0); } catch (err) { /* ignore */ } });
-              td.appendChild(a);
-            } else if (String(text).includes('\n') || String(text).length > 200) {
-              const pre = document.createElement('div');
-              pre.className = 'soql-cell-pre';
-              pre.textContent = text;
-              td.appendChild(pre);
-            } else {
-              td.textContent = text;
-            }
-          } catch (e) {
-            try { td.textContent = String(info.text || ''); } catch { td.textContent = ''; }
-          }
-        }
-        // add column metadata for targeted styling if needed
-        try { td.setAttribute('data-col', String(c)); } catch {}
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
+    const container = els.results;
+    container.innerHTML = '';
+    if (message) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'placeholder-note';
+      placeholder.textContent = String(message);
+      container.appendChild(placeholder);
     }
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    container.appendChild(tableWrap);
-    els.results.appendChild(container);
-   } catch (e) { console.warn && console.warn('renderSoqlResults failed', e); try { els.results.textContent = JSON.stringify(records, null, 2); } catch {} }
+  } catch (e) { /* ignore clear errors */ }
 }
+
+const VALIDATE_DEBOUNCE_MS = 140;
+let _validateTimer = null;
+let _rulesPromise = null;
+let _rulesLoadedOnce = false;
+
+function ensureRulesRequested() {
+  if (!_rulesPromise) {
+    _rulesPromise = loadRules()
+      .then((loaded) => {
+        if (loaded && typeof loaded === 'object') rules = loaded;
+        _rulesLoadedOnce = true;
+        return rules;
+      })
+      .catch((err) => {
+        try { console.warn && console.warn('soql_helper: failed to load rules', err); } catch (_) {}
+        _rulesLoadedOnce = true;
+        return rules;
+      })
+      .then((res) => {
+        try { scheduleValidation(); } catch (_) {}
+        return res;
+      });
+  }
+  return _rulesPromise;
+}
+
+function scheduleValidation() {
+  try {
+    if (_validateTimer) clearTimeout(_validateTimer);
+    _validateTimer = setTimeout(() => {
+      _validateTimer = null;
+      try { validateInline(); } catch (e) { try { console.warn && console.warn('validateInline error', e); } catch (_) {} }
+      try { validateAndRender().catch(()=>{}); } catch(e){}
+    }, VALIDATE_DEBOUNCE_MS);
+    ensureRulesRequested();
+  } catch (e) { /* ignore */ }
+}
+
+function validateInline() {
+  try {
+    if (!els || !els.editor) return;
+    ensureRulesRequested();
+    const query = typeof els.editor.value === 'string' ? els.editor.value : '';
+    const messages = [];
+
+    const validators = (rules && Array.isArray(rules.inlineValidators)) ? rules.inlineValidators : [];
+    for (const validator of validators) {
+      if (!validator) continue;
+      const message = validator.message ? String(validator.message) : '';
+      const pattern = validator.pattern;
+      if (!pattern || !message) continue;
+      let regex = validator._compiledRegex;
+      if (!regex) {
+        try {
+          const flags = typeof validator.flags === 'string' ? validator.flags : 'i';
+          regex = new RegExp(pattern, flags);
+          validator._compiledRegex = regex;
+        } catch (_) {
+          continue;
+        }
+      }
+      const matches = regex.test(query);
+      const negate = !!validator.negate;
+      const passed = negate ? !matches : matches;
+      if (!passed) {
+        const level = (validator.level || '').toString().toLowerCase();
+        if (level === 'warning') messages.push(`Warning: ${message}`);
+        else messages.push(message);
+      }
+    }
+
+    const fieldsMacroError = validateFieldsMacro(query);
+    if (fieldsMacroError) messages.push(fieldsMacroError);
+
+    renderInlineValidationMessages(messages);
+  } catch (e) {
+    try { console.warn && console.warn('validateInline top error', e); } catch (_) {}
+  }
+}
+
+function renderInlineValidationMessages(messages) {
+  try {
+    if (!els || !els.errors) return;
+    const el = els.errors;
+    const uniqueMessages = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(messages) ? messages : []) {
+      const text = String(raw || '').trim();
+      if (!text) continue;
+      if (seen.has(text)) continue;
+      seen.add(text);
+      uniqueMessages.push(text);
+    }
+
+    if (uniqueMessages.length === 0) {
+      el.innerHTML = '';
+      try { el.classList.remove('soql-error-list'); } catch (_) {}
+      if (_rulesLoadedOnce) {
+        try { el.classList.add('soql-valid'); } catch (_) {}
+      } else {
+        try { el.classList.remove('soql-valid'); } catch (_) {}
+      }
+      return;
+    }
+
+    try { el.classList.remove('soql-valid'); } catch (_) {}
+    try { el.classList.add('soql-error-list'); } catch (_) {}
+    const lis = uniqueMessages.map((msg) => `<li>${escapeHtml(msg)}</li>`).join('');
+    el.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
+  } catch (e) { /* ignore rendering errors */ }
+}
+
+// NOTE: removed duplicate/malformed escapeHtml block here (original caused syntax errors). The canonical escapeHtml is defined later in this file.
+
+ensureRulesRequested();
 
 // Initialization: populate `els` and wire DOM handlers. Also expose an ensureInitOnce function
 // so popup fallback can call into the real helper and clean up its listeners.
@@ -1181,12 +1030,6 @@ async function loadValidator() {
   }
 }
 
-function escapeHtml(s) {
-  try {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  } catch (e) { return String(s); }
-}
-
 function renderValidatorAreas(messages) {
   try {
     // Deduplicate and sanitize messages while preserving order
@@ -1195,7 +1038,7 @@ function renderValidatorAreas(messages) {
     for (const m of (messages || [])) {
       try {
         const s = typeof m === 'string' ? m : JSON.stringify(m);
-        const trimmed = s.trim();
+        const trimmed = (s || '').toString().trim();
         if (!trimmed) continue;
         if (seen.has(trimmed)) continue;
         seen.add(trimmed);
@@ -1209,11 +1052,11 @@ function renderValidatorAreas(messages) {
         const el = els.errors;
         if (!out || out.length === 0) {
           el.innerHTML = '';
-          el.classList.remove('soql-error-list');
-          el.classList.remove('soql-valid');
+          try { el.classList.remove('soql-error-list'); } catch (_) {}
+          try { el.classList.remove('soql-valid'); } catch (_) {}
         } else {
-          el.classList.remove('soql-valid');
-          el.classList.add('soql-error-list');
+          try { el.classList.remove('soql-valid'); } catch (_) {}
+          try { el.classList.add('soql-error-list'); } catch (_) {}
           const lis = out.map(m => `<li>${escapeHtml(m)}</li>`).join('\n');
           el.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
         }
@@ -1224,94 +1067,109 @@ function renderValidatorAreas(messages) {
     try {
       const topEl = document.getElementById('soql-validator-top');
       if (topEl) {
+        // Clear previous content and classes
+        try { topEl.innerHTML = ''; } catch(e){}
+        try { topEl.classList.remove('soql-error-list'); topEl.classList.remove('soql-valid'); } catch(e){}
+
         if (!out || out.length === 0) {
-          topEl.innerHTML = '';
-          topEl.classList.remove('soql-error-list');
-          topEl.classList.remove('soql-valid');
+          // No messages → show a small positive indicator and green highlight on editor
+          try { topEl.classList.add('soql-valid'); } catch(e){}
+          try { topEl.textContent = 'No validation issues'; } catch(e){}
+          try {
+            if (els && els.editor && els.editor.style) {
+              els.editor.style.border = '1px solid #4CAF50';
+              els.editor.style.boxShadow = '0 0 8px rgba(76,175,80,0.25)';
+              try { els.editor.setAttribute('data-validator-status','valid'); } catch(e){}
+            }
+          } catch (e) { /* ignore styling errors */ }
         } else {
-          topEl.classList.remove('soql-valid');
-          topEl.classList.add('soql-error-list');
-          const lis = out.map(m => `<li>${escapeHtml(m)}</li>`).join('\n');
-          topEl.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
+          // We have messages → render a summary with a togglable details list and apply red styling to the editor
+          try { topEl.classList.add('soql-error-list'); } catch(e){}
+          try {
+            if (els && els.editor && els.editor.style) {
+              els.editor.style.border = '2px solid #f44336';
+              els.editor.style.boxShadow = '0 0 10px rgba(244,67,54,0.28)';
+              try { els.editor.setAttribute('data-validator-status','error'); } catch(e){}
+            }
+          } catch (e) { /* ignore styling errors */ }
+
+          try {
+            const summary = document.createElement('div');
+            summary.className = 'soql-validator-summary';
+            summary.style.display = 'flex';
+            summary.style.alignItems = 'center';
+            summary.style.justifyContent = 'space-between';
+            summary.style.gap = '8px';
+            summary.style.marginBottom = '6px';
+            summary.style.fontWeight = '600';
+            summary.style.color = '#b00020';
+            summary.textContent = `${out.length} validation ${out.length === 1 ? 'issue' : 'issues'} found`;
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = 'Show details';
+            btn.style.marginLeft = '8px';
+            btn.style.cursor = 'pointer';
+
+            const details = document.createElement('div');
+            details.className = 'soql-validator-details';
+            details.style.display = 'none';
+            details.style.marginTop = '6px';
+
+            const ul = document.createElement('ul');
+            ul.className = 'soql-messages';
+            ul.style.margin = '0';
+            ul.style.paddingLeft = '18px';
+
+            for (const m of out) {
+              try {
+                const li = document.createElement('li');
+                li.innerHTML = escapeHtml(m);
+                ul.appendChild(li);
+              } catch (e) { /* ignore individual message errors */ }
+            }
+            details.appendChild(ul);
+
+            btn.addEventListener('click', () => {
+              try {
+                if (details.style.display === 'none') { details.style.display = ''; btn.textContent = 'Hide details'; }
+                else { details.style.display = 'none'; btn.textContent = 'Show details'; }
+              } catch (e) { /* ignore toggle errors */ }
+            });
+
+            // Place button at the end of the summary
+            try { summary.appendChild(btn); } catch(e){}
+            try { topEl.appendChild(summary); topEl.appendChild(details); } catch(e){}
+          } catch (e) { try { topEl.innerHTML = `<ul class="soql-messages">${out.map(m=>`<li>${escapeHtml(m)}</li>`).join('\n')}</ul>`; } catch(e){} }
         }
       }
-    } catch (e) { /* ignore */ }
-  } catch (e) { /* ignore */ }
-}
-
-function validateInline() {
-  try {
-    if (!els || !els.editor) return;
-    const q = String(els.editor.value || '');
-    const msgs = [];
-
-    // Quick: FIELDS() macro guard from utils
-    try {
-      const fm = validateFieldsMacro(q);
-      if (fm) msgs.push(fm);
-    } catch (e) { /* ignore field-macro errors */ }
-
-    // Load rules in background if not already loaded so future inline validators run
-    try { if (!rules || Object.keys(rules).length === 0) { loadRules().catch(() => {}); } } catch (e) {}
-
-    // Run lightweight inline validators from rules.inlineValidators (if present)
-    try {
-      const inline = (rules && Array.isArray(rules.inlineValidators)) ? rules.inlineValidators : [];
-      for (const v of inline) {
-        try {
-          const pattern = v && v.pattern ? String(v.pattern) : null;
-          if (!pattern) continue;
-          const negate = !!v.negate;
-          let re = null;
-          try { re = new RegExp(pattern, 'i'); } catch (e) { re = null; }
-          const matches = re ? re.test(q) : false;
-          // If negate=false then message is shown when pattern DOES NOT match
-          // If negate=true then message is shown when pattern DOES match
-          const shouldReport = (!negate && !matches) || (negate && matches);
-          if (shouldReport) {
-            const m = v.message || v.msg || v.id || 'Validation failed';
-            msgs.push(String(m));
-          }
-        } catch (e) { /* ignore per-validator */ }
-      }
-    } catch (e) { /* ignore */ }
-
-    // Deduplicate and sanitize messages before rendering
-    try { renderValidatorAreas(msgs); } catch (e) { /* ignore */ }
-
-    // Also schedule full async validation (which may show richer messages) shortly
-    try { scheduleValidation(); } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore top-level rendering errors */ }
   } catch (e) { /* swallow */ }
 }
 
+// Semantic validator runner: load validator module, run it and render results via renderValidatorAreas
 async function validateAndRender() {
   try {
+    const mod = await loadValidator().catch(() => null);
+    if (!mod) return renderValidatorAreas([]);
     if (!els || !els.editor) return;
-    const q = els.editor.value || '';
+    const q = String(els.editor.value || '');
 
-    const mod = await loadValidator();
-    if (!mod || typeof mod.validateSoql !== 'function') {
-      renderValidatorAreas([`Failed to load validator module`]);
-      return;
-    }
-
-    // Provide a best-effort describe when Account is selected and query mentions Account
+    // Best-effort describe: allow popup demo data if provided
     let describe = null;
     try {
       const parts = (typeof mod.parseQueryParts === 'function') ? mod.parseQueryParts(q) : null;
       const obj = (els.obj && els.obj.value) ? String(els.obj.value).trim() : '';
       if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
-        // Attempt to use demo describe from popup fallback if available
         try { if (typeof window !== 'undefined' && window.demoAccountDescribe) describe = window.demoAccountDescribe; } catch(e){}
-        // Otherwise, leave describe null (validator may still run)
       }
-    } catch(e){}
+    } catch (e) { /* ignore describe heuristics */ }
 
     try {
       const res = mod.validateSoql(q, describe) || {};
       const rawMsgs = Array.isArray(res.messages) ? res.messages.slice() : [];
       const describeMsgRe = /^Failed to retrieve describe for\s+'?.+?'?$/i;
-      // Filter out describe-failure noise and the specific 'SELECT list is empty' message which conflicts with suggester
+      // Filter out noisy describe-failure messages and a specific message that conflicts with suggester
       const nonDescribeMsgs = rawMsgs.filter(m => !describeMsgRe.test(String(m || '')));
       const filteredMsgs = nonDescribeMsgs.filter(m => !/^\s*SELECT list is empty\s*$/i.test(String(m || '')));
       renderValidatorAreas(filteredMsgs);
@@ -1321,138 +1179,16 @@ async function validateAndRender() {
   } catch (e) { /* ignore top-level validation errors */ }
 }
 
+// Update scheduleValidation to run both rule-backed quick checks and the heavier semantic validator
 function scheduleValidation() {
   try {
-    if (_validationDebounceTimer) clearTimeout(_validationDebounceTimer);
-    _validationDebounceTimer = setTimeout(() => { try { validateAndRender().catch(()=>{}); } catch(_){} }, VALIDATION_DEBOUNCE_MS);
+    if (_validateTimer) clearTimeout(_validateTimer);
+    _validateTimer = setTimeout(() => {
+      _validateTimer = null;
+      try { validateInline(); } catch (e) { try { console.warn && console.warn('validateInline error', e); } catch (_) {} }
+      try { validateAndRender().catch(()=>{}); } catch(e){}
+    }, VALIDATE_DEBOUNCE_MS);
+    ensureRulesRequested();
   } catch (e) { /* ignore */ }
 }
 
-function clearResults() {
-  try {
-    if (els && els.results) {
-      try { els.results.innerHTML = ''; } catch(e){}
-      try { els.results.textContent = ''; } catch(e){}
-      try { els.results.removeAttribute('data-status'); } catch(e){}
-    }
-    try { if (els && els.errors) { els.errors.textContent = ''; els.errors.innerHTML = ''; } } catch(e){}
-    try { const topEl = document.getElementById('soql-validator-top'); if (topEl) { topEl.textContent = ''; topEl.innerHTML = ''; } } catch(e){}
-    try { setEditorStatus(''); } catch(e){}
-  } catch (e) { /* ignore */ }
-}
-
-// Editor <-> controls synchronization helpers
-let _syncDebounceTimer = null;
-const SYNC_DEBOUNCE_MS = 200;
-
-function parseObjectNameFromQuery(q) {
-  try {
-    if (!q || typeof q !== 'string') return null;
-    // Simple heuristic: find first top-level FROM <identifier>
-    // This will pick up subquery FROMs too, but it's acceptable for a best-effort sync.
-    const m = q.match(/\bFROM\s+([A-Za-z0-9_.]+)/i);
-    if (m && m[1]) return m[1];
-    return null;
-  } catch (e) { return null; }
-}
-
-function parseLimitFromQuery(q) {
-  try {
-    if (!q || typeof q !== 'string') return null;
-    const m = q.match(/\bLIMIT\s+(\d+)/i);
-    if (m && m[1]) return Number(m[1]);
-    return null;
-  } catch (e) { return null; }
-}
-
-function setSelectValueIgnoreCase(select, value) {
-  try {
-    if (!select || !value) return false;
-    const v = String(value);
-    // Try exact first
-    for (const opt of Array.from(select.options || [])) {
-      try { if (opt.value === v) { select.value = v; return true; } } catch(e){}
-    }
-    // Fallback: case-insensitive match
-    for (const opt of Array.from(select.options || [])) {
-      try { if (String(opt.value).toLowerCase() === v.toLowerCase()) { select.value = opt.value; return true; } } catch(e){}
-    }
-    return false;
-  } catch (e) { return false; }
-}
-
-function syncEditorControls(force = false) {
-  try {
-    if (!els || !els.editor) return;
-    const q = String(els.editor.value || '');
-    const objName = parseObjectNameFromQuery(q);
-    const limitVal = parseLimitFromQuery(q);
-
-    // Sync object select
-    try {
-      if (els.obj && objName) {
-        const changed = setSelectValueIgnoreCase(els.obj, objName);
-        if (changed) {
-          try { const key = isToolingModeEnabled() ? 'tooling' : 'standard'; _lastSelectedObjectByEndpoint[key] = String(els.obj.value || ''); } catch(e){}
-        }
-      }
-    } catch (e) {}
-
-    // Sync limit control
-    try {
-      if (els && els.limit) {
-        if (Number.isFinite(limitVal) && limitVal > 0) {
-          try { els.limit.value = String(limitVal); } catch(e){}
-          try { els.limit.setAttribute('data-applied', String(limitVal)); } catch(e){}
-        } else {
-          // No explicit limit in query -> clear applied data attribute but don't clear user's typed value
-          try { els.limit.removeAttribute('data-applied'); } catch(e){}
-        }
-      }
-    } catch (e) {}
-
-  } catch (e) { /* ignore */ }
-}
-
-function scheduleSyncFromEditor(force = false) {
-  try {
-    if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-    if (force) {
-      try { syncEditorControls(true); } catch(e){}
-      return;
-    }
-    _syncDebounceTimer = setTimeout(() => { try { syncEditorControls(false); } catch(e){} }, SYNC_DEBOUNCE_MS);
-  } catch (e) { /* ignore */ }
-}
-
-function replaceFromObjectInEditor(newName) {
-  try {
-    if (!els || !els.editor) return false;
-    const q = String(els.editor.value || '');
-    if (!/\bfrom\b/i.test(q)) return false;
-    // Replace the first occurrence of FROM <identifier> with FROM <newName>
-    const replaced = q.replace(/(\bFROM\s+)([A-Za-z0-9_.]+)/i, function(_, p1) {
-      return p1 + newName;
-    });
-    if (replaced !== q) {
-      try {
-        els.editor.value = replaced;
-        // Dispatch input event so other listeners react
-        try { els.editor.dispatchEvent(new Event('input', { bubbles: true })); } catch(e){}
-      } catch(e){}
-      return true;
-    }
-    return false;
-  } catch (e) { return false; }
-}
-
-// Initialization: load persisted state and then rules, to avoid flicker
-(async function initPersistedStateAndRules() {
-  try {
-    // Load persisted last-selected objects (if any)
-    await loadPersistedSelectedObjects();
-
-    // Then load rules (which may depend on persisted state for initial suggestions)
-    await loadRules();
-  } catch (e) { /* ignore */ }
-})();
