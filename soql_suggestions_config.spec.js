@@ -191,4 +191,26 @@ describe("soql_suggestions_engine + config integration (smoke tests)", () => {
         );
         expect(hasWhereHint).toBe(true);
     });
+    test("derives object describe from query when context omits object", async () => {
+        const calls = [];
+        const mockProvider = {
+            async describeObject(name) {
+                calls.push(name);
+                return [
+                    { name: "Id", type: "id" },
+                    { name: "Name", type: "string" },
+                ];
+            },
+        };
+
+        const res = await engine({
+            query: "SELECT Name FROM Account ",
+            context: {},
+            config,
+            describeProvider: mockProvider,
+        });
+
+        expect(Array.isArray(res)).toBe(true);
+        expect(calls).toEqual(["Account"]);
+    });
 });

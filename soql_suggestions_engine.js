@@ -38,6 +38,23 @@ export function detectPhase(query) {
   return 'IDLE';
 }
 
+function inferObjectFromQuery(query) {
+    try {
+        if (!query) return null;
+        const m = String(query).match(/\bFROM\s+([A-Za-z_][\w.]*)/i);
+        if (!m) return null;
+        let name = (m[1] || '').trim();
+        if (!name) return null;
+        // Trim trailing punctuation/aliases and reduce relationship notation to the base object
+        name = name.replace(/[;,]$/, '');
+        if (name.includes('.')) name = name.split('.')[0];
+        if (!/^[A-Za-z_][\w]*$/.test(name)) return null;
+        return name;
+    } catch (e) {
+        return null;
+    }
+}
+
 export function buildSessionContext(editorState, policyDefaults) {
   const defaults = policyDefaults && policyDefaults.sessionContextDefaults ? policyDefaults.sessionContextDefaults : {
     isActive: true,
@@ -517,7 +534,9 @@ export async function generateSuggestions(query, describe, editorState, rulesArr
 // Adapter helpers to satisfy the spec's expected API
 async function buildDescribeFromProvider(describeProvider, objectApiName) {
   if (!describeProvider) return null;
-  // If caller already passed a describe-shaped object
+    if (!objectApiName) return null;
+
+    // If caller already passed a describe-shaped object
   if (Array.isArray(describeProvider.fields)) return describeProvider;
   // If provider exposes describeObject(objectApiName)
   if (typeof describeProvider.describeObject === 'function') {
@@ -546,7 +565,7 @@ async function buildDescribeFromProvider(describeProvider, objectApiName) {
 export async function suggest(query, baseCtx, describeProvider, CONFIG) {
   const ctx = baseCtx || {};
   const config = CONFIG || {};
-  const objectName = ctx.object || null;
+  const objectName = ctx.object || inferObjectFromQuery(query) || null;
   const describe = await buildDescribeFromProvider(describeProvider, objectName);
   // Tests and some callers expect procedural fallbacks even when a policy sets declarativeOnly.
   const policy = Object.assign({}, config);
@@ -557,7 +576,7 @@ export async function suggest(query, baseCtx, describeProvider, CONFIG) {
 export async function getSuggestions({ query, context, config, describeProvider }) {
   const ctx = context || {};
   const cfg = config || {};
-  const objectName = ctx.object || null;
+  const objectName = ctx.object || inferObjectFromQuery(query) || null;
   const describe = await buildDescribeFromProvider(describeProvider, objectName);
   const policy = Object.assign({}, cfg);
   if (policy.declarativeOnly) policy.declarativeOnly = false;
