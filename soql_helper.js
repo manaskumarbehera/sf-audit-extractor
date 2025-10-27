@@ -42,7 +42,13 @@
             if (!resp || !resp.success) { resolve([]); return; }
             const objs = Array.isArray(resp.objects) ? resp.objects : [];
             const names = objs
-              .filter(o => o && o.queryable === true)
+                .filter((o) => {
+                    if (!o) return false;
+                    const val = o.queryable;
+                    if (typeof val === 'boolean') return val;
+                    if (typeof val === 'string') return val.toLowerCase() === 'true';
+                    return true;
+                })
               .map(o => o?.name || o?.label || '')
               .filter(Boolean)
               .sort((a,b) => a.localeCompare(b));
