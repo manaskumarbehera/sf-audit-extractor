@@ -620,10 +620,9 @@ async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
     const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
     return list.map(s => {
         const rawQueryable = s?.queryable;
-        let queryable;
-        if (typeof rawQueryable === 'boolean') queryable = rawQueryable;
+        let queryable = false;
+        if (typeof rawQueryable === 'boolean') queryable = rawQueryable === true;
         else if (typeof rawQueryable === 'string') queryable = rawQueryable.toLowerCase() === 'true';
-        else queryable = true; // default to true if omitted by the endpoint
         return ({
             name: s?.name || s?.keyPrefix || '',
             label: s?.label || s?.name || s?.keyPrefix || '',
