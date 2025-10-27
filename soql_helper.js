@@ -44,6 +44,7 @@
             const names = objs
                 .filter((o) => {
                     if (!o) return false;
+                    if (tooling) return true;
                     const val = o.queryable;
                     if (typeof val === 'boolean') return val;
                     if (typeof val === 'string') return val.toLowerCase() === 'true';
