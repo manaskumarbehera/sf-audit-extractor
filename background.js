@@ -618,13 +618,20 @@ async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
     }
     const data = await res.json();
     const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
-    return list.map(s => ({
-        name: s?.name || s?.keyPrefix || '',
-        label: s?.label || s?.name || s?.keyPrefix || '',
-        custom: !!s?.custom,
-        keyPrefix: s?.keyPrefix || null,
-        queryable: (typeof s?.queryable === 'boolean') ? (s.queryable === true) : false
-    }));
+    return list.map(s => {
+        const rawQueryable = s?.queryable;
+        let queryable;
+        if (typeof rawQueryable === 'boolean') queryable = rawQueryable;
+        else if (typeof rawQueryable === 'string') queryable = rawQueryable.toLowerCase() === 'true';
+        else queryable = true; // default to true if omitted by the endpoint
+        return ({
+            name: s?.name || s?.keyPrefix || '',
+            label: s?.label || s?.name || s?.keyPrefix || '',
+            custom: !!s?.custom,
+            keyPrefix: s?.keyPrefix || null,
+            queryable
+        });
+    });
 }
 
 async function describeSObject(instanceUrl, sessionId, name, useTooling = false) {
