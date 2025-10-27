@@ -369,16 +369,14 @@
         const allNames = Array.from(buttons).map(b => b.dataset.tab);
         const rawHash = (location.hash || '').replace('#','').toLowerCase();
 
-        // restore last tab or default to 'soql' if available
+        // restore last tab or default to first available
         (async () => {
             let initial = null;
             try {
                 const saved = await chrome.storage?.local?.get?.({ lastTab: '' });
                 if (saved && saved.lastTab && allNames.includes(saved.lastTab)) initial = saved.lastTab;
             } catch {}
-            if (!initial) initial = allNames.includes(rawHash)
-                ? rawHash
-                : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames[0] || 'sf'));
+            if (!initial) initial = allNames.includes(rawHash) ? rawHash : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames[0] || 'sf'));
             showTab(initial);
         })();
 

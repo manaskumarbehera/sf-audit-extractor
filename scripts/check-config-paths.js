@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
-const specPath = path.join(process.cwd(), 'soql_suggestions_config.spec.js');
-const specDir = path.dirname(specPath);
-const candidates = [
-  path.join(specDir, 'soql_suggestions_config.json'),
-  path.join(specDir, '..', 'soql_suggestions_config.json'),
-  path.join(process.cwd(), 'soql_suggestions_config.json'),
-];
-console.log('specPath:', specPath);
-console.log('specDir:', specDir);
+
+const rulesDir = path.join(process.cwd(), 'rules');
+const candidates = [];
+try {
+  const files = fs.readdirSync(rulesDir);
+  for (const f of files) {
+    if (f.toLowerCase().endsWith('.json')) candidates.push(path.join(rulesDir, f));
+  }
+} catch (e) {
+  // ignore
+}
+console.log('rulesDir:', rulesDir);
 for (const p of candidates) {
   try {
     const exists = fs.existsSync(p);
@@ -23,4 +26,3 @@ for (const p of candidates) {
     console.error('error for', p, e.message);
   }
 }
-

@@ -1,7 +1,7 @@
 {
   "name": "sf-audit-extractor",
   "version": "1.0.0",
-  "description": "Salesforce SOQL Builder / Audit Extractor Chrome Extension",
+  "description": "Salesforce Audit Extractor Chrome Extension",
   "main": "background.js",
   "scripts": {
     "test": "jest --runInBand --detectOpenHandles",
@@ -11,7 +11,6 @@
   },
   "keywords": [
     "salesforce",
-    "soql",
     "chrome-extension",
     "jest",
     "testing"
