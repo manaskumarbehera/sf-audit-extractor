@@ -1,7 +1,7 @@
-const SALESFORCE_SUFFIXES = ['salesforce.com', 'force.com'];
-const API_VERSION = 'v65.0';
+import { SALESFORCE_SUFFIXES, DEFAULT_API_VERSION } from './constants.js';
 
 let platformWindowId = null;
+let appWindowId = null;
 let lastInstanceUrl = null;
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -21,18 +21,26 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(async () => {
     try {
-        const { platformPinned } = await chrome.storage.local.get({ platformPinned: false });
+        const { platformPinned, appPoppedOut } = await chrome.storage.local.get({ platformPinned: false, appPoppedOut: false });
         if (platformPinned) {
             await openPlatformWindow();
         }
+        if (appPoppedOut) {
+            await openAppWindow();
+        }
     } catch (e) {
-        console.warn('onStartup pin restore failed', e);
+        console.warn('onStartup restore failed', e);
     }
 });
 
 chrome.windows.onRemoved.addListener((winId) => {
     if (platformWindowId && winId === platformWindowId) {
         platformWindowId = null;
+        try { chrome.storage.local.set({ platformPinned: false }); } catch {}
+    }
+    if (appWindowId && winId === appWindowId) {
+        appWindowId = null;
+        try { chrome.storage.local.set({ appPoppedOut: false }); } catch {}
     }
 });
 
@@ -42,12 +50,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     chrome.action.setBadgeText({ tabId, text: isSF ? 'SF' : '' });
     if (isSF) chrome.action.setBadgeBackgroundColor({ tabId, color: '#00A1E0' });
 });
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.action === 'FETCH_ORG_NAME') {
         (async () => {
             try {
                 const soql = 'SELECT+Name+FROM+Organization+LIMIT+1';
-                const url = `${msg.instanceUrl}/services/data/v56.0/query?q=${soql}`;
+                const v = await getApiVersion();
+                const url = `${msg.instanceUrl}/services/data/${v}/query?q=${soql}`;
                 const res = await fetch(url, {
                     method: 'GET',
                     headers: {
@@ -68,11 +78,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 sendResponse({ success: false, error: String(err) });
             }
         })();
-        return true; // keep message channel open for async sendResponse
+        return true;
     }
 });
 
-// Handle general actions and Platform Events pinning
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
         try {
@@ -111,9 +120,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 }
                 return { success: true, pinned: next, windowId: platformWindowId };
             }
+            if (is('APP_POP_GET')) {
+                const popped = !!appWindowId;
+                return { success: true, popped, windowId: appWindowId };
+            }
+            if (is('APP_POP_SET')) {
+                const next = !!msg?.popped;
+                await chrome.storage.local.set({ appPoppedOut: next });
+                if (next) {
+                    await openAppWindow();
+                } else if (appWindowId) {
+                    try { await chrome.windows.remove(appWindowId); } catch {}
+                    appWindowId = null;
+                }
+                return { success: true, popped: !!appWindowId, windowId: appWindowId };
+            }
+            if (is('APP_POP_TOGGLE')) {
+                const { appPoppedOut } = await chrome.storage.local.get({ appPoppedOut: false });
+                const next = !appPoppedOut;
+                await chrome.storage.local.set({ appPoppedOut: next });
+                if (next) {
+                    await openAppWindow();
+                } else if (appWindowId) {
+                    try { await chrome.windows.remove(appWindowId); } catch {}
+                    appWindowId = null;
+                }
+                return { success: true, popped: next, windowId: appWindowId };
+            }
 
             if (is('CONTENT_PING') || is('CONTENT_READY') || upper === 'CONTENTREADY') {
-                // keep track of last known instance URL for extension pages
                 try {
                     const url = sanitizeUrl(msg?.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);
                     const norm = normalizeApiBase(url);
@@ -142,7 +177,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
 
-                    // Accept sessionId passed from the caller (popup) as a hint. Fall back to cookie lookup if not provided.
                 let sessionId = msg?.sessionId || null;
                 if (!sessionId) {
                     const sess = await getSalesforceSession(instanceUrl);
@@ -169,7 +203,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 if (!instanceUrl) {
                     return { success: false, error: 'Instance URL not detected.' };
                 }
-                // Accept sessionId from caller when provided
                 let sessionId = msg?.sessionId || null;
                 if (!sessionId) {
                     const sess = await getSalesforceSession(instanceUrl);
@@ -183,10 +216,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, channels };
             }
 
-            //  SOQL Builder schema and run actions
             if (is('DESCRIBE_GLOBAL')) {
-                // Try several approaches to determine the instance origin: explicit param, sender tab, last known tab,
-                // an open Salesforce tab, or derive from cookies when available.
                 let rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 if (!rawUrl) {
                     const fromCookies = await findInstanceFromCookies();
@@ -194,7 +224,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 }
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                // allow provided sessionId to be used
                 let sessionId = msg?.sessionId || null;
                 if (!sessionId) {
                     const sess = await getSalesforceSession(instanceUrl);
@@ -211,7 +240,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
-                // allow provided sessionId to be used
                 let sessionId = msg?.sessionId || null;
                 if (!sessionId) {
                     const sess = await getSalesforceSession(instanceUrl);
@@ -222,7 +250,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     const describe = await describeSObject(instanceUrl, sessionId, name, msg.useTooling);
                     return describe ? { success: true, describe } : { success: false, error: 'Describe failed' };
                 } catch (e) {
-                    // Forward the underlying error message for better diagnostics (e.g., Unknown object 'X')
                     return { success: false, error: String(e) };
                 }
             }
@@ -279,7 +306,27 @@ async function openPlatformWindow() {
     }
 }
 
-// Helpers
+async function openAppWindow() {
+    try {
+        if (appWindowId) {
+            await chrome.windows.update(appWindowId, { focused: true });
+            return appWindowId;
+        }
+    } catch {
+        appWindowId = null;
+    }
+    const url = chrome.runtime.getURL('popup.html#standalone');
+    try {
+        const win = await chrome.windows.create({ url, type: 'popup', width: 1000, height: 760, focused: true });
+        appWindowId = win?.id || null;
+        return appWindowId;
+    } catch (e) {
+        console.warn('Failed to open App window', e);
+        appWindowId = null;
+        return null;
+    }
+}
+
 function isSalesforceUrl(url) {
     try {
         const u = new URL(url);
@@ -344,7 +391,6 @@ const cookies = {
     })
 };
 
-// New: attempt to derive a Salesforce origin from available cookies when no tab is present.
 async function findInstanceFromCookies() {
     try {
         const all = await cookies.getAll({});
@@ -452,7 +498,8 @@ async function fetchAuditTrail(instanceUrl, sessionId, opts = {}) {
     const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
 
     const records = [];
-    let url = `${base}/services/data/${API_VERSION}/query?q=${encodeURIComponent(soql)}`;
+    const v = await getApiVersion();
+    let url = `${base}/services/data/${v}/query?q=${encodeURIComponent(soql)}`;
     let guard = 0;
 
     while (url && records.length < max && guard < 50) {
@@ -481,9 +528,9 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
     if (!base || !/^https:\/\//i.test(base)) throw new Error('Invalid instance URL');
     const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
 
-    // Do NOT select Metadata in a multi-row query (it causes MALFORMED_QUERY)
     const soql = 'SELECT Id, DeveloperName, MasterLabel, NamespacePrefix FROM LightningMessageChannel ORDER BY DeveloperName';
-    const url = `${base}/services/data/${API_VERSION}/tooling/query?q=${encodeURIComponent(soql)}`;
+    const v = await getApiVersion();
+    const url = `${base}/services/data/${v}/tooling/query?q=${encodeURIComponent(soql)}`;
     const res = await fetch(url, { method: 'GET', headers, credentials: 'omit' });
     if (!res.ok) {
         const text = await res.text().catch(() => '');
@@ -525,8 +572,9 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
                 if (idx >= channels.length) break;
                 const id = channels[idx].Id;
                 try {
+                    const v = await getApiVersion();
                     const resp = await fetch(
-                        `${baseUrl}/services/data/${API_VERSION}/tooling/sobjects/LightningMessageChannel/${encodeURIComponent(id)}`,
+                        `${baseUrl}/services/data/${v}/tooling/sobjects/LightningMessageChannel/${encodeURIComponent(id)}`,
                         { method: 'GET', headers: hdrs, credentials: 'omit' }
                     );
                     if (resp.ok) {
@@ -547,14 +595,13 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
     }
 }
 
-// New helpers for SOQL Builder
 async function getApiVersion() {
     try {
         const { apiVersion } = await chrome.storage.local.get({ apiVersion: '65.0' });
         const v = String(apiVersion || '65.0');
         return v.startsWith('v') ? v : ('v' + v);
     } catch {
-        return API_VERSION; // fallback (already has leading 'v')
+        return DEFAULT_API_VERSION;
     }
 }
 

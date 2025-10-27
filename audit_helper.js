@@ -149,32 +149,6 @@
     }
   }
 
-  async function getInstanceUrl(){
-    try {
-      const s = opts.getSession?.() || null;
-      if (s && s.instanceUrl) return String(s.instanceUrl).replace(/\/+$/, '');
-    } catch {}
-    return await new Promise((resolve) => {
-      try {
-        chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, (resp) => {
-          if (chrome.runtime.lastError) { resolve(null); return; }
-          const url = resp?.instanceUrl || null;
-          resolve(url ? String(url).replace(/\/+$/, '') : null);
-        });
-      } catch { resolve(null); }
-    });
-  }
-
-  async function openRecordInNewTab(id){
-    try {
-      const base = await getInstanceUrl();
-      if (!base) { try { Utils.showToast('Salesforce URL not detected', 'error'); } catch {} return; }
-      const url = base + '/' + encodeURIComponent(String(id||''));
-      try { await chrome?.tabs?.create?.({ url }); }
-      catch { try { window.open(url, '_blank', 'noopener,noreferrer'); } catch {} }
-    } catch {}
-  }
-
   function attachHandlers(){
     if (dom.fetchBtn) dom.fetchBtn.addEventListener('click', handleFetch);
     if (dom.exportBtn) dom.exportBtn.addEventListener('click', handleExport);
@@ -187,7 +161,7 @@
         if (!id) return;
         e.stopPropagation();
         if (e.shiftKey) { try { await navigator.clipboard.writeText(id); Utils.showToast('Id copied', 'success'); } catch {} return; }
-        await openRecordInNewTab(id);
+        await Utils.openRecordInNewTab(id);
       }
     });
   }
@@ -214,14 +188,14 @@
   async function handleFetch() {
     try {
       await opts.refreshSessionFromTab();
-      // ignore result; rely on getSession()
     } catch {}
     const s = opts.getSession();
     if (!s || !s.isLoggedIn) { showError('Please ensure you are logged in to Salesforce'); return; }
     if (dom.fetchBtn) { dom.fetchBtn.disabled = true; dom.fetchBtn.innerHTML = '<span class="btn-icon">⏳</span>'; }
     if (dom.logs) dom.logs.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Fetching audit trail data...</p></div>';
     try {
-      chrome.runtime.sendMessage({ action: 'FETCH_AUDIT_TRAIL', url: s.instanceUrl, days: 180, limit: 2000 }, (response) => {
+      const payload = { action: 'FETCH_AUDIT_TRAIL', instanceUrl: s.instanceUrl, days: 180, limit: 2000 };
+      chrome.runtime.sendMessage(payload, (response) => {
         if (chrome.runtime.lastError) { showError('Failed to fetch data: ' + chrome.runtime.lastError.message); resetFetchButton(); return; }
         if (response && response.success) { processAuditData(response.data); enableControls(); state.fetched = true; }
         else { showError(response?.error || 'Failed to fetch audit trail data'); }

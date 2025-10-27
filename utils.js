@@ -51,12 +51,10 @@
       document.body.appendChild(a); a.click();
       a.remove(); URL.revokeObjectURL(url);
     } catch (e) {
-      // fallback: copy data to clipboard if available
       try { navigator.clipboard.writeText(String(data || '')); } catch {}
     }
   }
 
-  // Salesforce / Chrome helpers (centralized)
   async function findSalesforceTab(){
     try {
       const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
@@ -127,6 +125,36 @@
     } catch {}
   }
 
+  async function getApiVersionNumber(){
+    try {
+      const { apiVersion } = await chrome.storage?.local?.get?.({ apiVersion: '65.0' });
+      return String(apiVersion || '65.0');
+    } catch { return '65.0'; }
+  }
+
+  async function getApiVersionPath(){
+    const n = await getApiVersionNumber();
+    return n.startsWith('v') ? n : ('v' + n);
+  }
+
+  function getAccessToken(session){
+    if (!session) return null;
+    return (
+      session.accessToken ||
+      session.sessionId ||
+      session.sid ||
+      session.sessionToken ||
+      session.session_token ||
+      null
+    );
+  }
+
+  async function getSessionInfo(){
+    const resp = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+    return resp || null;
+  }
+
   window.Utils = { escapeHtml, sleep, fetchWithTimeout, svgPlus, svgMinus, showToast, download,
-    findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab, fallbackCopyText };
+    findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab, fallbackCopyText,
+    getApiVersionNumber, getApiVersionPath, getAccessToken, getSessionInfo };
 })();

@@ -1,10 +1,5 @@
 (function() {
     'use strict';
-
-    // Global fallback: ensure a `findPopupEditor` identifier exists even if
-    // the richer `soql_helper` module defers the popup-level fallback. This
-    // prevents ReferenceError when other code dispatches `soql-load` or calls
-    // helper functions before the local popup handler is initialized.
     try {
         if (typeof window !== 'undefined') {
             window.findPopupEditor = window.findPopupEditor || function() {
@@ -32,14 +27,46 @@
     const statusEl = document.getElementById('status');
     const statusText = statusEl ? statusEl.querySelector('.status-text') : null;
 
-    const pePinBtn = document.getElementById('pe-pin');
+    const appPopBtn = document.getElementById('app-pop');
     const apiVersionSel = document.getElementById('api-version');
 
     let auditFetched = false;
 
+    // Loader for settings helper so popup.js doesn't contain tab settings logic directly
+    async function loadSettingsHelper() {
+        if (window.SettingsHelper) return;
+        await new Promise((resolve) => {
+            try {
+                const s = document.createElement('script');
+                s.src = 'settings_helper.js';
+                s.async = false;
+                s.onload = () => resolve();
+                s.onerror = () => resolve();
+                document.head.appendChild(s);
+            } catch { resolve(); }
+        });
+    }
+
+    function ensureSettingsPanelMarkupExists() {
+        const pane = document.querySelector('.tab-pane[data-tab="settings"]');
+        if (!pane) return;
+        if (!pane.querySelector('#tab-settings-list')) {
+            pane.innerHTML = `
+                <div class="settings-group">
+                    <h4>Tab visibility</h4>
+                    <div class="settings-list" id="tab-settings-list"></div>
+                </div>
+            `;
+        }
+    }
+
     init();
 
     async function init() {
+        // Load Settings helper and inject flex CSS early to enable stretchable layout
+        await loadSettingsHelper();
+        try { window.SettingsHelper && window.SettingsHelper.injectFlexCss && window.SettingsHelper.injectFlexCss(); } catch {}
+
         const apiVersion = await loadAndBindApiVersion();
 
         await checkSalesforceConnection();
@@ -66,7 +93,7 @@
 
         await setupTabs();
 
-        attachPinHandlers();
+        attachAppPopHandlers();
     }
 
     async function loadAndBindApiVersion() {
@@ -126,31 +153,31 @@
         } catch { /* no-op */ }
     }
 
-    function attachPinHandlers() {
-        if (!pePinBtn) return;
-        pePinBtn.disabled = true;
-        chrome.runtime.sendMessage({ action: 'PLATFORM_PIN_GET' }, (resp) => {
+    function attachAppPopHandlers() {
+        if (!appPopBtn) return;
+        appPopBtn.disabled = true;
+        chrome.runtime.sendMessage({ action: 'APP_POP_GET' }, (resp) => {
             if (chrome.runtime.lastError) {
-                updatePinButton(false);
-                pePinBtn.disabled = false;
+                updateAppPopButton(false);
+                appPopBtn.disabled = false;
                 return;
             }
-            updatePinButton(resp && resp.success ? resp.pinned : false);
-            pePinBtn.disabled = false;
+            updateAppPopButton(resp && resp.success ? !!resp.popped : false);
+            appPopBtn.disabled = false;
         });
-        pePinBtn.addEventListener('click', () => {
-            if (pePinBtn.disabled) return;
-            pePinBtn.disabled = true;
-            chrome.runtime.sendMessage({ action: 'PLATFORM_PIN_TOGGLE' }, (resp) => {
+        appPopBtn.addEventListener('click', () => {
+            if (appPopBtn.disabled) return;
+            appPopBtn.disabled = true;
+            chrome.runtime.sendMessage({ action: 'APP_POP_TOGGLE' }, (resp) => {
                 if (!chrome.runtime.lastError && resp && resp.success) {
-                    updatePinButton(resp.pinned);
+                    updateAppPopButton(!!resp.popped);
                 }
-                pePinBtn.disabled = false;
+                appPopBtn.disabled = false;
             });
         });
     }
 
-    function svgPin() {
+    function svgPopOut() {
         const xmlns = 'http://www.w3.org/2000/svg';
         const svg = document.createElementNS(xmlns, 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
@@ -160,16 +187,18 @@
         svg.setAttribute('stroke-width', '2');
         svg.setAttribute('stroke-linecap', 'round');
         svg.setAttribute('stroke-linejoin', 'round');
-        const paths = ['M8 3h8', 'M10 3v6l-3 3v1h10v-1l-3-3V3', 'M12 13v8'];
-        paths.forEach(d => {
-            const p = document.createElementNS(xmlns, 'path');
-            p.setAttribute('d', d);
-            svg.appendChild(p);
-        });
+        const pathWin = document.createElementNS(xmlns, 'path');
+        pathWin.setAttribute('d', 'M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6');
+        const poly = document.createElementNS(xmlns, 'polyline');
+        poly.setAttribute('points', '15 3 21 3 21 9');
+        const line = document.createElementNS(xmlns, 'line');
+        line.setAttribute('x1', '10'); line.setAttribute('y1', '14');
+        line.setAttribute('x2', '21'); line.setAttribute('y2', '3');
+        svg.appendChild(pathWin); svg.appendChild(poly); svg.appendChild(line);
         return svg.outerHTML;
     }
 
-    function svgPinOff() {
+    function svgPopIn() {
         const xmlns = 'http://www.w3.org/2000/svg';
         const svg = document.createElementNS(xmlns, 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
@@ -179,55 +208,36 @@
         svg.setAttribute('stroke-width', '2');
         svg.setAttribute('stroke-linecap', 'round');
         svg.setAttribute('stroke-linejoin', 'round');
-        const paths = ['M8 3h8', 'M10 3v6l-3 3v1h10v-1l-3-3V3', 'M12 13v8', 'M4 4l16 16'];
-        paths.forEach(d => {
-            const p = document.createElementNS(xmlns, 'path');
-            p.setAttribute('d', d);
-            svg.appendChild(p);
-        });
+        const pathWin = document.createElementNS(xmlns, 'path');
+        pathWin.setAttribute('d', 'M19 7v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5');
+        const line = document.createElementNS(xmlns, 'line');
+        line.setAttribute('x1', '16'); line.setAttribute('y1', '8');
+        line.setAttribute('x2', '8');  line.setAttribute('y2', '16');
+        const poly = document.createElementNS(xmlns, 'polyline');
+        poly.setAttribute('points', '16 16 8 16 8 8');
+        svg.appendChild(pathWin); svg.appendChild(line); svg.appendChild(poly);
         return svg.outerHTML;
     }
 
-    function updatePinButton(pinned) {
-        if (!pePinBtn) return;
-        pePinBtn.classList.toggle('active', !!pinned);
-        pePinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-        pePinBtn.title = pinned ? 'Unpin Platform Events window' : 'Pin Platform Events window';
-        pePinBtn.setAttribute('aria-label', pePinBtn.title);
-        pePinBtn.innerHTML = pinned ? svgPinOff() : svgPin();
+    function updateAppPopButton(popped) {
+        if (!appPopBtn) return;
+        appPopBtn.classList.toggle('active', !!popped);
+        appPopBtn.setAttribute('aria-pressed', popped ? 'true' : 'false');
+        appPopBtn.title = popped ? 'Pop in window' : 'Pop out window';
+        appPopBtn.setAttribute('aria-label', appPopBtn.title);
+        appPopBtn.innerHTML = popped ? svgPopIn() : svgPopOut();
     }
 
     async function findSalesforceTab() {
-        const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
-        if (!Array.isArray(matches) || matches.length === 0) return null;
-        const current = await chrome.windows.getCurrent({ populate: true }).catch(() => null);
-        const currentWindowId = current?.id;
-        const activeInCurrent = matches.find(t => t.active && t.windowId === currentWindowId);
-        return activeInCurrent || matches[0] || null;
+        try { return await Utils.findSalesforceTab(); } catch { return null; }
     }
 
     async function sendMessageToSalesforceTab(message) {
-        const tab = await findSalesforceTab();
-        if (!tab?.id) return null;
-        return await new Promise((resolve) => {
-            try {
-                chrome.tabs.sendMessage(tab.id, message, (resp) => {
-                    if (chrome.runtime.lastError) { resolve(null); return; }
-                    resolve(resp || null);
-                });
-            } catch { resolve(null); }
-        });
+        try { return await Utils.sendMessageToSalesforceTab(message); } catch { return null; }
     }
 
     function getAccessToken() {
-        return (
-            sessionInfo?.accessToken ||
-            sessionInfo?.sessionId ||
-            sessionInfo?.sid ||
-            sessionInfo?.sessionToken ||
-            sessionInfo?.session_token ||
-            null
-        );
+        try { return Utils.getAccessToken(sessionInfo); } catch { return null; }
     }
 
     async function fetchOrgName(instanceUrl, accessToken, apiVersion) {
@@ -323,6 +333,81 @@
     }
 
     async function setupTabs() {
+        const H = window.SettingsHelper;
+
+        if (H) {
+            H.ensureSettingsTabExists();
+            ensureSettingsPanelMarkupExists();
+
+            const tabsContainer = document.querySelector('.tabs');
+            await applySavedTabOrder(tabsContainer);
+
+            const buttons = document.querySelectorAll('.tab-button');
+            const panes = document.querySelectorAll('.tab-pane');
+            const headerTitle = document.getElementById('header-title');
+
+            let currentVisibility = await H.applyTabVisibilityFromStorage(buttons, panes);
+            await H.buildSettingsPanel(async (updatedVis) => {
+                currentVisibility = updatedVis;
+                await H.applyTabVisibilityFromStorage(document.querySelectorAll('.tab-button'), document.querySelectorAll('.tab-pane'));
+                const active = document.querySelector('.tab-pane.active');
+                if (!active || active.hasAttribute('hidden')) {
+                    const first = H.firstVisibleTabName();
+                    if (first) showTab(first);
+                }
+            });
+
+            function showTab(name) {
+                const activated = H.showTab(name, currentVisibility, {
+                    headerTitle, panes, buttons,
+                    onActivated: (tabName) => {
+                        if (tabName === 'platform') {
+                            try { document.dispatchEvent(new CustomEvent('platform-load')); } catch {}
+                        }
+                        if (tabName === 'sf' && !auditFetched) {
+                            auditFetched = true;
+                            try { window.AuditHelper?.fetchNow?.(); } catch {}
+                        }
+                        if (tabName === 'lms') {
+                            try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
+                        }
+                    }
+                });
+                try { history.replaceState(null, '', `#${activated}`); } catch {}
+            }
+
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.addEventListener('click', () => showTab(btn.dataset.tab));
+            });
+
+            enableTabDragAndDrop(tabsContainer, () => {});
+
+            const allNames = Array.from(document.querySelectorAll('.tab-button')).map(b => b.dataset.tab);
+            const rawHash = (location.hash || '').replace('#', '').toLowerCase();
+
+            (async () => {
+                let initial = null;
+                try {
+                    const saved = await chrome.storage?.local?.get?.({ lastTab: '' });
+                    if (saved?.lastTab && allNames.includes(saved.lastTab) && currentVisibility?.[saved.lastTab]) {
+                        initial = saved.lastTab;
+                    }
+                } catch {}
+                if (!initial) {
+                    initial = (allNames.includes(rawHash) && currentVisibility?.[rawHash]) ? rawHash : (H.firstVisibleTabName() || 'sf');
+                }
+                showTab(initial);
+            })();
+
+            window.addEventListener('hashchange', () => {
+                const h = (location.hash || '').replace('#','').toLowerCase();
+                if (allNames.includes(h)) showTab(h);
+            });
+
+            return;
+        }
+
+        // Fallback to original behavior if helper failed to load
         const tabsContainer = document.querySelector('.tabs');
         await applySavedTabOrder(tabsContainer);
 
@@ -330,8 +415,16 @@
         const panes = document.querySelectorAll('.tab-pane');
         const headerTitle = document.getElementById('header-title');
 
-        function showTab(name) {
-            panes.forEach(p => (p.style.display = p.dataset.tab === name ? 'block' : 'none'));
+        function showTabSimple(name) {
+            panes.forEach(p => {
+                const isActive = p.dataset.tab === name;
+                p.classList.toggle('active', isActive);
+                if (isActive) {
+                    p.removeAttribute('hidden');
+                } else {
+                    p.setAttribute('hidden', '');
+                }
+            });
             buttons.forEach(b => {
                 const active = b.dataset.tab === name;
                 b.classList.toggle('active', active);
@@ -358,7 +451,7 @@
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const name = btn.dataset.tab;
-                showTab(name);
+                showTabSimple(name);
                 try { history.replaceState(null, '', `#${name}`); } catch {}
             });
         });
@@ -377,12 +470,12 @@
                 if (saved && saved.lastTab && allNames.includes(saved.lastTab)) initial = saved.lastTab;
             } catch {}
             if (!initial) initial = allNames.includes(rawHash) ? rawHash : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames[0] || 'sf'));
-            showTab(initial);
+            showTabSimple(initial);
         })();
 
         window.addEventListener('hashchange', () => {
             const h = (location.hash || '').replace('#','').toLowerCase();
-            if (allNames.includes(h)) showTab(h);
+            if (allNames.includes(h)) showTabSimple(h);
         });
     }
 

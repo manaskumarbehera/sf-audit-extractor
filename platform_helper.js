@@ -6,14 +6,12 @@
     platformEventsLoaded: false,
     peSubscriptions: new Set(),
     pePendingOps: new Set(),
-    // cometD
     cometdClientId: null,
     cometdBaseUrl: null,
     cometdState: 'disconnected',
     cometdAdvice: { timeout: 110000, interval: 0 },
     connectAbortController: null,
     connectLoopActive: false,
-    // log view
     peLogPaused: false,
     peLogAutoScrollEnabled: true,
   };
@@ -25,14 +23,10 @@
     apiVersion: '56.0'
   };
 
-  // DOM refs (lazily resolved in init)
   let dom = {};
 
   function getAccessToken() {
-    const s = opts.getSession();
-    return (
-      s?.accessToken || s?.sessionId || s?.sid || s?.sessionToken || s?.session_token || null
-    );
+    try { return Utils.getAccessToken(opts.getSession()); } catch { return null; }
   }
 
   function getCometdBase() {

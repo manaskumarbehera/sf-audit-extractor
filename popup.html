@@ -17,7 +17,8 @@ File: `popup.html` (replace body content with this)
                 <button class="tab-button active" role="tab" aria-selected="true" data-tab="sf">Audit Trails</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="platform">Platform Events</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="lms">Lightning Message Service</button>
-                <!-- Additional tabs (SOQL Builder removed) -->
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="soql">SOQL Query Builder</button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="graphql">GraphQL Query Builder</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="data">Data Explorer</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="settings">Settings</button>
                 <button class="tab-button" role="tab" aria-selected="false" data-tab="help">Help</button>
@@ -40,7 +41,7 @@ File: `popup.html` (replace body content with this)
                 <option value="61.0">61.0</option>
                 <option value="60.0">60.0</option>
             </select>
-            <button id="pe-pin" class="header-icon-btn" aria-label="Pin Platform Events window" title="Pin Platform Events window"></button>
+            <button id="app-pop" class="header-icon-btn" aria-label="Pop out window" title="Pop out window"></button>
         </div>
     </header>
 
@@ -101,7 +102,7 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
 
-        <div id="tab-platform" class="tab-pane" data-tab="platform" style="display: none;">
+        <div id="tab-platform" class="tab-pane" data-tab="platform" hidden>
             <div class="platform-header">
                 <div class="platform-left">
                     <div class="platform-controls">
@@ -154,7 +155,7 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
 
-        <div id="tab-lms" class="tab-pane" data-tab="lms" style="display: none;">
+        <div id="tab-lms" class="tab-pane" data-tab="lms" hidden>
             <div class="audit-header">
                 <div class="audit-left">
                     <div class="audit-controls">
@@ -187,8 +188,46 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
 
-        <!-- New generic panes for additional tabs -->
-        <div id="tab-data" class="tab-pane" data-tab="data" style="display: none;">
+        <div id="tab-soql" class="tab-pane" data-tab="soql" hidden>
+            <div class="filters" style="gap: 8px; align-items: center;">
+                <label class="filter-label" for="soql-tooling">Tooling API:</label>
+                <input type="checkbox" id="soql-tooling" aria-label="Use Tooling API">
+
+                <div id="soql-object-group" style="display: inline-flex; align-items: center; gap: 8px;">
+                    <label class="filter-label" for="soql-object">Object:</label>
+                    <select id="soql-object" aria-label="Select SObject">
+                        <option value="">Select an object</option>
+                    </select>
+                </div>
+
+                <button id="soql-run" class="icon-btn btn-sm" title="Run Query" aria-label="Run Query">
+                    <span aria-hidden="true">▶</span>
+                </button>
+                <button id="soql-clear" class="icon-btn btn-sm" title="Clear results" aria-label="Clear results">
+                    <span aria-hidden="true">🗑</span>
+                </button>
+            </div>
+
+            <div class="search-box">
+                <textarea id="soql-query" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 10" aria-label="SOQL query"></textarea>
+            </div>
+
+            <div id="soql-results" class="logs-container">
+                <div class="placeholder">
+                    <p>SOQL Query Builder</p>
+                    <p class="placeholder-note">Type a query and click Run. This UI is a stub; execution is not wired.</p>
+                </div>
+            </div>
+        </div>
+        <div id="tab-graphql" class="tab-pane" data-tab="graphql" hidden>
+            <div class="logs-container">
+                <div class="placeholder">
+                    <p>GraphQL Query Builder</p>
+                    <p class="placeholder-note">Coming soon. Create GraphQL queries for Salesforce APIs.</p>
+                </div>
+            </div>
+        </div>
+        <div id="tab-data" class="tab-pane" data-tab="data" hidden>
             <div class="logs-container">
                 <div class="placeholder">
                     <p>Data Explorer</p>
@@ -196,7 +235,7 @@ File: `popup.html` (replace body content with this)
                 </div>
             </div>
         </div>
-        <div id="tab-settings" class="tab-pane" data-tab="settings" style="display: none;">
+        <div id="tab-settings" class="tab-pane" data-tab="settings" hidden>
             <div class="logs-container">
                 <div class="placeholder">
                     <p>Settings</p>
@@ -204,7 +243,7 @@ File: `popup.html` (replace body content with this)
                 </div>
             </div>
         </div>
-        <div id="tab-help" class="tab-pane" data-tab="help" style="display: none;">
+        <div id="tab-help" class="tab-pane" data-tab="help" hidden>
             <div class="logs-container">
                 <div class="placeholder">
                     <p>Help</p>
@@ -212,7 +251,7 @@ File: `popup.html` (replace body content with this)
                 </div>
             </div>
         </div>
-        <div id="tab-about" class="tab-pane" data-tab="about" style="display: none;">
+        <div id="tab-about" class="tab-pane" data-tab="about" hidden>
             <div class="logs-container">
                 <div class="placeholder">
                     <p>About</p>
@@ -234,6 +273,7 @@ File: `popup.html` (replace body content with this)
 <script src="platform_helper.js"></script>
 <script src="lms_helper.js"></script>
 <script src="audit_helper.js"></script>
+<script src="soql_helper.js"></script>
 <script type="module" src="popup.js"></script>
 </body>
 </html>
