@@ -4,6 +4,7 @@
 
   let attached = false;
   const cleanup = [];
+  let guidanceCleanup = null;
 
   function on(el, evt, fn, opts) {
     if (!el) return;
@@ -41,7 +42,7 @@
             if (!resp || !resp.success) { resolve([]); return; }
             const objs = Array.isArray(resp.objects) ? resp.objects : [];
             const names = objs
-              .filter(o => (typeof o?.queryable === 'boolean' ? o.queryable : true))
+              .filter(o => o && o.queryable === true)
               .map(o => o?.name || o?.label || '')
               .filter(Boolean)
               .sort((a,b) => a.localeCompare(b));
@@ -62,7 +63,8 @@
     sel.appendChild(def);
 
     fetchDescribe(!!tooling).then((names) => {
-      if (!Array.isArray(names) || names.length === 0) {
+      const list = Array.isArray(names) ? names : [];
+      if (list.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
         opt.textContent = 'No objects loaded';
@@ -71,7 +73,7 @@
         return;
       }
       const frag = document.createDocumentFragment();
-      names.forEach(name => {
+      list.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name; opt.textContent = name; frag.appendChild(opt);
       });
@@ -98,9 +100,10 @@
       renderPlaceholder();
     }
 
-    if (toolingCb && objSel) {
+    if (toolingCb) {
       on(toolingCb, 'change', () => {
         clearUi();
+        applyObjectSelectorVisibility();
         reloadObjects(!!toolingCb.checked);
       });
     }
@@ -113,8 +116,17 @@
         renderPlaceholder();
       });
     }
+      if (window.SoqlGuidance?.init) {
+          try {
+              guidanceCleanup = window.SoqlGuidance.init({ root: document });
+              if (typeof guidanceCleanup === 'function') {
+                  const fn = guidanceCleanup;
+                  cleanup.push(() => { try { fn(); } catch {}; guidanceCleanup = null; });
+              }
+          } catch {}
+      }
 
-    if (runBtn && queryEl && results) {
+      if (runBtn && queryEl && results) {
       on(runBtn, 'click', () => {
         const q = (queryEl.value || '').trim();
         const tooling = !!document.getElementById('soql-tooling')?.checked;
@@ -190,6 +202,11 @@
   function detach() {
     cleanup.splice(0).forEach(fn => { try { fn(); } catch {} });
     attached = false;
+      if (typeof guidanceCleanup === 'function') {
+          try { guidanceCleanup(); } catch {}
+      }
+      guidanceCleanup = null;
+      try { window.SoqlGuidance?.detach?.(); } catch {}
   }
 
   window.SoqlHelper = { detach };

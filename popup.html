@@ -210,13 +210,17 @@ File: `popup.html` (replace body content with this)
 
             <div class="search-box">
                 <textarea id="soql-query" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 10" aria-label="SOQL query"></textarea>
+                <div id="soql-guidance" class="soql-guidance" aria-live="polite">
+                    <div class="soql-guidance-card">
+                        <div class="soql-guidance-card-title">Write a focused SOQL query</div>
+                        <div class="soql-guidance-card-message">Start by selecting a small field list and limit the records you pull back.</div>
+                    </div>
+                    <div class="soql-guidance-flags" role="list"></div>
+                </div>
             </div>
 
             <div id="soql-results" class="logs-container">
-                <div class="placeholder">
-                    <p>SOQL Query Builder</p>
-                    <p class="placeholder-note">Type a query and click Run. This UI is a stub; execution is not wired.</p>
-                </div>
+
             </div>
         </div>
         <div id="tab-graphql" class="tab-pane" data-tab="graphql" hidden>
@@ -274,6 +278,8 @@ File: `popup.html` (replace body content with this)
 <script src="lms_helper.js"></script>
 <script src="audit_helper.js"></script>
 <script src="soql_helper.js"></script>
+<script src="scripts/soql/soql_guidance_engine.js"></script>
+<script src="scripts/soql/soql_guidance.js"></script>
 <script type="module" src="popup.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { SALESFORCE_SUFFIXES, DEFAULT_API_VERSION } from './constants.js';
+import { SALESFORCE_SUFFIXES, DEFAULT_API_VERSION, LMS_CHANNELS_SOQL } from './constants.js';
 
 let platformWindowId = null;
 let appWindowId = null;
@@ -522,13 +522,12 @@ async function fetchAuditTrail(instanceUrl, sessionId, opts = {}) {
     return { totalSize: records.length, records };
 }
 
-
 async function fetchLmsChannels(instanceUrl, sessionId) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base || !/^https:\/\//i.test(base)) throw new Error('Invalid instance URL');
     const headers = { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' };
 
-    const soql = 'SELECT Id, DeveloperName, MasterLabel, NamespacePrefix FROM LightningMessageChannel ORDER BY DeveloperName';
+    const soql = LMS_CHANNELS_SOQL;
     const v = await getApiVersion();
     const url = `${base}/services/data/${v}/tooling/query?q=${encodeURIComponent(soql)}`;
     const res = await fetch(url, { method: 'GET', headers, credentials: 'omit' });
@@ -618,16 +617,13 @@ async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
         throw new Error(`Describe Global failed (${res.status}): ${text || res.statusText}`);
     }
     const data = await res.json();
-    // Tooling global returns tooling sobjects on a different key but often mirrors sobjects structure
-    const list = Array.isArray(data?.sobjects) ? data.sobjects : (Array.isArray(data?.sobjects) ? data.sobjects : []);
-    // Map into a minimal, consistent shape and include a queryable flag when available from the API
+    const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
     return list.map(s => ({
         name: s?.name || s?.keyPrefix || '',
         label: s?.label || s?.name || s?.keyPrefix || '',
         custom: !!s?.custom,
         keyPrefix: s?.keyPrefix || null,
-        // Some endpoints expose a `queryable` boolean; preserve it when present, otherwise default to true
-        queryable: typeof s?.queryable === 'boolean' ? s.queryable : true
+        queryable: (typeof s?.queryable === 'boolean') ? (s.queryable === true) : false
     }));
 }
 
