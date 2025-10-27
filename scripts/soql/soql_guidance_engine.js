@@ -40,7 +40,8 @@
         evaluate(queryText) {
             const query = normalize(queryText);
             const lower = toLower(query);
-            const context = { raw: query, lower };
+            const normalizedWhitespace = lower.replace(/\s+/g, ' ').trim();
+            const context = { raw: query, lower, normalized: normalizedWhitespace };
 
             const grouped = { suggestion: [], warning: [], error: [], info: [] };
 
@@ -73,6 +74,8 @@
                 title: rule?.title || rule?.message || 'SOQL guidance',
                 message: rule?.message || '',
                 suggestion: rule?.suggestion || rule?.message || '',
+                keyword: normalize(rule?.keyword),
+                keywordMatch: normalize(rule?.keywordMatch),
                 meta: {
                     order: typeof rule?.order === 'number' ? rule.order : DEFAULT_ORDER[rule?.category || 'info']
                 }
@@ -93,8 +96,11 @@
 
         #matchSingle(condition, context) {
             if (!condition) return true;
-            const lower = context.lower;
-            const raw = context.raw;
+            const raw = context.raw || '';
+            const lower = typeof context.lower === 'string' ? context.lower : '';
+            const normalizedLower = (typeof context.normalized === 'string' && context.normalized.length)
+                ? context.normalized
+                : lower;
 
             if (condition.regex) {
                 try {
@@ -108,12 +114,18 @@
 
             if (condition.contains) {
                 const needles = ensureArray(condition.contains).map(toLower).filter(Boolean);
-                return needles.every(n => lower.includes(n));
+                const normalizedNeedles = needles.map(n => n.replace(/\s+/g, ' '));
+                return needles.every((needle, idx) => {
+                    return lower.includes(needle) || normalizedLower.includes(normalizedNeedles[idx]);
+                });
             }
 
             if (condition.notContains) {
                 const needles = ensureArray(condition.notContains).map(toLower).filter(Boolean);
-                return needles.every(n => !lower.includes(n));
+                const normalizedNeedles = needles.map(n => n.replace(/\s+/g, ' '));
+                return needles.every((needle, idx) => {
+                    return !lower.includes(needle) && !normalizedLower.includes(normalizedNeedles[idx]);
+                });
             }
 
             if (typeof condition.minLength === 'number') {

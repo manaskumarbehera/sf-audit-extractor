@@ -162,6 +162,21 @@ h1 {
     flex-direction: column;
     gap: 4px;
 }
+.soql-guidance-card.has-keyword,
+.soql-guidance-flag.has-keyword {
+    cursor: pointer;
+}
+
+.soql-guidance-card.has-keyword:hover,
+.soql-guidance-flag.has-keyword:hover {
+    box-shadow: 0 0 0 2px rgba(1, 118, 211, 0.15);
+}
+
+.soql-guidance-card.has-keyword:focus-visible,
+.soql-guidance-flag.has-keyword:focus-visible {
+    outline: 2px solid #0176d3;
+    outline-offset: 2px;
+}
 
 .soql-guidance-card-title {
     font-size: 13px;

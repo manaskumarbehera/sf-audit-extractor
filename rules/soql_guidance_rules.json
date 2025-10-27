@@ -1,7 +1,7 @@
 {
   "meta": {
-    "version": 1,
-    "description": "Guidance rules for the SOQL helper. Each rule may produce a suggestion, warning or error without blocking others."
+    "version": 2,
+    "description": "Enhanced guidance rules for the SOQL helper, structured to follow SELECT → FROM → WHERE → ORDER BY → LIMIT."
   },
   "defaults": {
     "emptySuggestion": {
@@ -10,36 +10,6 @@
     }
   },
   "rules": [
-    {
-      "id": "limit_missing",
-      "category": "warning",
-      "title": "Add a LIMIT clause",
-      "message": "SOQL queries without LIMIT can pull more data than expected.",
-      "suggestion": "Append LIMIT <n> to control how many records are returned.",
-      "conditions": {
-        "all": [
-          { "regex": "^\\s*select\\s+[\\s\\S]+\\s+from\\s+", "flags": "i" },
-          { "notContains": [" limit "] }
-        ]
-      }
-    },
-    {
-      "id": "where_missing",
-      "category": "suggestion",
-      "title": "Filter your query",
-      "message": "Filtering helps SOQL run faster and stay within limits.",
-      "suggestion": "Add a WHERE clause that narrows the records you need.",
-      "conditions": {
-        "all": [
-          { "regex": "^\\s*select\\s+[\\s\\S]+\\s+from\\s+", "flags": "i" },
-          { "notContains": [" where "] }
-        ],
-        "any": [
-          { "contains": [" limit "] },
-          { "contains": [" order by "] }
-        ]
-      }
-    },
     {
       "id": "select_star",
       "category": "error",
@@ -53,14 +23,90 @@
       }
     },
     {
+      "id": "missing_fields",
+      "category": "suggestion",
+      "title": "Select specific fields",
+      "message": "Always specify only the fields you need. Avoid broad field lists for better performance.",
+      "suggestion": "List only the fields needed, e.g., SELECT Id, Name FROM Account.",
+      "keyword": "SELECT Id, Name",
+      "keywordMatch": "select",
+      "conditions": {
+        "all": [
+          { "regex": "^\\s*select\\s+.+\\s+from\\s+", "flags": "i" },
+          { "notContains": [" id ", " name "] }
+        ]
+      }
+    },
+    {
+      "id": "from_missing_object",
+      "category": "error",
+      "title": "Specify a valid object",
+      "message": "The FROM clause must reference a valid Salesforce object.",
+      "suggestion": "Ensure you include one valid object name after FROM.",
+      "conditions": {
+        "all": [
+          { "regex": "select\\s+.+\\s+from\\s*$", "flags": "i" }
+        ]
+      }
+    },
+    {
+      "id": "where_missing",
+      "category": "suggestion",
+      "title": "Filter your query",
+      "message": "Filtering helps SOQL run faster and stay within limits.",
+      "suggestion": "Add a WHERE clause that narrows the records you need.",
+      "keyword": "WHERE <field> = '<value>'",
+      "keywordMatch": "where",
+      "conditions": {
+        "all": [
+          { "regex": "^\\s*select\\s+[\\s\\S]+\\s+from\\s+", "flags": "i" },
+          { "notContains": [" where "] }
+        ],
+        "any": [
+          { "contains": [" limit "] },
+          { "contains": [" order by "] }
+        ]
+      }
+    },
+    {
+      "id": "unfiltered_query",
+      "category": "warning",
+      "title": "Query lacks filtering",
+      "message": "Unfiltered queries can return too many records and hurt performance.",
+      "suggestion": "Add a WHERE clause to reduce result size.",
+      "conditions": {
+        "all": [
+          { "regex": "^\\s*select\\s+.+\\s+from\\s+.+$", "flags": "i" },
+          { "notContains": [" where ", " limit "] }
+        ]
+      }
+    },
+    {
       "id": "order_by_without_limit",
       "category": "warning",
       "title": "Pair ORDER BY with LIMIT",
       "message": "ORDER BY can be expensive without a LIMIT.",
       "suggestion": "Use LIMIT when ordering to keep results manageable.",
+      "keyword": "LIMIT 100",
+      "keywordMatch": "limit",
       "conditions": {
         "all": [
           { "contains": [" order by "] },
+          { "notContains": [" limit "] }
+        ]
+      }
+    },
+    {
+      "id": "limit_missing",
+      "category": "warning",
+      "title": "Add a LIMIT clause",
+      "message": "SOQL queries without LIMIT can pull more data than expected.",
+      "suggestion": "Append LIMIT <n> to control how many records are returned.",
+      "keyword": "LIMIT 100",
+      "keywordMatch": "limit",
+      "conditions": {
+        "all": [
+          { "regex": "^\\s*select\\s+[\\s\\S]+\\s+from\\s+", "flags": "i" },
           { "notContains": [" limit "] }
         ]
       }
@@ -71,6 +117,8 @@
       "title": "COUNT() queries",
       "message": "COUNT() returns a single aggregate row.",
       "suggestion": "Use COUNT() when you only need the record count.",
+      "keyword": "SELECT COUNT() FROM <object>",
+      "keywordMatch": "count(",
       "conditions": {
         "all": [
           { "regex": "^\\s*select\\s+count\\s*\\(\\s*\\*?\\s*\\)", "flags": "i" }
@@ -79,4 +127,3 @@
     }
   ]
 }
-
