@@ -9,11 +9,11 @@
         if (typeof window !== 'undefined') {
             window.findPopupEditor = window.findPopupEditor || function() {
                 try {
-                    // Prefer explicit id
-                    let el = document.getElementById('soql-editor');
+                    // Prefer common explicit ids
+                    let el = document.getElementById('editor') || document.getElementById('main-editor');
                     if (el) return el;
-                    // Common alternate selectors
-                    el = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
+                    // Common alternate selectors (generic)
+                    el = document.querySelector('[data-editor], textarea.editor, .editor, textarea, input[type="text"], [contenteditable="true"]');
                     if (el) return el;
                     // Last-resort: first textarea/input/contenteditable
                     const candidate = document.querySelector('textarea, input[type="text"], [contenteditable="true"]');
@@ -233,8 +233,9 @@
     async function fetchOrgName(instanceUrl, accessToken, apiVersion) {
         if (!instanceUrl || !accessToken) return null;
         const v = String(apiVersion || apiVersionSel?.value || '65.0');
-        const soql = 'SELECT+Name+FROM+Organization+LIMIT+1';
-        const url = `${instanceUrl}/services/data/v${v}/query?q=${soql}`;
+        // Query organization name (encoded). Kept minimal and not part of any removed feature.
+        const orgQuery = encodeURIComponent('SELECT Name FROM Organization LIMIT 1');
+        const url = `${instanceUrl}/services/data/v${v}/query?q=${orgQuery}`;
         const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`SF API ${res.status}: ${res.statusText}`);
         const data = await res.json();
@@ -352,9 +353,6 @@
             if (name === 'lms') {
                 try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
             }
-            if (name === 'soql') {
-                try { document.dispatchEvent(new CustomEvent('soql-load')); } catch {}
-            }
         }
 
         buttons.forEach(btn => {
@@ -380,7 +378,7 @@
             } catch {}
             if (!initial) initial = allNames.includes(rawHash)
                 ? rawHash
-                : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames.includes('soql') ? 'soql' : (allNames[0] || 'sf')));
+                : (document.querySelector('.tab-button.active')?.dataset.tab || (allNames[0] || 'sf'));
             showTab(initial);
         })();
 
@@ -426,190 +424,5 @@
         statusText.textContent = message;
     }
 
-    // SOQL validation / suggestion UI integration (popup-level fallback)
-    // Simplified: validator removed — only suggestion fallback remains. If the full `soql_helper` module
-    // loads it will replace these handlers via the `soql-load` event.
-    (function setupSoqlSuggestionFallback(){
-        if (window.__soql_helper_loaded) return; // real helper will handle everything
-
-        let initialized = false;
-        let suggestionDebounce = null;
-        const SUGGEST_DEBOUNCE_MS = 250;
-        let suggesterModule = null;
-
-        async function loadSuggester() {
-            if (suggesterModule) return suggesterModule;
-            try {
-                const mod = await import('./soql_suggester.js');
-                let fn = null;
-                if (mod && typeof mod.suggestSoql === 'function') fn = mod.suggestSoql;
-                else if (mod && typeof mod.default === 'function') fn = mod.default;
-                else if (mod && mod.default && typeof mod.default.suggestSoql === 'function') fn = mod.default.suggestSoql;
-                if (typeof fn === 'function') {
-                    suggesterModule = { suggestSoql: fn };
-                    return suggesterModule;
-                }
-                suggesterModule = mod || null;
-                return suggesterModule;
-            } catch (e) {
-                console.warn('Failed to load SOQL suggester module', e);
-                suggesterModule = null;
-                return null;
-            }
-        }
-
-        function findPopupEditor() {
-            try {
-                let el = document.getElementById('soql-editor');
-                if (el) return el;
-                const host = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
-                if (host) return resolvePopupEditorHost(host);
-                const candidate = Array.from(document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]')).find(c => {
-                    try { const t = (c.value || c.textContent || '').toString(); return /\bselect\b|\bfrom\b/i.test(t) || t.trim().length === 0; } catch { return false; }
-                });
-                if (candidate) return resolvePopupEditorHost(candidate);
-            } catch (e) {}
-            return null;
-        }
-
-        function resolvePopupEditorHost(host) {
-            try {
-                if (!host) return null;
-                if ('value' in host && (typeof host.value === 'string' || typeof host.value === 'number')) return host;
-                if (host.editor && ('value' in host.editor)) return host.editor;
-                if (host.input && ('value' in host.input)) return host.input;
-                if (host.shadowRoot) {
-                    const inner = host.shadowRoot.querySelector('textarea, input[type="text"], [contenteditable="true"]');
-                    if (inner) return inner;
-                }
-                if (host.querySelector) {
-                    const inner = host.querySelector('textarea, input[type="text"], [contenteditable="true"]');
-                    if (inner) return inner;
-                }
-                return host;
-            } catch (e) { return host; }
-        }
-
-        async function computeAndRenderSuggestions() {
-            try {
-                if (window && window.__soql_helper_loaded) return; // let real helper take over
-                const editor = findPopupEditor();
-                const objSel = document.getElementById('soql-obj');
-                if (!editor) return;
-                const q = editor.value || '';
-                const mod = await loadSuggester();
-                if (!mod || typeof mod.suggestSoql !== 'function') { renderSuggestions([]); return; }
-
-                // Heuristic describe: only provide a tiny Account describe if selected
-                let describe = null;
-                try {
-                    const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
-                    const fromMatch = (String(q || '').match(/\bfrom\s+([A-Za-z0-9_\.]+)/i) || []);
-                    const fromObj = fromMatch[1] ? fromMatch[1].replace(/\[|\]|`/g,'') : '';
-                    if (obj && /account/i.test(obj) && fromObj && fromObj.toLowerCase() === 'account') {
-                        describe = {
-                            name: 'Account', __demo: true, fields: [ {name:'Id',type:'reference'}, {name:'Name',type:'string'} ]
-                        };
-                    }
-                } catch {}
-
-                let suggestions = [];
-                if (typeof mod.suggestSoqlAll === 'function') {
-                    try { suggestions = await mod.suggestSoqlAll(q, describe, 'soqlEditor') || []; } catch (e) { suggestions = []; }
-                    if ((!Array.isArray(suggestions) || suggestions.length === 0) && typeof mod.suggestSoql === 'function') {
-                        try { const top = await mod.suggestSoql(q, describe, 'soqlEditor'); suggestions = Array.isArray(top) ? top : (top ? [top] : []); } catch (e) { suggestions = []; }
-                    }
-                } else {
-                    try { const s = await mod.suggestSoql(q, describe, 'soqlEditor'); suggestions = Array.isArray(s) ? s : (s ? [s] : []); } catch (e) { suggestions = []; }
-                }
-
-                try { console.debug && console.debug('popup fallback suggester ->', Array.isArray(suggestions) ? suggestions.length : typeof suggestions); } catch (e) {}
-                renderSuggestions(suggestions.slice(0, 10));
-                const hintsEl = document.getElementById('soql-hints'); if (hintsEl) hintsEl._latestSuggestions = suggestions;
-            } catch (e) { renderSuggestions([]); }
-        }
-
-        function renderSuggestions(items) {
-            try {
-                const ul = document.getElementById('soql-hints');
-                if (!ul) return;
-                if (!items || items.length === 0) { ul.innerHTML = ''; ul.classList.add('hidden'); return; }
-                ul.innerHTML = '';
-                const frag = document.createDocumentFragment();
-                items.forEach((s, idx) => {
-                    try {
-                        const li = document.createElement('li');
-                        li.className = 'soql-suggestion'; li.tabIndex = 0;
-                        li.textContent = String(s.text || s.message || (s.apply && s.apply.text) || s.id || 'Suggestion');
-                        li.addEventListener('click', (ev) => { try { ev.preventDefault(); applySuggestionByIndex(idx); } catch (e) {} });
-                        li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); applySuggestionByIndex(idx); } });
-                        frag.appendChild(li);
-                    } catch (e) {}
-                });
-                ul.appendChild(frag); ul.classList.remove('hidden');
-            } catch (e) { console.warn && console.warn('renderSuggestions error', e); }
-        }
-
-        function applySuggestionByIndex(idx) {
-            try {
-                const hintsEl = document.getElementById('soql-hints'); if (!hintsEl) return;
-                const suggestions = hintsEl._latestSuggestions || [];
-                const s = suggestions[idx]; if (!s) return;
-                const editor = findPopupEditor(); if (!editor) return;
-                const cur = editor.value || '';
-                const app = s.apply || {};
-                let next = cur;
-                const clamp = (n) => { if (typeof n !== 'number' || Number.isNaN(n)) return null; return Math.max(0, Math.min(cur.length, Math.floor(n))); };
-                if (app.type === 'append') next = cur + (app.text || '');
-                else if (app.type === 'replace') {
-                    const startRaw = (app.start == null) ? null : app.start;
-                    const endRaw = (app.end == null) ? null : app.end;
-                    const start = clamp(startRaw); const end = clamp(endRaw);
-                    if (start != null && end != null && start >= 0 && end >= start && end <= cur.length) next = cur.slice(0, start) + (app.text || '') + cur.slice(end);
-                    else if (app.text) { const star = cur.indexOf('*'); if (star >= 0) next = cur.slice(0, star) + app.text + cur.slice(star+1); else next = cur + app.text; }
-                } else if (app.type === 'insert') {
-                    const posRaw = app.pos; const pos = clamp(posRaw);
-                    if (pos != null && pos >= 0 && pos <= cur.length) next = cur.slice(0, pos) + (app.text || '') + cur.slice(pos);
-                    else next = cur + (app.text || '');
-                } else next = cur + (app.text || '');
-
-                editor.value = next; try { editor.focus(); } catch {} try { editor.setSelectionRange(editor.value.length, editor.value.length); } catch {}
-                try { hintsHide(); } catch (e) {}
-                // re-run suggestions shortly after applying
-                setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(e){} }, 80);
-            } catch (e) { console.warn && console.warn('applySuggestionByIndex error', e); }
-        }
-
-        function hintsHide(){ try { const ul = document.getElementById('soql-hints'); if (ul) { ul.innerHTML = ''; ul.classList.add('hidden'); } } catch(e){} }
-
-        function scheduleSuggestionCompute() {
-            try { if (suggestionDebounce) clearTimeout(suggestionDebounce); suggestionDebounce = setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(_){} }, SUGGEST_DEBOUNCE_MS); } catch (e) {}
-        }
-
-        function onKeyDown(ev){ try { if ((ev.ctrlKey || ev.metaKey) && (ev.code === 'Space' || ev.key === ' ')) { try { ev.preventDefault(); computeAndRenderSuggestions().catch(()=>{}); } catch(e){} return; } if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); const runBtn = document.getElementById('soql-run'); if (runBtn) runBtn.click(); return; } if (ev.key === 'Escape') { hintsHide(); } } catch (e) { console.warn && console.warn('onKeyDown error', e); } }
-
-        document.addEventListener('soql-load', async () => {
-            if (initialized) return; initialized = true;
-            try {
-                const editor = findPopupEditor();
-                const runBtn = document.getElementById('soql-run');
-                const objSel = document.getElementById('soql-obj');
-                if (editor) {
-                    editor.addEventListener('input', scheduleSuggestionCompute);
-                    editor.addEventListener('keyup', scheduleSuggestionCompute);
-                    editor.addEventListener('focus', scheduleSuggestionCompute);
-                    editor.addEventListener('click', scheduleSuggestionCompute);
-                    editor.addEventListener('keydown', onKeyDown);
-                    editor.addEventListener('blur', () => { /* no validator to run — just hide hints after blur */ setTimeout(() => { try { hintsHide(); } catch(e){} }, 200); });
-                }
-                if (objSel) objSel.addEventListener('change', scheduleSuggestionCompute);
-                if (runBtn) runBtn.addEventListener('click', scheduleSuggestionCompute);
-                // Preload suggester
-                loadSuggester().catch(()=>{});
-                // Initial compute
-                scheduleSuggestionCompute();
-            } catch (e) { console.error('soql-load fallback error', e); }
-        });
-
-    })();
+    // Suggestion UI integration removed from popup — no feature-specific handlers remain.
 })();
