@@ -222,4 +222,4 @@ export async function showIdContextMenu(id, clientX, clientY){
   sfContextMenuEl.classList.remove('hidden');
 }
 
-export function hideIdContextMenu(){ if (sfContextMenuEl) { sfContextMenuEl.classList.add('hidden'); sfContextMenuEl.removeAttribute('data-id'); } }
+export function hideIdContextMenu(){ try { if (sfContextMenuEl) sfContextMenuEl.classList.add('hidden'); } catch(e){} }

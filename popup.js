@@ -426,90 +426,21 @@
         statusText.textContent = message;
     }
 
-    // SOQL validation UI integration
-    // - Dynamically import the validator module when the SOQL pane is shown
-    // - Wire the editor to run validateSoql(query, describe) and render messages into #soql-errors
-    (function setupSoqlValidationUI(){
-        // If the richer soql_helper module is already loaded, it will own all editor wiring
-        // and validation; skip the popup.js fallback to avoid duplicate listeners and conflicts.
-        if (window.__soql_helper_loaded) {
-            try { console.debug && console.debug('soql_helper present — skipping popup-level SOQL validation'); } catch(e) {}
-            return;
-        }
-        // Additional guard: if the <script type="module" src="soql_helper.js"> tag is present
-        // in the DOM (it will be, since popup.html loads the module after popup.js), then the
-        // richer helper will initialize shortly. Avoid registering the popup-level fallback
-        // listeners now to prevent duplicate suggestion listeners and double-apply behaviour.
-        try {
-            const helperScript = document.querySelector('script[type="module"][src$="soql_helper.js"], script[type="module"][src*="/soql_helper.js"], script[type="module"][src*="soql_helper.js"]');
-            if (helperScript) {
-                try { console.debug && console.debug('soql_helper module script tag present — deferring popup-level SOQL fallback'); } catch(e) {}
-                return;
-            }
-        } catch(e) {}
-        // If the full helper loads later, let it initialize the UI; listen for the event and call its init
-        function onSoqlHelperLoaded() {
-            try {
-                // Let the real helper perform initialization
-                if (window.__soql_helper_ensureInitOnce) window.__soql_helper_ensureInitOnce();
-            } catch(e) {}
-            try {
-                // Cleanup popup fallback listeners/timers to avoid double-handling suggestions
-                cleanupFallbackListeners();
-            } catch(e) {}
-            try { document.removeEventListener('soql-helper-loaded', onSoqlHelperLoaded); } catch(e) {}
-        }
-        try { document.addEventListener('soql-helper-loaded', onSoqlHelperLoaded); } catch(e) {}
+    // SOQL validation / suggestion UI integration (popup-level fallback)
+    // Simplified: validator removed — only suggestion fallback remains. If the full `soql_helper` module
+    // loads it will replace these handlers via the `soql-load` event.
+    (function setupSoqlSuggestionFallback(){
+        if (window.__soql_helper_loaded) return; // real helper will handle everything
 
         let initialized = false;
-        let validatorModule = null;
-        let debounceTimer = null;
-        const DEBOUNCE_MS = 300;
-        // Suggestion-related state
-        let suggesterModule = null;
         let suggestionDebounce = null;
         const SUGGEST_DEBOUNCE_MS = 250;
-
-        // Minimal Account describe used for client-side validation when Account is selected
-        const demoAccountDescribe = {
-            name: 'Account',
-            __demo: true,
-            fields: [
-                { name: 'Id', type: 'reference' },
-                { name: 'Name', type: 'string' },
-                { name: 'Industry', type: 'string' },
-                { name: 'CreatedDate', type: 'date' },
-                { name: 'IsDeleted', type: 'boolean' },
-                { name: 'LastModifiedDate', type: 'date' },
-                { name: 'ShippingState', type: 'string' },
-                { name: 'BillingCountry', type: 'string' },
-                { name: 'NumberOfEmployees', type: 'number' },
-                { name: 'Type', type: 'string' },
-                { name: 'Active__c', type: 'boolean' },
-                { name: 'RecordType.DeveloperName', type: 'string' },
-                { name: 'Owner.UserType', type: 'string' }
-            ]
-        };
-
-        async function loadValidator() {
-            if (validatorModule) return validatorModule;
-            try {
-                // dynamic import of the ES module
-                validatorModule = await import('./soql_semantic_validator.js');
-                return validatorModule;
-            } catch (e) {
-                console.error('Failed to load SOQL validator module', e);
-                validatorModule = null;
-                return null;
-            }
-        }
+        let suggesterModule = null;
 
         async function loadSuggester() {
             if (suggesterModule) return suggesterModule;
             try {
-                // Import as module that exports suggestSoql
                 const mod = await import('./soql_suggester.js');
-                // Normalize to an object with a suggestSoql function, supporting default and named exports
                 let fn = null;
                 if (mod && typeof mod.suggestSoql === 'function') fn = mod.suggestSoql;
                 else if (mod && typeof mod.default === 'function') fn = mod.default;
@@ -518,7 +449,6 @@
                     suggesterModule = { suggestSoql: fn };
                     return suggesterModule;
                 }
-                // fallback: expose whatever the module exported
                 suggesterModule = mod || null;
                 return suggesterModule;
             } catch (e) {
@@ -528,111 +458,17 @@
             }
         }
 
-        function renderMessages(messages) {
-            const el = document.getElementById('soql-errors');
-            if (!el) return;
-            const editor = document.getElementById('soql-editor');
-            const editorActive = (editor && document.activeElement === editor);
-            if (!messages || messages.length === 0) {
-                // If the SOQL editor has focus (cursor inside), avoid showing the 'No issues found.' text
-                // to prevent confusing the user while they are still editing. Instead, clear the area.
-                if (editorActive) {
-                    el.innerHTML = '';
-                    el.classList.remove('soql-error-list');
-                    el.classList.remove('soql-valid');
-                    return;
-                }
-                el.innerHTML = '<div class="soql-valid">No issues found.</div>';
-                el.classList.remove('soql-error-list');
-                el.classList.add('soql-valid');
-                return;
-            }
-            el.classList.remove('soql-valid');
-            el.classList.add('soql-error-list');
-            const lis = messages.map(m => `<li>${escapeHtml(String(m))}</li>`).join('\n');
-            el.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
-        }
-
-        // Render validator messages into the top validator area (#soql-validator-top)
-        function renderValidatorTop(messages) {
-            const topEl = document.getElementById('soql-validator-top');
-            if (!topEl) return;
-            if (!messages || messages.length === 0) {
-                topEl.innerHTML = '';
-                topEl.classList.remove('soql-error-list');
-                topEl.classList.remove('soql-valid');
-                return;
-            }
-            topEl.classList.remove('soql-valid');
-            topEl.classList.add('soql-error-list');
-            const lis = messages.map(m => `<li>${escapeHtml(String(m))}</li>`).join('\n');
-            topEl.innerHTML = `<ul class="soql-messages">${lis}</ul>`;
-        }
-
-        function escapeHtml(s) {
-            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-        }
-
-        async function validateAndRender() {
-            // Run semantic validator and render results into the top validator area.
-            const editor = document.getElementById('soql-editor');
-            const objSel = document.getElementById('soql-obj');
-            if (!editor) return;
-            const q = editor.value || '';
-            const mod = await loadValidator();
-            if (!mod || typeof mod.validateSoql !== 'function') {
-                renderValidatorTop([`Failed to load validator module`]);
-                return;
-            }
-            // Provide describe only when the selected object is Account (demo) AND the query FROM is Account
-            let describe = null;
-            try {
-                const parts = (typeof mod.parseQueryParts === 'function') ? mod.parseQueryParts(q) : null;
-                const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
-                if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
-                    describe = demoAccountDescribe;
-                }
-            } catch {}
-
-            try {
-                const res = mod.validateSoql(q, describe);
-                const rawMsgs = Array.isArray(res.messages) ? res.messages.slice() : [];
-                const describeMsgRe = /^Failed to retrieve describe for\s+'?.+?'?$/i;
-                const nonDescribeMsgs = rawMsgs.filter(m => !describeMsgRe.test(String(m || '')));
-                // Remove the specific validator message 'SELECT list is empty' because it conflicts with suggester UX
-                const filteredMsgs = nonDescribeMsgs.filter(m => !/^\s*SELECT list is empty\s*$/i.test(String(m || '')));
-                 // Render any non-describe messages to the top validator area. If there are none, clear the top area.
-                if (filteredMsgs.length === 0) renderValidatorTop([]);
-                else renderValidatorTop(filteredMsgs);
-            } catch (e) {
-                renderValidatorTop([`Validator exception: ${String(e)}`]);
-            }
-        }
-
-        // Popup-specific: attempt to find the editor element in a variety of DOM/host scenarios.
         function findPopupEditor() {
             try {
-                // Preferred: explicit id
                 let el = document.getElementById('soql-editor');
                 if (el) return el;
-
-                // Custom element tags
-                let host = document.querySelector('soqleditor, soql-editor');
+                const host = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
                 if (host) return resolvePopupEditorHost(host);
-
-                // Data-attribute/class/legacy ids
-                host = document.querySelector('[data-soql-editor], textarea.soql-editor, .soql-editor, #soqlEditor');
-                if (host) return resolvePopupEditorHost(host);
-
-                // Last resort: visible textarea/input/contenteditable that looks like an editor
                 const candidate = Array.from(document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]')).find(c => {
-                    try {
-                        const t = (c.value || c.textContent || '').toString();
-                        return /\bselect\b|\bfrom\b/i.test(t) || t.trim().length === 0;
-                    } catch { return false; }
+                    try { const t = (c.value || c.textContent || '').toString(); return /\bselect\b|\bfrom\b/i.test(t) || t.trim().length === 0; } catch { return false; }
                 });
                 if (candidate) return resolvePopupEditorHost(candidate);
-            } catch (e) { /* ignore */ }
+            } catch (e) {}
             return null;
         }
 
@@ -654,207 +490,126 @@
             } catch (e) { return host; }
         }
 
-        // Debounced wrapper to run validateAndRender without running on every keystroke
-        function scheduleValidation() {
-            try {
-                if (debounceTimer) clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(() => { try { validateAndRender().catch(()=>{}); } catch(_){} }, DEBOUNCE_MS);
-            } catch (e) { /* ignore */ }
-        }
-
-        // Cleanup function to remove popup-level fallback listeners and timers when the full helper loads
-        function cleanupFallbackListeners() {
-            try {
-                // Cancel timers
-                if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-                if (suggestionDebounce) { clearTimeout(suggestionDebounce); suggestionDebounce = null; }
-                // Remove editor listeners if present
-                const editor = findPopupEditor();
-                if (editor) {
-                    try { editor.removeEventListener('blur', scheduleValidation); } catch(e){}
-                    try { editor.removeEventListener('input', scheduleSuggestionCompute); } catch(e){}
-                    try { editor.removeEventListener('keyup', scheduleSuggestionCompute); } catch(e){}
-                    try { editor.removeEventListener('focus', scheduleSuggestionCompute); } catch(e){}
-                    try { editor.removeEventListener('click', scheduleSuggestionCompute); } catch(e){}
-                }
-                const runBtn = document.getElementById('soql-run');
-                const objSel = document.getElementById('soql-obj');
-                if (runBtn) {
-                    try { runBtn.removeEventListener('click', scheduleValidation); } catch(e){}
-                    try { runBtn.removeEventListener('click', scheduleSuggestionCompute); } catch(e){}
-                }
-                if (objSel) {
-                    try { objSel.removeEventListener('change', scheduleValidation); } catch(e){}
-                    try { objSel.removeEventListener('change', scheduleSuggestionCompute); } catch(e){}
-                }
-                // Clear any UI hints the fallback may have left
-                try { const hintsEl = document.getElementById('soql-hints'); if (hintsEl) { hintsEl._latestSuggestions = null; hintsEl.innerHTML = ''; hintsEl.classList.add('hidden'); } } catch(e){}
-                initialized = false; // mark fallback as not initialized
-            } catch (e) { /* ignore cleanup errors */ }
-        }
-
         async function computeAndRenderSuggestions() {
-             // If the full helper is active, bail out and let it handle suggestions
-             try {
-                if (window && window.__soql_helper_loaded) {
-                    try { if (typeof cleanupFallbackListeners === 'function') cleanupFallbackListeners(); } catch (e) {}
-                    try { if (window.__soql_helper_ensureInitOnce) window.__soql_helper_ensureInitOnce(); } catch (e) {}
-                    return;
-                }
-             } catch (e) { /* ignore */ }
-             // Robust editor lookup: prefer id but accept custom elements
-             const editor = findPopupEditor();
-             const objSel = document.getElementById('soql-obj');
-             if (!editor) return;
-             const q = editor.value || '';
-             const mod = await loadSuggester();
-             if (!mod || typeof mod.suggestSoql !== 'function') {
-                 renderSuggestions([]);
-                 return;
-             }
-             let describe = null;
-             try {
-                 const validatorMod = await loadValidator();
-                 const parts = (validatorMod && typeof validatorMod.parseQueryParts === 'function') ? validatorMod.parseQueryParts(q) : null;
-                 const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
-                 if (parts && parts.objectName && obj && /account/i.test(obj) && parts.objectName.toLowerCase() === 'account') {
-                     describe = demoAccountDescribe;
-                 }
-             } catch {}
-             try {
-                 const suggestions = await mod.suggestSoql(q, describe, 'soqlEditor') || [];
-                 // normalize suggestions array
-                 // Debug: surface suggestions in popup console to help diagnose missing hints
-                 try { console.debug && console.debug('computeAndRenderSuggestions -> suggester returned', Array.isArray(suggestions) ? suggestions.length : typeof suggestions, suggestions); } catch (e) {}
-                 renderSuggestions(suggestions.slice(0, 10));
-                 // store latest suggestions on the element so apply can access them
-                 const hintsEl = document.getElementById('soql-hints');
-                 if (hintsEl) hintsEl._latestSuggestions = suggestions;
-             } catch (e) {
-                 renderSuggestions([]);
-             }
-        }
-
-        function applySuggestionByIndex(idx) {
-            const hintsEl = document.getElementById('soql-hints');
-            if (!hintsEl) return;
-            // avoid double-apply if another handler (soql_helper) is already applying a suggestion
-            if (hintsEl._applying) return;
-            const suggestions = hintsEl._latestSuggestions || [];
-            const s = suggestions[idx];
-            if (!s) return;
-            const editor = findPopupEditor();
-            if (!editor) return;
             try {
-                // mark that we are applying to prevent other handlers from doing the same
-                hintsEl._applying = true;
-                 const cur = editor.value || '';
-                 const app = s.apply || {};
-                 let next = cur;
-                 // helper clamp
-                 const clamp = (n) => { if (typeof n !== 'number' || Number.isNaN(n)) return null; return Math.max(0, Math.min(cur.length, Math.floor(n))); };
-                 if (app.type === 'append') {
-                     next = cur + (app.text || '');
-                 } else if (app.type === 'replace') {
-                     const startRaw = (app.start == null) ? null : app.start;
-                     const endRaw = (app.end == null) ? null : app.end;
-                     const start = clamp(startRaw);
-                     const end = clamp(endRaw);
-                     if (start != null && end != null && start >= 0 && end >= start && end <= cur.length) {
-                         next = cur.slice(0, start) + (app.text || '') + cur.slice(end);
-                     } else if (app.text) {
-                        // fallback: try simple heuristic replace of first '*' occurrence
-                        const star = cur.indexOf('*');
-                        if (star >= 0) next = cur.slice(0, star) + app.text + cur.slice(star+1);
-                        else next = cur + app.text;
-                     }
-                 } else if (app.type === 'insert') {
-                     const posRaw = app.pos;
-                     const pos = clamp(posRaw);
-                     if (pos != null && pos >= 0 && pos <= cur.length) {
-                         next = cur.slice(0, pos) + (app.text || '') + cur.slice(pos);
-                     } else {
-                         next = cur + (app.text || '');
-                     }
-                 } else {
-                    // unknown -> append
-                    next = cur + (app.text || '');
-                 }
-                 editor.value = next;
-                 // re-run validation and suggestions after applying
-                 scheduleValidation();
-                 scheduleSuggestionCompute();
-                 // clear applying flag after scheduling recompute
-                 hintsEl._applying = false;
-             } catch (e) {
-                 // ignore
-                 try { hintsEl._applying = false; } catch(_){ }
-             }
-         }
+                if (window && window.__soql_helper_loaded) return; // let real helper take over
+                const editor = findPopupEditor();
+                const objSel = document.getElementById('soql-obj');
+                if (!editor) return;
+                const q = editor.value || '';
+                const mod = await loadSuggester();
+                if (!mod || typeof mod.suggestSoql !== 'function') { renderSuggestions([]); return; }
+
+                // Heuristic describe: only provide a tiny Account describe if selected
+                let describe = null;
+                try {
+                    const obj = objSel && objSel.value ? String(objSel.value).trim() : '';
+                    const fromMatch = (String(q || '').match(/\bfrom\s+([A-Za-z0-9_\.]+)/i) || []);
+                    const fromObj = fromMatch[1] ? fromMatch[1].replace(/\[|\]|`/g,'') : '';
+                    if (obj && /account/i.test(obj) && fromObj && fromObj.toLowerCase() === 'account') {
+                        describe = {
+                            name: 'Account', __demo: true, fields: [ {name:'Id',type:'reference'}, {name:'Name',type:'string'} ]
+                        };
+                    }
+                } catch {}
+
+                let suggestions = [];
+                if (typeof mod.suggestSoqlAll === 'function') {
+                    try { suggestions = await mod.suggestSoqlAll(q, describe, 'soqlEditor') || []; } catch (e) { suggestions = []; }
+                    if ((!Array.isArray(suggestions) || suggestions.length === 0) && typeof mod.suggestSoql === 'function') {
+                        try { const top = await mod.suggestSoql(q, describe, 'soqlEditor'); suggestions = Array.isArray(top) ? top : (top ? [top] : []); } catch (e) { suggestions = []; }
+                    }
+                } else {
+                    try { const s = await mod.suggestSoql(q, describe, 'soqlEditor'); suggestions = Array.isArray(s) ? s : (s ? [s] : []); } catch (e) { suggestions = []; }
+                }
+
+                try { console.debug && console.debug('popup fallback suggester ->', Array.isArray(suggestions) ? suggestions.length : typeof suggestions); } catch (e) {}
+                renderSuggestions(suggestions.slice(0, 10));
+                const hintsEl = document.getElementById('soql-hints'); if (hintsEl) hintsEl._latestSuggestions = suggestions;
+            } catch (e) { renderSuggestions([]); }
+        }
 
         function renderSuggestions(items) {
             try {
                 const ul = document.getElementById('soql-hints');
                 if (!ul) return;
+                if (!items || items.length === 0) { ul.innerHTML = ''; ul.classList.add('hidden'); return; }
                 ul.innerHTML = '';
-                if (!items || items.length === 0) { ul.classList.add('hidden'); return; }
                 const frag = document.createDocumentFragment();
                 items.forEach((s, idx) => {
                     try {
                         const li = document.createElement('li');
-                        li.className = 'soql-suggestion';
-                        li.tabIndex = 0;
+                        li.className = 'soql-suggestion'; li.tabIndex = 0;
                         li.textContent = String(s.text || s.message || (s.apply && s.apply.text) || s.id || 'Suggestion');
-                        li.addEventListener('click', (ev) => { try { ev.preventDefault(); applySuggestionByIndex(idx); } catch (e) { console.warn && console.warn('suggest click error', e); } });
+                        li.addEventListener('click', (ev) => { try { ev.preventDefault(); applySuggestionByIndex(idx); } catch (e) {} });
                         li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); applySuggestionByIndex(idx); } });
                         frag.appendChild(li);
-                    } catch (e) { /* ignore per-item errors */ }
+                    } catch (e) {}
                 });
-                ul.appendChild(frag);
-                ul.classList.remove('hidden');
-            } catch (e) { console.warn && console.warn('renderSuggestions (popup) error', e); }
+                ul.appendChild(frag); ul.classList.remove('hidden');
+            } catch (e) { console.warn && console.warn('renderSuggestions error', e); }
         }
 
-        // Debounced scheduling wrapper for computeAndRenderSuggestions (popup fallback)
-        function scheduleSuggestionCompute() {
+        function applySuggestionByIndex(idx) {
             try {
-                if (suggestionDebounce) clearTimeout(suggestionDebounce);
-                suggestionDebounce = setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(_){} }, SUGGEST_DEBOUNCE_MS);
-            } catch (e) { /* ignore */ }
+                const hintsEl = document.getElementById('soql-hints'); if (!hintsEl) return;
+                const suggestions = hintsEl._latestSuggestions || [];
+                const s = suggestions[idx]; if (!s) return;
+                const editor = findPopupEditor(); if (!editor) return;
+                const cur = editor.value || '';
+                const app = s.apply || {};
+                let next = cur;
+                const clamp = (n) => { if (typeof n !== 'number' || Number.isNaN(n)) return null; return Math.max(0, Math.min(cur.length, Math.floor(n))); };
+                if (app.type === 'append') next = cur + (app.text || '');
+                else if (app.type === 'replace') {
+                    const startRaw = (app.start == null) ? null : app.start;
+                    const endRaw = (app.end == null) ? null : app.end;
+                    const start = clamp(startRaw); const end = clamp(endRaw);
+                    if (start != null && end != null && start >= 0 && end >= start && end <= cur.length) next = cur.slice(0, start) + (app.text || '') + cur.slice(end);
+                    else if (app.text) { const star = cur.indexOf('*'); if (star >= 0) next = cur.slice(0, star) + app.text + cur.slice(star+1); else next = cur + app.text; }
+                } else if (app.type === 'insert') {
+                    const posRaw = app.pos; const pos = clamp(posRaw);
+                    if (pos != null && pos >= 0 && pos <= cur.length) next = cur.slice(0, pos) + (app.text || '') + cur.slice(pos);
+                    else next = cur + (app.text || '');
+                } else next = cur + (app.text || '');
+
+                editor.value = next; try { editor.focus(); } catch {} try { editor.setSelectionRange(editor.value.length, editor.value.length); } catch {}
+                try { hintsHide(); } catch (e) {}
+                // re-run suggestions shortly after applying
+                setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(e){} }, 80);
+            } catch (e) { console.warn && console.warn('applySuggestionByIndex error', e); }
         }
+
+        function hintsHide(){ try { const ul = document.getElementById('soql-hints'); if (ul) { ul.innerHTML = ''; ul.classList.add('hidden'); } } catch(e){} }
+
+        function scheduleSuggestionCompute() {
+            try { if (suggestionDebounce) clearTimeout(suggestionDebounce); suggestionDebounce = setTimeout(() => { try { computeAndRenderSuggestions().catch(()=>{}); } catch(_){} }, SUGGEST_DEBOUNCE_MS); } catch (e) {}
+        }
+
+        function onKeyDown(ev){ try { if ((ev.ctrlKey || ev.metaKey) && (ev.code === 'Space' || ev.key === ' ')) { try { ev.preventDefault(); computeAndRenderSuggestions().catch(()=>{}); } catch(e){} return; } if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') { ev.preventDefault(); const runBtn = document.getElementById('soql-run'); if (runBtn) runBtn.click(); return; } if (ev.key === 'Escape') { hintsHide(); } } catch (e) { console.warn && console.warn('onKeyDown error', e); } }
 
         document.addEventListener('soql-load', async () => {
-            if (initialized) return;
-            initialized = true;
+            if (initialized) return; initialized = true;
             try {
-                // Do not eagerly validate on every keystroke; validator will run on blur/run/object change.
-                // Initial load of modules: suggester and validator (best-effort)
-                if (typeof loadSuggester === 'function') loadSuggester().catch(()=>{});
-                if (typeof loadValidator === 'function') loadValidator().catch(()=>{});
-
                 const editor = findPopupEditor();
                 const runBtn = document.getElementById('soql-run');
                 const objSel = document.getElementById('soql-obj');
-
                 if (editor) {
-                    // Validation: only run on blur (user finished typing) to avoid overriding suggester in-flight
-                    editor.addEventListener('blur', scheduleValidation);
-                    // Suggestions: still compute on input and focus to provide live hints
                     editor.addEventListener('input', scheduleSuggestionCompute);
                     editor.addEventListener('keyup', scheduleSuggestionCompute);
                     editor.addEventListener('focus', scheduleSuggestionCompute);
                     editor.addEventListener('click', scheduleSuggestionCompute);
+                    editor.addEventListener('keydown', onKeyDown);
+                    editor.addEventListener('blur', () => { /* no validator to run — just hide hints after blur */ setTimeout(() => { try { hintsHide(); } catch(e){} }, 200); });
                 }
-                if (objSel) objSel.addEventListener('change', scheduleValidation);
-                if (runBtn) runBtn.addEventListener('click', scheduleValidation);
                 if (objSel) objSel.addEventListener('change', scheduleSuggestionCompute);
                 if (runBtn) runBtn.addEventListener('click', scheduleSuggestionCompute);
-                // Do not run validation immediately; wait for blur or run to avoid overriding suggestions during edit
-                // But compute suggestions initially so UI shows helpful hints
+                // Preload suggester
+                loadSuggester().catch(()=>{});
+                // Initial compute
                 scheduleSuggestionCompute();
-            } catch (err) {
-                try { console.error('soql-load handler error', err); } catch(e) { /* ignore */ }
-            }
+            } catch (e) { console.error('soql-load fallback error', e); }
         });
+
     })();
 })();
