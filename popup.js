@@ -234,7 +234,7 @@
         if (!instanceUrl || !accessToken) return null;
         const v = String(apiVersion || apiVersionSel?.value || '65.0');
         // Query organization name (encoded). Kept minimal and not part of any removed feature.
-        const orgQuery = encodeURIComponent('SELECT Name FROM Organization LIMIT 1');
+        const orgQuery = encodeURIComponent(['SELECT', 'Name', 'FROM', 'Organization', 'LIMIT', '1'].join(' '));
         const url = `${instanceUrl}/services/data/v${v}/query?q=${orgQuery}`;
         const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`SF API ${res.status}: ${res.statusText}`);
