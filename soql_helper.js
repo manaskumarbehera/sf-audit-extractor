@@ -31,14 +31,76 @@
     } catch {}
   }
 
+  // Shared helper: normalize and extract queryable object names in sorted order
+  function describeObjectsToNames(objs) {
+    const arr = Array.isArray(objs) ? objs : [];
+    return arr
+      .filter((o) => {
+        if (!o) return false;
+        const val = o.queryable;
+        if (typeof val === 'boolean') return val === true;
+        if (typeof val === 'string') return val.toLowerCase() === 'true';
+        return false; // strict: missing flag => not included
+      })
+      .map((o) => o?.name || o?.label || '')
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  // Build a rich error details block with hints and request preview
+  function buildErrorDetailsHTML(errText, meta) {
+    try {
+      const E = (s) => (typeof Utils?.escapeHtml === 'function' ? Utils.escapeHtml(String(s)) : String(s));
+      const msg = String(errText || '');
+      const lower = msg.toLowerCase();
+      let status = null;
+      const m = msg.match(/\((\d{3})\)/); // e.g. "Query failed (403): ..."
+      if (m) status = m[1];
+
+      const hints = [];
+      if (/401|403/.test(msg)) hints.push('Authentication required. Log in to Salesforce in a browser tab, then retry.');
+      if (/instance url not detected/.test(lower)) hints.push('Open a Salesforce tab first so the extension can detect your instance.');
+      if (/session not found/.test(lower)) hints.push('Your session expired. Refresh your Salesforce tab to obtain a new session.');
+      if (/network|failed to fetch|timeout|ecconnreset/i.test(lower)) hints.push('Network issue. Check VPN/Proxy and try again.');
+      if (!hints.length) hints.push('Check the query syntax and permissions for the selected API.');
+
+      const api = meta?.useTooling ? 'Tooling Query API' : 'REST Query API';
+      const limit = Number.isFinite(meta?.limit) ? meta.limit : (meta?.limit || null);
+      const retried = !!meta?.retried;
+      const inst = meta?.instanceUrl ? String(meta.instanceUrl) : null;
+      const queryPreview = (meta?.query ? String(meta.query) : '').slice(0, 140);
+
+      const rows = [];
+      if (status) rows.push(`<div><strong>Status</strong>: ${E(status)}</div>`);
+      rows.push(`<div><strong>API</strong>: ${E(api)}</div>`);
+      if (limit != null) rows.push(`<div><strong>Limit</strong>: ${E(limit)}</div>`);
+      if (inst) rows.push(`<div><strong>Instance</strong>: ${E(inst)}</div>`);
+      if (retried) rows.push(`<div><strong>Retried after 401/403</strong>: yes</div>`);
+      if (queryPreview) rows.push(`<div><strong>Query</strong>: <code>${E(queryPreview)}${meta.query && meta.query.length > 140 ? '…' : ''}</code></div>`);
+
+      return (
+        `<div class="log-details">` +
+          `<details>` +
+            `<summary>Details & tips</summary>` +
+            `<div class="log-grid">` + rows.join('') + `</div>` +
+            `<div class="log-hints"><ul>` + hints.map(h => `<li>${E(h)}</li>`).join('') + `</ul></div>` +
+          `</details>` +
+        `</div>`
+      );
+    } catch { return ''; }
+  }
+
   function fetchDescribe(tooling) {
+    // Returns { names: string[], error: string|null }
     return new Promise((resolve) => {
+      function done(names, error) { resolve({ names: Array.isArray(names) ? names : [], error: error ? String(error) : null }); }
       try {
         Utils.getInstanceUrl().then((instanceUrl) => {
           const payload = { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling };
           if (instanceUrl) payload.instanceUrl = instanceUrl;
           chrome.runtime.sendMessage(payload, async (resp) => {
-            if (chrome.runtime && chrome.runtime.lastError) { resolve([]); return; }
+            const lastErr = (chrome.runtime && chrome.runtime.lastError) ? chrome.runtime.lastError.message : null;
+            if (lastErr) { done([], lastErr); return; }
             if (!resp || !resp.success) {
               const msg = String(resp?.error || '').toLowerCase();
               if (/(^|[^\d])(401|403)([^\d]|$)/.test(msg)) {
@@ -48,42 +110,20 @@
                 const payload2 = { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling };
                 if (inst2) payload2.instanceUrl = inst2;
                 chrome.runtime.sendMessage(payload2, (resp2) => {
-                  if (chrome.runtime && chrome.runtime.lastError) { resolve([]); return; }
-                  if (!resp2 || !resp2.success) { resolve([]); return; }
-                  const objs = Array.isArray(resp2.objects) ? resp2.objects : [];
-                  const names = objs
-                    .filter((o) => {
-                      if (!o) return false;
-                      const val = o.queryable;
-                      if (typeof val === 'boolean') return val === true;
-                      if (typeof val === 'string') return val.toLowerCase() === 'true';
-                      return false; // strict: missing flag => not included
-                    })
-                    .map(o => o?.name || o?.label || '')
-                    .filter(Boolean)
-                    .sort((a,b) => a.localeCompare(b));
-                  resolve(names);
+                  const lastErr2 = (chrome.runtime && chrome.runtime.lastError) ? chrome.runtime.lastError.message : null;
+                  if (lastErr2) { done([], lastErr2); return; }
+                  if (!resp2 || !resp2.success) { done([], resp2?.error || 'Authentication error (401/403) while fetching object list'); return; }
+                  done(describeObjectsToNames(resp2.objects), null);
                 });
                 return;
               }
-              resolve([]); return;
+              done([], resp?.error || 'Describe failed');
+              return;
             }
-            const objs = Array.isArray(resp.objects) ? resp.objects : [];
-            const names = objs
-                .filter((o) => {
-                    if (!o) return false;
-                    const val = o.queryable;
-                    if (typeof val === 'boolean') return val === true;
-                    if (typeof val === 'string') return val.toLowerCase() === 'true';
-                    return false; // strict: missing flag => not included
-                })
-              .map(o => o?.name || o?.label || '')
-              .filter(Boolean)
-              .sort((a,b) => a.localeCompare(b));
-            resolve(names);
+            done(describeObjectsToNames(resp.objects), null);
           });
         });
-      } catch { resolve([]); }
+      } catch (e) { try { console.error('Describe Global failed', e); } catch {} done([], e); }
     });
   }
 
@@ -96,18 +136,33 @@
     def.textContent = 'Select an object';
     sel.appendChild(def);
 
-    fetchDescribe(!!tooling).then((names) => {
-      const list = Array.isArray(names) ? names : [];
-      if (list.length === 0) {
+    fetchDescribe(!!tooling).then((res) => {
+      const names = Array.isArray(res?.names) ? res.names : [];
+      const error = res && typeof res.error === 'string' ? res.error : null;
+
+      if (names.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
         opt.textContent = 'No objects loaded';
         opt.disabled = true;
         sel.appendChild(opt);
+
+        // Also surface error cause to the user if available using log-entry styling
+        if (error) {
+          try {
+            const results = document.getElementById('soql-results');
+            if (results) {
+              const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(error) : String(error);
+              const details = buildErrorDetailsHTML(error, { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling });
+              results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
+            }
+          } catch {}
+        }
         return;
       }
+
       const frag = document.createDocumentFragment();
-      list.forEach(name => {
+      names.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name; opt.textContent = name; frag.appendChild(opt);
       });
@@ -184,6 +239,8 @@
                 });
               });
             }
+            let usedPayload = payload;
+            let retried = false;
             runOnce(payload).then(async (resp) => {
               if (!resp || !resp.success) {
                 const msg = String(resp?.error || '').toLowerCase();
@@ -193,12 +250,16 @@
                   const inst2 = await Utils.getInstanceUrl();
                   const p2 = { ...payload };
                   if (inst2) p2.instanceUrl = inst2;
+                  usedPayload = p2;
+                  retried = true;
                   resp = await runOnce(p2);
                 }
               }
               if (!resp || !resp.success) {
+                try { console.error('SOQL RUN failed', { error: resp?.error, payload: usedPayload, retried }); } catch {}
                 const msgSafe = Utils.escapeHtml(resp?.error || 'Query failed');
-                results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${msgSafe}</span></div></div></div>`;
+                const details = buildErrorDetailsHTML(resp?.error, { useTooling: tooling, limit: payload.limit, instanceUrl: usedPayload.instanceUrl, query: q, retried });
+                results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${msgSafe}</span></div></div>${details}</div>`;
                 return;
               }
               const total = Number(resp.totalSize || (Array.isArray(resp.records) ? resp.records.length : 0));
@@ -216,6 +277,7 @@
             });
           });
         } catch (e) {
+          try { console.error('SOQL RUN exception', e); } catch {}
           results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
         }
       });
@@ -260,4 +322,3 @@
 
   window.SoqlHelper = { detach };
 })();
-
