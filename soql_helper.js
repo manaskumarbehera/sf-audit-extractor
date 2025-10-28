@@ -118,7 +118,7 @@
       on(objSel, 'change', () => {
         const v = (objSel.value || '').trim();
         if (!v) { clearUi(); return; }
-        queryEl.value = `SELECT Id, Name FROM ${v} LIMIT 10`;
+        queryEl.value = `SELECT Id FROM ${v} LIMIT 10`;
         renderPlaceholder();
       });
     }

@@ -6,7 +6,7 @@
   "defaults": {
     "emptySuggestion": {
       "title": "Write a focused SOQL query",
-      "message": "Start by selecting a small field list and limit the records you pull back."
+      "message": "Start by selecting a small field list and limit the records you pull back. Use WHERE and LIMIT to keep results manageable."
     }
   },
   "rules": [
@@ -14,8 +14,8 @@
       "id": "select_star",
       "category": "error",
       "title": "Avoid SELECT *",
-      "message": "SOQL does not support SELECT * and it increases payload size.",
-      "suggestion": "List the fields you really need instead of using *.",
+      "message": "SOQL does not support SELECT * and listing many fields increases payload size.",
+      "suggestion": "List the specific fields you need instead of using *.",
       "conditions": {
         "all": [
           { "regex": "select\\s+\\*", "flags": "i" }
@@ -26,7 +26,7 @@
       "id": "missing_fields",
       "category": "suggestion",
       "title": "Select specific fields",
-      "message": "Always specify only the fields you need. Avoid broad field lists for better performance.",
+      "message": "Specify only the fields you need for this query to reduce payload and improve performance.",
       "suggestion": "List only the fields needed, e.g., SELECT Id, Name FROM Account.",
       "keyword": "SELECT Id, Name",
       "keywordMatch": "select",
@@ -41,7 +41,7 @@
       "id": "from_missing_object",
       "category": "error",
       "title": "Specify a valid object",
-      "message": "The FROM clause must reference a valid Salesforce object.",
+      "message": "The FROM clause must reference a valid Salesforce object (for example: Account).",
       "suggestion": "Ensure you include one valid object name after FROM.",
       "conditions": {
         "all": [
@@ -53,7 +53,7 @@
       "id": "where_missing",
       "category": "suggestion",
       "title": "Filter your query",
-      "message": "Filtering helps SOQL run faster and stay within limits.",
+      "message": "Filtering reduces returned rows and speeds up queries.",
       "suggestion": "Add a WHERE clause that narrows the records you need.",
       "keyword": "WHERE <field> = '<value>'",
       "keywordMatch": "where",
@@ -61,10 +61,6 @@
         "all": [
           { "regex": "^\\s*select\\s+[\\s\\S]+\\s+from\\s+", "flags": "i" },
           { "notContains": [" where "] }
-        ],
-        "any": [
-          { "contains": [" limit "] },
-          { "contains": [" order by "] }
         ]
       }
     },
@@ -85,7 +81,7 @@
       "id": "order_by_without_limit",
       "category": "warning",
       "title": "Pair ORDER BY with LIMIT",
-      "message": "ORDER BY can be expensive without a LIMIT.",
+      "message": "ORDER BY can be expensive without a LIMIT; consider adding LIMIT when ordering.",
       "suggestion": "Use LIMIT when ordering to keep results manageable.",
       "keyword": "LIMIT 100",
       "keywordMatch": "limit",
@@ -100,7 +96,7 @@
       "id": "limit_missing",
       "category": "warning",
       "title": "Add a LIMIT clause",
-      "message": "SOQL queries without LIMIT can pull more data than expected.",
+      "message": "SOQL queries without LIMIT can pull more data than expected; add a LIMIT to bound results.",
       "suggestion": "Append LIMIT <n> to control how many records are returned.",
       "keyword": "LIMIT 100",
       "keywordMatch": "limit",
@@ -112,10 +108,25 @@
       }
     },
     {
+      "id": "related_fields",
+      "category": "suggestion",
+      "title": "Include related-object fields",
+      "message": "If you need data from a related object, select related fields using dot-notation (for example: Owner.Name) instead of separate queries.",
+      "suggestion": "Select related fields when appropriate, e.g., SELECT Id, Name, Owner.Name FROM Account.",
+      "keyword": "Owner.Name",
+      "keywordMatch": "select",
+      "conditions": {
+        "all": [
+          { "regex": "^\\s*select\\s+[\\s\\S]+\\s+from\\s+", "flags": "i" },
+          { "notRegex": "\\.[A-Za-z0-9_]+", "flags": "i" }
+        ]
+      }
+    },
+    {
       "id": "count_query_tip",
       "category": "suggestion",
       "title": "COUNT() queries",
-      "message": "COUNT() returns a single aggregate row.",
+      "message": "COUNT() returns a single aggregate row and is efficient when you only need a total.",
       "suggestion": "Use COUNT() when you only need the record count.",
       "keyword": "SELECT COUNT() FROM <object>",
       "keywordMatch": "count(",

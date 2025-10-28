@@ -31,6 +31,7 @@
 
   function getCometdBase() {
     const base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+    // state.apiVersion is normalized (no leading v)
     return `${base}/cometd/${state.apiVersion}`;
   }
 
@@ -158,7 +159,9 @@
     if (!ensureSession()) return;
     state.cometdState = 'handshaking';
     updateCometdStatus(false, 'Handshaking...');
-    state.apiVersion = String(opts.apiVersion || state.apiVersion);
+    // normalize api version
+    const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
+    state.apiVersion = String(norm || '56.0');
     state.cometdBaseUrl = getCometdBase();
 
     const token = getAccessToken();
@@ -466,7 +469,8 @@
 
   function init(options){
     opts = { ...opts, ...options };
-    state.apiVersion = String(opts.apiVersion || state.apiVersion);
+    const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
+    state.apiVersion = String(norm || '56.0');
     dom = {
       peRefreshBtn: document.getElementById('pe-refresh'),
       peListEl: document.getElementById('platform-events-list'),
@@ -480,5 +484,10 @@
     attachHandlers();
   }
 
-  window.PlatformHelper = { init };
+  function updateApiVersion(v){
+    const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(v) : v;
+    if (norm) state.apiVersion = String(norm);
+  }
+
+  window.PlatformHelper = { init, updateApiVersion };
 })();

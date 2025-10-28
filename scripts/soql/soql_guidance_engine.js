@@ -112,6 +112,16 @@
                 }
             }
 
+            if (condition.notRegex) {
+                try {
+                    const re = new RegExp(condition.notRegex, condition.flags || '');
+                    return !re.test(raw);
+                } catch (e) {
+                    console.warn('[SOQL Guidance] Invalid notRegex condition', condition, e);
+                    return true;
+                }
+            }
+
             if (condition.contains) {
                 const needles = ensureArray(condition.contains).map(toLower).filter(Boolean);
                 const normalizedNeedles = needles.map(n => n.replace(/\s+/g, ' '));

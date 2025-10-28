@@ -597,8 +597,15 @@ async function fetchLmsChannels(instanceUrl, sessionId) {
 async function getApiVersion() {
     try {
         const { apiVersion } = await chrome.storage.local.get({ apiVersion: '65.0' });
-        const v = String(apiVersion || '65.0');
-        return v.startsWith('v') ? v : ('v' + v);
+        const stored = String(apiVersion || '65.0');
+        // normalize: ensure storage has no leading v
+        let majorMinor = stored.replace(/^v/i, '');
+        const m = majorMinor.match(/^(\d{1,3})(?:\.(\d{1,2}))?$/);
+        if (!m) majorMinor = '65.0';
+        if (majorMinor !== stored) {
+            try { await chrome.storage.local.set({ apiVersion: majorMinor }); } catch {}
+        }
+        return 'v' + majorMinor;
     } catch {
         return DEFAULT_API_VERSION;
     }

@@ -125,10 +125,39 @@
     } catch {}
   }
 
+  // Shared: normalize API version (strip leading v, validate, return "major.minor")
+  function normalizeApiVersion(value){
+    try {
+      if (value == null) return null;
+      const str = String(value).trim();
+      if (!str) return null;
+      const noV = str.replace(/^v/i, '');
+      const m = noV.match(/^(\d{1,3})(?:\.(\d{1,2}))?$/);
+      if (!m) return null;
+      const major = parseInt(m[1], 10);
+      const minor = m[2] != null ? parseInt(m[2], 10) : 0;
+      return `${major}.${minor}`;
+    } catch { return null; }
+  }
+
+  // Shared: safe URL join
+  function joinUrl(base, ...parts) {
+    const all = [base, ...parts].filter(Boolean).map(String);
+    return all.reduce((acc, part, idx) => {
+      if (idx === 0) return part.replace(/\/+$/g, '');
+      return acc.replace(/\/+$/g, '') + '/' + part.replace(/^\/+/, '').replace(/\/+$/g, '');
+    }, '');
+  }
+
   async function getApiVersionNumber(){
     try {
       const { apiVersion } = await chrome.storage?.local?.get?.({ apiVersion: '65.0' });
-      return String(apiVersion || '65.0');
+      const normalized = normalizeApiVersion(apiVersion || '65.0') || '65.0';
+      // Persist normalized (no leading v)
+      if (normalized !== apiVersion) {
+        try { await chrome.storage?.local?.set?.({ apiVersion: normalized }); } catch {}
+      }
+      return String(normalized);
     } catch { return '65.0'; }
   }
 
@@ -156,5 +185,6 @@
 
   window.Utils = { escapeHtml, sleep, fetchWithTimeout, svgPlus, svgMinus, showToast, download,
     findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab, fallbackCopyText,
-    getApiVersionNumber, getApiVersionPath, getAccessToken, getSessionInfo };
+    getApiVersionNumber, getApiVersionPath, getAccessToken, getSessionInfo,
+    normalizeApiVersion, joinUrl };
 })();
