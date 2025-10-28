@@ -31,7 +31,6 @@
 
   function getCometdBase() {
     const base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
-    // state.apiVersion is normalized (no leading v)
     return `${base}/cometd/${state.apiVersion}`;
   }
 
@@ -156,7 +155,6 @@
   }
 
   async function withAuthRetry(fn, label) {
-    // Executes fn() which returns a Response; on 401/403, clears cache, refreshes session, and retries once
     try {
       let res = await fn();
       if (res && (res.status === 401 || res.status === 403)) {
@@ -168,7 +166,6 @@
       }
       return res;
     } catch (e) {
-      // On network errors, try a single refresh + retry as well
       appendPeLog(`${label} error: ${String(e)}. Retrying...`);
       try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
       try { await opts.refreshSessionFromTab(); } catch {}
@@ -181,7 +178,6 @@
     if (!ensureSession()) return;
     state.cometdState = 'handshaking';
     updateCometdStatus(false, 'Handshaking...');
-    // normalize api version
     const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
     state.apiVersion = String(norm || '56.0');
     state.cometdBaseUrl = getCometdBase();
@@ -489,9 +485,7 @@
     updateAutoScrollUI();
     updatePauseUI();
 
-    // Lazy load hook
     try { document.addEventListener('platform-load', () => { loadPlatformEventsList(false); }); } catch {}
-    // If tab is already active
     const activeTab = document.querySelector('.tab-button.active')?.getAttribute('data-tab');
     if (activeTab === 'platform') loadPlatformEventsList(false);
   }
@@ -518,31 +512,19 @@
     if (norm) state.apiVersion = String(norm);
   }
 
-  // Expose init/update handlers via existing API
   window.PlatformHelper = window.PlatformHelper || {};
   window.PlatformHelper.init = function(options) {
-    opts = { ...opts, ...options };
-    dom = {
-      peListEl: document.getElementById('pe-list'),
-      peLogEl: document.getElementById('pe-log'),
-      peLogFilterSel: document.getElementById('pe-log-filter'),
-      peLogAutoscrollBtn: document.getElementById('pe-log-autoscroll'),
-      cometdStatusEl: document.getElementById('cometd-status')
-    };
-
-    // Wire UI events (subset retained)
-    try { document.addEventListener('platform-load', () => { loadPlatformEventsList(false); }); } catch {}
-    const activeTab = document.querySelector('.tab-button.active')?.getAttribute('data-tab');
-    if (activeTab === 'platform') loadPlatformEventsList(false);
+      try {
+          init(options);
+          state.cometdBaseUrl = getCometdBase();
+      } catch (e) {
+          try { console.error('PlatformHelper.init error:', e); } catch {}
+      }
   };
-
   window.PlatformHelper.updateApiVersion = function(v) {
     try {
-      const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(v) : v;
-      state.apiVersion = String(norm || state.apiVersion || '56.0');
-      state.cometdBaseUrl = getCometdBase();
+        updateApiVersion(v);
+        state.cometdBaseUrl = getCometdBase();
     } catch {}
   };
-
-  // Keep existing functions (applyPeLogFilter, etc.) on the object if they were previously exposed
 })();
