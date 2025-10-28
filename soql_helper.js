@@ -1,10 +1,13 @@
 (function(){
   'use strict';
-  // Minimal UI-only SOQL helper. Exposes only detach(). No async/await to avoid parser issues.
 
   let attached = false;
   const cleanup = [];
   let guidanceCleanup = null;
+
+  let lifecycleEpoch = 0;
+  let reloadSeq = 0;
+  let runSeq = 0;
 
   function on(el, evt, fn, opts) {
     if (!el) return;
@@ -45,6 +48,17 @@
       .map((o) => o?.name || o?.label || '')
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
+  }
+
+  // Quote identifier if it contains unsafe characters or starts with a digit
+  function quoteIdentifier(name) {
+    const n = String(name || '');
+    if (!n) return n;
+    // safe if starts with letter/_ and contains only letters, digits, underscore
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return n;
+    // already quoted
+    if ((n.startsWith('`') && n.endsWith('`')) || (n.startsWith('"') && n.endsWith('"'))) return n;
+    return '`' + n.replace(/`/g, '\\`') + '`';
   }
 
   // Build a rich error details block with hints and request preview
@@ -130,6 +144,10 @@
   function reloadObjects(tooling) {
     const sel = document.getElementById('soql-object');
     if (!sel) return;
+
+    const epoch = lifecycleEpoch;
+    const seq = ++reloadSeq;
+
     sel.innerHTML = '';
     const def = document.createElement('option');
     def.value = '';
@@ -137,6 +155,10 @@
     sel.appendChild(def);
 
     fetchDescribe(!!tooling).then((res) => {
+      // Ignore stale callbacks
+      if (epoch !== lifecycleEpoch || seq !== reloadSeq) return;
+      if (!sel.isConnected) return;
+
       const names = Array.isArray(res?.names) ? res.names : [];
       const error = res && typeof res.error === 'string' ? res.error : null;
 
@@ -145,16 +167,16 @@
         opt.value = '';
         opt.textContent = 'No objects loaded';
         opt.disabled = true;
-        sel.appendChild(opt);
+        try { sel.appendChild(opt); } catch {}
 
         // Also surface error cause to the user if available using log-entry styling
         if (error) {
           try {
             const results = document.getElementById('soql-results');
-            if (results) {
+            if (results && results.isConnected) {
               const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(error) : String(error);
               const details = buildErrorDetailsHTML(error, { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling });
-              results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
+              results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
             }
           } catch {}
         }
@@ -166,7 +188,7 @@
         const opt = document.createElement('option');
         opt.value = name; opt.textContent = name; frag.appendChild(opt);
       });
-      sel.appendChild(frag);
+      try { sel.appendChild(frag); } catch {}
     });
   }
 
@@ -177,6 +199,13 @@
     const results = document.getElementById('soql-results');
     const objSel = document.getElementById('soql-object');
     const toolingCb = document.getElementById('soql-tooling');
+    const limitEl = document.getElementById('soql-limit');
+
+    function getLimitValue() {
+      const v = Number((limitEl && limitEl.value) ? limitEl.value : 200);
+      if (!Number.isFinite(v)) return 200;
+      return Math.min(5000, Math.max(1, Math.floor(v)));
+    }
 
     function renderPlaceholder() {
       if (!results) return;
@@ -197,11 +226,26 @@
       });
     }
 
+    // Update LIMIT in the auto-generated template when the limit control changes
+    if (limitEl && queryEl) {
+      on(limitEl, 'change', () => {
+        const lim = getLimitValue();
+        const val = (queryEl.value || '').trim();
+        // If the query looks like our template, only update the LIMIT number
+        const m = val.match(/^select\s+id\s+from\s+(.+?)\s+limit\s+\d+\s*$/i);
+        if (m && m[1]) {
+          queryEl.value = `SELECT Id FROM ${m[1]} LIMIT ${lim}`;
+        }
+      });
+    }
+
     if (objSel && queryEl) {
       on(objSel, 'change', () => {
         const v = (objSel.value || '').trim();
         if (!v) { clearUi(); return; }
-        queryEl.value = `SELECT Id FROM ${v} LIMIT 10`;
+        const qName = quoteIdentifier(v);
+        const lim = getLimitValue();
+        queryEl.value = `SELECT Id FROM ${qName} LIMIT ${lim}`;
         renderPlaceholder();
       });
     }
@@ -219,17 +263,26 @@
       on(runBtn, 'click', () => {
         const q = (queryEl.value || '').trim();
         const tooling = !!document.getElementById('soql-tooling')?.checked;
+        const limitVal = getLimitValue();
         if (!q) {
           results.innerHTML = `
-            <div class="log-entry">
-              <div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">Please type a SOQL query.</span></div></div>
+            <div class=\"log-entry\">\n              <div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Please type a SOQL query.</span></div></div>
             </div>
           `;
           return;
         }
         try {
+          // Capture lifecycle + sequence for this run
+          const epoch = lifecycleEpoch;
+          const seq = ++runSeq;
+
+          // Loading state: disable Run and show spinner
+          try { runBtn.disabled = true; runBtn.setAttribute('aria-busy', 'true'); } catch {}
+          if (results && results.isConnected) {
+            results.innerHTML = `<div class=\"loading\"><div class=\"loading-spinner\"></div><div>Running query… (limit ${limitVal})</div></div>`;
+          }
           Utils.getInstanceUrl().then((instanceUrl) => {
-            const payload = { action: 'RUN_SOQL', query: q, useTooling: tooling, limit: 200 };
+            const payload = { action: 'RUN_SOQL', query: q, useTooling: tooling, limit: limitVal };
             if (instanceUrl) payload.instanceUrl = instanceUrl;
             function runOnce(p){
               return new Promise((resolve) => {
@@ -255,30 +308,51 @@
                   resp = await runOnce(p2);
                 }
               }
+              // Ignore stale callbacks and avoid touching DOM
+              if (epoch !== lifecycleEpoch || seq !== runSeq) return;
+
+              // Re-enable Run button before rendering
+              try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
+
               if (!resp || !resp.success) {
                 try { console.error('SOQL RUN failed', { error: resp?.error, payload: usedPayload, retried }); } catch {}
                 const msgSafe = Utils.escapeHtml(resp?.error || 'Query failed');
                 const details = buildErrorDetailsHTML(resp?.error, { useTooling: tooling, limit: payload.limit, instanceUrl: usedPayload.instanceUrl, query: q, retried });
-                results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${msgSafe}</span></div></div>${details}</div>`;
+                if (results && results.isConnected) {
+                  results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${msgSafe}</span></div></div>${details}</div>`;
+                }
                 return;
               }
               const total = Number(resp.totalSize || (Array.isArray(resp.records) ? resp.records.length : 0));
-              results.innerHTML = `
-                <div class="log-entry">
-                  <div class="log-header">
-                    <div class="log-left">
-                      <span class="log-badge event">event</span>
-                      <span class="log-message">Returned ${total} record(s)</span>
-                    </div>
-                  </div>
-                  <div class="log-details"><details><summary>Records</summary><pre class="log-json">${Utils.escapeHtml(JSON.stringify(resp.records || [], null, 2))}</pre></details></div>
-                </div>
-              `;
+              if (results && results.isConnected) {
+                results.innerHTML = `
+                  <div class=\"log-entry\">\n                    <div class=\"log-header\">\n                      <div class=\"log-left\">\n                        <span class=\"log-badge event\">event</span>\n                        <span class=\"log-message\">Returned ${total} record(s)</span>\n                      </div>\n                    </div>\n                    <div class=\"log-details\"><details><summary>Records</summary><pre class=\"log-json\">${Utils.escapeHtml(JSON.stringify(resp.records || [], null, 2))}</pre></details></div>\n                  </div>
+                `;
+              }
+            }).catch((e) => {
+              // Ignore stale
+              if (epoch !== lifecycleEpoch || seq !== runSeq) return;
+              try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
+              try { console.error('SOQL RUN chain error', e); } catch {}
+              if (results && results.isConnected) {
+                results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
+              }
             });
+          }).catch((e) => {
+            // Ignore stale
+            if (epoch !== lifecycleEpoch || seq !== runSeq) return;
+            try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
+            try { console.error('SOQL RUN instanceUrl error', e); } catch {}
+            if (results && results.isConnected) {
+              results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
+            }
           });
         } catch (e) {
           try { console.error('SOQL RUN exception', e); } catch {}
-          results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
+          try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
+          if (results && results.isConnected) {
+            results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
+          }
         }
       });
     }
@@ -318,6 +392,13 @@
       }
       guidanceCleanup = null;
       try { window.SoqlGuidance?.detach?.(); } catch {}
+      // Bump epoch so pending callbacks ignore DOM updates
+      lifecycleEpoch++;
+      // Best-effort: clear loading state if any
+      try {
+        const runBtn = document.getElementById('soql-run');
+        if (runBtn) { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); }
+      } catch {}
   }
 
   window.SoqlHelper = { detach };
