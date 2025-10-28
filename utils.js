@@ -57,7 +57,7 @@
 
   async function findSalesforceTab(){
     try {
-      const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+      const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*'] });
       if (!Array.isArray(matches) || matches.length === 0) return null;
       let currentWindowId = null;
       try { const current = await chrome.windows.getCurrent({ populate: true }); currentWindowId = current?.id ?? null; } catch {}
@@ -81,25 +81,65 @@
     } catch { return null; }
   }
 
-  let instanceUrlCache = null;
+  // Instance URL cache with TTL and explicit setter
+  const INSTANCE_URL_TTL_MS = 60 * 1000; // 1 minute
+  let instanceUrlCache = { value: null, ts: 0 };
+
+  function now() { return Date.now(); }
+  function isFresh(entry) { return !!(entry && entry.value && (now() - (entry.ts || 0) < INSTANCE_URL_TTL_MS)); }
+
+  function safeOrigin(url) {
+    if (!url) return null;
+    try { return new URL(url).origin; } catch {
+      const m = String(url || '').match(/^(https:\/\/[^/]+)/i);
+      return m ? m[1] : null;
+    }
+  }
+
+  function setInstanceUrlCache(value) {
+    if (!value) { instanceUrlCache = { value: null, ts: 0 }; return; }
+    const origin = safeOrigin(value);
+    instanceUrlCache = { value: origin || null, ts: origin ? now() : 0 };
+  }
+  function getCachedInstanceUrl() { return instanceUrlCache?.value || null; }
+
   async function getInstanceUrl(){
-    if (instanceUrlCache) return instanceUrlCache;
-    // Prefer a live Salesforce tab first (like Audit/LMS helpers)
+    // Return fresh cache if available
+    if (isFresh(instanceUrlCache)) return instanceUrlCache.value;
+
+    // Try foreground first
+    let foregroundOrigin = null;
     try {
       const resp = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
       if (resp && resp.success && resp.isLoggedIn && resp.instanceUrl) {
-        instanceUrlCache = resp.instanceUrl;
-        return instanceUrlCache;
+        foregroundOrigin = safeOrigin(resp.instanceUrl);
+        if (foregroundOrigin) {
+          // If cache differs from foreground, treat as org change and replace cache
+          if (instanceUrlCache.value && instanceUrlCache.value !== foregroundOrigin) {
+            setInstanceUrlCache(foregroundOrigin);
+          } else {
+            setInstanceUrlCache(foregroundOrigin);
+          }
+          return instanceUrlCache.value;
+        }
+      } else {
+        // Foreground responded but not logged in or error-like: clear cache to force background detection
+        if (instanceUrlCache.value) setInstanceUrlCache(null);
       }
-    } catch {}
+    } catch {
+      // Foreground messaging failed: clear stale cache to force fallback
+      if (instanceUrlCache.value) setInstanceUrlCache(null);
+    }
+
     // Fallback: ask background (cookie-based)
     return await new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, (resp) => {
           if (chrome.runtime.lastError) { resolve(null); return; }
           const url = resp?.instanceUrl || null;
-          instanceUrlCache = url || null;
-          resolve(instanceUrlCache);
+          const origin = safeOrigin(url);
+          if (origin) setInstanceUrlCache(origin); else setInstanceUrlCache(null);
+          resolve(instanceUrlCache.value);
         });
       } catch { resolve(null); }
     });
@@ -186,5 +226,5 @@
   window.Utils = { escapeHtml, sleep, fetchWithTimeout, svgPlus, svgMinus, showToast, download,
     findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab, fallbackCopyText,
     getApiVersionNumber, getApiVersionPath, getAccessToken, getSessionInfo,
-    normalizeApiVersion, joinUrl };
+    normalizeApiVersion, joinUrl, setInstanceUrlCache, getCachedInstanceUrl };
 })();

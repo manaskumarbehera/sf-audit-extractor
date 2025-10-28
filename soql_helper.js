@@ -37,9 +37,37 @@
         Utils.getInstanceUrl().then((instanceUrl) => {
           const payload = { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling };
           if (instanceUrl) payload.instanceUrl = instanceUrl;
-          chrome.runtime.sendMessage(payload, (resp) => {
+          chrome.runtime.sendMessage(payload, async (resp) => {
             if (chrome.runtime && chrome.runtime.lastError) { resolve([]); return; }
-            if (!resp || !resp.success) { resolve([]); return; }
+            if (!resp || !resp.success) {
+              const msg = String(resp?.error || '').toLowerCase();
+              if (/(^|[^\d])(401|403)([^\d]|$)/.test(msg)) {
+                try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+                try { await new Promise((res) => chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, () => res())); } catch {}
+                const inst2 = await Utils.getInstanceUrl();
+                const payload2 = { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling };
+                if (inst2) payload2.instanceUrl = inst2;
+                chrome.runtime.sendMessage(payload2, (resp2) => {
+                  if (chrome.runtime && chrome.runtime.lastError) { resolve([]); return; }
+                  if (!resp2 || !resp2.success) { resolve([]); return; }
+                  const objs = Array.isArray(resp2.objects) ? resp2.objects : [];
+                  const names = objs
+                    .filter((o) => {
+                      if (!o) return false;
+                      const val = o.queryable;
+                      if (typeof val === 'boolean') return val === true;
+                      if (typeof val === 'string') return val.toLowerCase() === 'true';
+                      return false; // strict: missing flag => not included
+                    })
+                    .map(o => o?.name || o?.label || '')
+                    .filter(Boolean)
+                    .sort((a,b) => a.localeCompare(b));
+                  resolve(names);
+                });
+                return;
+              }
+              resolve([]); return;
+            }
             const objs = Array.isArray(resp.objects) ? resp.objects : [];
             const names = objs
                 .filter((o) => {
@@ -148,32 +176,47 @@
           Utils.getInstanceUrl().then((instanceUrl) => {
             const payload = { action: 'RUN_SOQL', query: q, useTooling: tooling, limit: 200 };
             if (instanceUrl) payload.instanceUrl = instanceUrl;
-            chrome.runtime.sendMessage(payload, (resp) => {
-              if (chrome.runtime && chrome.runtime.lastError) {
-                results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(chrome.runtime.lastError.message)}</span></div></div></div>`;
-                return;
+            function runOnce(p){
+              return new Promise((resolve) => {
+                chrome.runtime.sendMessage(p, (resp) => {
+                  if (chrome.runtime && chrome.runtime.lastError) { resolve({ ok: false, error: chrome.runtime.lastError.message }); return; }
+                  resolve(resp || { ok: false, error: 'No response' });
+                });
+              });
+            }
+            runOnce(payload).then(async (resp) => {
+              if (!resp || !resp.success) {
+                const msg = String(resp?.error || '').toLowerCase();
+                if (/(^|[^\d])(401|403)([^\d]|$)/.test(msg)) {
+                  try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+                  try { await new Promise((res) => chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, () => res())); } catch {}
+                  const inst2 = await Utils.getInstanceUrl();
+                  const p2 = { ...payload };
+                  if (inst2) p2.instanceUrl = inst2;
+                  resp = await runOnce(p2);
+                }
               }
               if (!resp || !resp.success) {
-                const msg = Utils.escapeHtml(resp?.error || 'Query failed');
-                results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${msg}</span></div></div></div>`;
+                const msgSafe = Utils.escapeHtml(resp?.error || 'Query failed');
+                results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${msgSafe}</span></div></div></div>`;
                 return;
               }
               const total = Number(resp.totalSize || (Array.isArray(resp.records) ? resp.records.length : 0));
               results.innerHTML = `
-                <div class=\"log-entry\">
-                  <div class=\"log-header\">
-                    <div class=\"log-left\">
-                      <span class=\"log-badge event\">event</span>
-                      <span class=\"log-message\">Returned ${total} record(s)</span>
+                <div class="log-entry">
+                  <div class="log-header">
+                    <div class="log-left">
+                      <span class="log-badge event">event</span>
+                      <span class="log-message">Returned ${total} record(s)</span>
                     </div>
                   </div>
-                  <div class=\"log-details\"><details><summary>Records</summary><pre class=\"log-json\">${Utils.escapeHtml(JSON.stringify(resp.records || [], null, 2))}</pre></details></div>
+                  <div class="log-details"><details><summary>Records</summary><pre class="log-json">${Utils.escapeHtml(JSON.stringify(resp.records || [], null, 2))}</pre></details></div>
                 </div>
               `;
             });
           });
         } catch (e) {
-          results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
+          results.innerHTML = `<div class="log-entry"><div class="log-header"><div class="log-left"><span class="log-badge error">error</span><span class="log-message">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
         }
       });
     }
@@ -217,3 +260,4 @@
 
   window.SoqlHelper = { detach };
 })();
+

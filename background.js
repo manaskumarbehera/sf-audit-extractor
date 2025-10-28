@@ -374,7 +374,7 @@ function normalizeApiBase(url) {
 
 async function findSalesforceOrigin() {
     try {
-        const tabs = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+        const tabs = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*'] });
         const t = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
         return t?.url ? sanitizeUrl(t.url) : null;
     } catch {
@@ -398,7 +398,7 @@ async function findInstanceFromCookies() {
         // Filter cookie domains that look like Salesforce hosts
         const candidates = all
             .map(c => ({ domain: c.domain || '', name: c.name || '', valueLength: c.value ? String(c.value).length : 0 }))
-            .filter(c => typeof c.domain === 'string' && /(?:salesforce\.com|force\.com)$/i.test(c.domain))
+            .filter(c => typeof c.domain === 'string' && /(?:salesforce\.com|force\.com|salesforce-setup\.com)$/i.test(c.domain))
             .map(c => {
                 // normalize domain to a host (remove leading dot)
                 let host = String(c.domain).trim();
@@ -406,12 +406,13 @@ async function findInstanceFromCookies() {
                 return { host, name: c.name, valueLength: c.valueLength };
             });
         if (!candidates.length) return null;
-        // Rank candidates: prefer *.my.salesforce.com, then *.salesforce.com, then *.force.com
+        // Rank candidates: prefer *.my.salesforce.com, then *.salesforce.com, then *.force.com, then *.salesforce-setup.com
         function rankHost(h) {
             const lh = h.toLowerCase();
-            if (lh.endsWith('.my.salesforce.com')) return 3;
-            if (lh.endsWith('.salesforce.com')) return 2;
-            if (lh.endsWith('.force.com')) return 1;
+            if (lh.endsWith('.my.salesforce.com')) return 4;
+            if (lh.endsWith('.salesforce.com')) return 3;
+            if (lh.endsWith('.force.com')) return 2;
+            if (lh.endsWith('.salesforce-setup.com')) return 1;
             return 0;
         }
         candidates.sort((a, b) => {
@@ -445,7 +446,7 @@ async function getSalesforceSession(url) {
     if (!sid) {
         const all = await cookies.getAll({});
         const candidates = (all || []).filter(
-            (c) => (c.name === 'sid' || /^sid[_-]/i.test(c.name)) && (c.domain.endsWith('salesforce.com') || c.domain.endsWith('force.com')) && c.value
+            (c) => (c.name === 'sid' || /^sid[_-]/i.test(c.name)) && (c.domain.endsWith('salesforce.com') || c.domain.endsWith('force.com') || c.domain.endsWith('salesforce-setup.com')) && c.value
         );
 
         // Prepare a masked diagnostics list (do not expose full cookie values in UI)
@@ -489,7 +490,7 @@ async function fetchAuditTrail(instanceUrl, sessionId, opts = {}) {
     if (!base || !/^https:\/\//i.test(base)) throw new Error('Invalid instance URL');
 
     const soql = [
-        'SELECT Id, Action, Section, CreatedDate, CreatedById, CreatedBy.Name',
+        'SELECT Id, Action, Section, Display, DelegateUser, CreatedDate, CreatedById, CreatedBy.Name',
         'FROM SetupAuditTrail',
         `WHERE CreatedDate = LAST_N_DAYS:${days}`,
         'ORDER BY CreatedDate DESC'

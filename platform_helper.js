@@ -155,6 +155,28 @@
     startConnectLoop();
   }
 
+  async function withAuthRetry(fn, label) {
+    // Executes fn() which returns a Response; on 401/403, clears cache, refreshes session, and retries once
+    try {
+      let res = await fn();
+      if (res && (res.status === 401 || res.status === 403)) {
+        appendPeLog(`${label} unauthorized (${res.status}). Refreshing session...`, { status: res.status });
+        try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+        try { await opts.refreshSessionFromTab(); } catch {}
+        state.cometdBaseUrl = getCometdBase();
+        res = await fn();
+      }
+      return res;
+    } catch (e) {
+      // On network errors, try a single refresh + retry as well
+      appendPeLog(`${label} error: ${String(e)}. Retrying...`);
+      try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+      try { await opts.refreshSessionFromTab(); } catch {}
+      state.cometdBaseUrl = getCometdBase();
+      return await fn();
+    }
+  }
+
   async function cometdHandshake() {
     if (!ensureSession()) return;
     state.cometdState = 'handshaking';
@@ -173,7 +195,7 @@
       advice: { timeout: 60000, interval: 0 }
     }];
 
-    const res = await Utils.fetchWithTimeout(`${state.cometdBaseUrl}/handshake`, {
+    const res = await withAuthRetry(() => Utils.fetchWithTimeout(`${state.cometdBaseUrl}/handshake`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -181,7 +203,7 @@
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(body)
-    });
+    }), 'Handshake');
 
     if (!res.ok) throw new Error(`Handshake failed: ${res.status} ${res.statusText}`);
     const arr = await res.json();
@@ -221,7 +243,7 @@
   async function cometdConnectOnce() {
     if (!state.cometdClientId) throw new Error('No clientId');
     state.connectAbortController = new AbortController();
-    const res = await fetch(`${state.cometdBaseUrl}/connect`, {
+    const res = await withAuthRetry(() => fetch(`${state.cometdBaseUrl}/connect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -230,14 +252,14 @@
       },
       signal: state.connectAbortController.signal,
       body: JSON.stringify([{ channel: '/meta/connect', clientId: state.cometdClientId, connectionType: 'long-polling' }])
-    });
+    }), 'Connect');
     if (!res.ok) throw new Error(`Connect failed: ${res.status} ${res.statusText}`);
     return await res.json();
   }
 
   async function cometdSubscribe(channel) {
     if (!state.cometdClientId) await cometdEnsureConnected();
-    const res = await Utils.fetchWithTimeout(`${state.cometdBaseUrl}/subscribe`, {
+    const res = await withAuthRetry(() => Utils.fetchWithTimeout(`${state.cometdBaseUrl}/subscribe`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -245,7 +267,7 @@
         'Authorization': `Bearer ${getAccessToken()}`
       },
       body: JSON.stringify([{ channel: '/meta/subscribe', clientId: state.cometdClientId, subscription: channel }])
-    });
+    }), 'Subscribe');
     if (!res.ok) throw new Error(`Subscribe failed HTTP: ${res.status}`);
     const arr = await res.json();
     const m = Array.isArray(arr) ? arr[0] : null;
@@ -255,7 +277,7 @@
 
   async function cometdUnsubscribe(channel) {
     if (!state.cometdClientId) return true;
-    const res = await Utils.fetchWithTimeout(`${state.cometdBaseUrl}/unsubscribe`, {
+    const res = await withAuthRetry(() => Utils.fetchWithTimeout(`${state.cometdBaseUrl}/unsubscribe`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -263,7 +285,7 @@
         'Authorization': `Bearer ${getAccessToken()}`
       },
       body: JSON.stringify([{ channel: '/meta/unsubscribe', clientId: state.cometdClientId, subscription: channel }])
-    });
+    }), 'Unsubscribe');
     if (!res.ok) throw new Error(`Unsubscribe failed HTTP: ${res.status}`);
     const arr = await res.json();
     const m = Array.isArray(arr) ? arr[0] : null;
@@ -321,10 +343,17 @@
       const accessToken = getAccessToken();
       const base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
       const url = `${base}/services/data/v${state.apiVersion}/sobjects`;
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
-      });
+      const doFetch = () => fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
+      let res = await doFetch();
+      if (res && (res.status === 401 || res.status === 403)) {
+        appendPeLog(`SObjects list unauthorized (${res.status}). Refreshing session...`);
+        try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+        try { await opts.refreshSessionFromTab(); } catch {}
+        const s = opts.getSession();
+        const nextBase = s?.instanceUrl?.replace(/\/+$/, '') || base;
+        const nextUrl = `${nextBase}/services/data/v${state.apiVersion}/sobjects`;
+        res = await fetch(nextUrl, { method: 'GET', headers: { 'Authorization': `Bearer ${Utils.getAccessToken(s)}`, 'Accept': 'application/json' } });
+      }
       if (!res.ok) throw new Error(`SObjects list failed: ${res.status} ${res.statusText}`);
       const data = await res.json();
       const sobjects = Array.isArray(data?.sobjects) ? data.sobjects : [];
@@ -489,5 +518,31 @@
     if (norm) state.apiVersion = String(norm);
   }
 
-  window.PlatformHelper = { init, updateApiVersion };
+  // Expose init/update handlers via existing API
+  window.PlatformHelper = window.PlatformHelper || {};
+  window.PlatformHelper.init = function(options) {
+    opts = { ...opts, ...options };
+    dom = {
+      peListEl: document.getElementById('pe-list'),
+      peLogEl: document.getElementById('pe-log'),
+      peLogFilterSel: document.getElementById('pe-log-filter'),
+      peLogAutoscrollBtn: document.getElementById('pe-log-autoscroll'),
+      cometdStatusEl: document.getElementById('cometd-status')
+    };
+
+    // Wire UI events (subset retained)
+    try { document.addEventListener('platform-load', () => { loadPlatformEventsList(false); }); } catch {}
+    const activeTab = document.querySelector('.tab-button.active')?.getAttribute('data-tab');
+    if (activeTab === 'platform') loadPlatformEventsList(false);
+  };
+
+  window.PlatformHelper.updateApiVersion = function(v) {
+    try {
+      const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(v) : v;
+      state.apiVersion = String(norm || state.apiVersion || '56.0');
+      state.cometdBaseUrl = getCometdBase();
+    } catch {}
+  };
+
+  // Keep existing functions (applyPeLogFilter, etc.) on the object if they were previously exposed
 })();

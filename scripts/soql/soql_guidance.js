@@ -354,6 +354,7 @@
         try { if (STATE.debug) console.debug('[SOQL Guidance] handleSuggestionActivate', { type: evt.type, time: Date.now(), keyword: STATE.currentSuggestionKeyword, keywordMatch: STATE.currentSuggestionKeywordMatch }); } catch {}
         applyKeyword(STATE.currentSuggestionKeyword, STATE.currentSuggestionKeywordMatch);
     }
+
     function renderStatuses(engineResult) {
         clearStatuses();
         if (!engineResult) return;
@@ -728,6 +729,7 @@
         li.appendChild(div);
         list.appendChild(li);
     }
+
     function insertWhereClause(el) {
       if (!el || typeof el.value !== 'string') return;
       const q = String(el.value || '');
@@ -947,6 +949,7 @@
         li.appendChild(div);
         list.appendChild(li);
     }
+
     // expose
     try { window.SoqlGuidance = { init, detach }; } catch {}
 })();

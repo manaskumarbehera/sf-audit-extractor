@@ -5,7 +5,7 @@
     'use strict';
 
     const isSalesforceHost = (hostname) =>
-        /(^|\.)salesforce\.com$/i.test(hostname) || /(^|\.)force\.com$/i.test(hostname);
+        /(^|\.)salesforce\.com$/i.test(hostname) || /(^|\.)force\.com$/i.test(hostname) || /(^|\.)salesforce-setup\.com$/i.test(hostname);
 
     const isTop = window === window.top;
     const host = location.hostname;

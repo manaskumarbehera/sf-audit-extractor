@@ -74,6 +74,7 @@
             const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
             if (fresh && fresh.success && fresh.isLoggedIn) {
                 sessionInfo = fresh;
+                try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(fresh.instanceUrl || null); } catch {}
                 const accessToken = getAccessToken();
                 const instanceUrl = fresh.instanceUrl;
                 if (accessToken && instanceUrl) {
@@ -129,14 +130,30 @@
         if (!window.PlatformHelper) return;
         try {
             const norm = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(apiVersion || (apiVersionSel?.value || '65.0')) || '65.0') : (apiVersion || '65.0');
+            const getSess = () => sessionInfo;
             window.PlatformHelper.init({
                 apiVersion: norm,
-                getSession: () => sessionInfo,
+                getSession: getSess,
                 setSession: (s) => { sessionInfo = s; },
                 refreshSessionFromTab: async () => {
+                    const before = getSess();
                     try {
                         const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-                        if (fresh && fresh.success && fresh.isLoggedIn) { sessionInfo = fresh; return fresh; }
+                        if (fresh && fresh.success && fresh.isLoggedIn) {
+                            sessionInfo = fresh;
+                            try {
+                                const prevUrl = before?.instanceUrl || null;
+                                const nextUrl = fresh.instanceUrl || null;
+                                if (prevUrl && nextUrl && prevUrl !== nextUrl) {
+                                    // Org changed; clear instance URL cache to force refetch
+                                    Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null);
+                                } else if (nextUrl) {
+                                    // Keep cache fresh
+                                    Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(nextUrl);
+                                }
+                            } catch {}
+                            return fresh;
+                        }
                     } catch {}
                     return null;
                 }
@@ -155,9 +172,22 @@
             window.AuditHelper.init({
                 getSession: () => sessionInfo,
                 refreshSessionFromTab: async () => {
+                    const before = sessionInfo;
                     try {
                         const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-                        if (fresh && fresh.success && fresh.isLoggedIn) { sessionInfo = fresh; return fresh; }
+                        if (fresh && fresh.success && fresh.isLoggedIn) {
+                            sessionInfo = fresh;
+                            try {
+                                const prevUrl = before?.instanceUrl || null;
+                                const nextUrl = fresh.instanceUrl || null;
+                                if (prevUrl && nextUrl && prevUrl !== nextUrl) {
+                                    Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null);
+                                } else if (nextUrl) {
+                                    Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(nextUrl);
+                                }
+                            } catch {}
+                            return fresh;
+                        }
                     } catch {}
                     return null;
                 }
@@ -513,6 +543,7 @@
 
             if (response && response.success && response.isLoggedIn) {
                 sessionInfo = response;
+                try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(response.instanceUrl || null); } catch {}
                 updateStatus(true, 'Connected to Salesforce');
             } else {
                 updateStatus(false, 'Not logged in');

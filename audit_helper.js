@@ -84,17 +84,21 @@
 
   function processAuditData(records) {
     if (!Array.isArray(records) || records.length === 0) { showEmpty(); return; }
-    state.allLogs = records.map(record => ({
-      id: record.Id,
-      action: record.Action || 'Unknown Action',
-      section: record.Section || 'Unknown',
-      date: record.CreatedDate,
-      user: record.CreatedBy ? record.CreatedBy.Name : 'Unknown User',
-      createdById: record.CreatedById || '',
-      display: record.Display || '',
-      delegateUser: record.DelegateUser || '',
-      category: categorizeAction(record.Section, record.Action)
-    }));
+    state.allLogs = records.map(record => {
+      const displayVal = (record.display ?? record.Display ?? record.DisplayText ?? record.DisplayValue ?? '');
+      const delegateVal = (record.delegateUser ?? record.DelegateUser ?? record.DelegatedUser ?? '');
+      return ({
+        id: record.Id,
+        action: record.Action || 'Unknown Action',
+        section: record.Section || 'Unknown',
+        date: record.CreatedDate,
+        user: record.CreatedBy ? record.CreatedBy.Name : 'Unknown User',
+        createdById: record.CreatedById || '',
+        display: displayVal,
+        delegateUser: delegateVal,
+        category: categorizeAction(record.Section, record.Action)
+      });
+    });
     state.filteredLogs = [...state.allLogs];
     updateStats();
     renderLogs();
@@ -193,23 +197,38 @@
     if (!s || !s.isLoggedIn) { showError('Please ensure you are logged in to Salesforce'); return; }
     if (dom.fetchBtn) { dom.fetchBtn.disabled = true; dom.fetchBtn.innerHTML = '<span class="btn-icon">⏳</span>'; }
     if (dom.logs) dom.logs.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Fetching audit trail data...</p></div>';
-    try {
-      const payload = { action: 'FETCH_AUDIT_TRAIL', instanceUrl: s.instanceUrl, days: 180, limit: 2000 };
-      chrome.runtime.sendMessage(payload, (response) => {
-        if (chrome.runtime.lastError) { showError('Failed to fetch data: ' + chrome.runtime.lastError.message); resetFetchButton(); return; }
-        if (response && response.success) { processAuditData(response.data); enableControls(); state.fetched = true; }
-        else { showError(response?.error || 'Failed to fetch audit trail data'); }
-        resetFetchButton();
+
+    async function fetchOnce() {
+      return await new Promise((resolve) => {
+        const payload = { action: 'FETCH_AUDIT_TRAIL', instanceUrl: s.instanceUrl, days: 180, limit: 2000 };
+        chrome.runtime.sendMessage(payload, (response) => {
+          if (chrome.runtime.lastError) { resolve({ ok: false, error: chrome.runtime.lastError.message }); return; }
+          resolve(response || { ok: false, error: 'No response' });
+        });
       });
+    }
+
+    try {
+      let response = await fetchOnce();
+      // Detect 401/403 from background error strings
+      const errStr = String(response?.error || '').toLowerCase();
+      const unauthorized = !response?.success && (/(^|[^\d])(401|403)([^\d]|$)/.test(errStr));
+      if (unauthorized) {
+        try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+        try { await opts.refreshSessionFromTab(); } catch {}
+        response = await fetchOnce();
+      }
+
+      if (response && response.success) { processAuditData(response.data); enableControls(); state.fetched = true; }
+      else { showError(response?.error || 'Failed to fetch audit trail data'); }
     } catch {
       showError('An error occurred while fetching data');
-      resetFetchButton();
-    }
+    } finally { resetFetchButton(); }
   }
 
   function resetFetchButton() {
     if (dom.fetchBtn) { dom.fetchBtn.disabled = false; dom.fetchBtn.innerHTML = '<span class="btn-icon">↻</span>'; }
   }
 
-  window.AuditHelper = { init, fetchNow };
+  window.AuditHelper = { init, fetchNow, _test: { processAuditData, handleExport, getState: () => JSON.parse(JSON.stringify(state)) } };
 })();
