@@ -231,7 +231,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 }
                 if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
                 const data = await describeGlobal(instanceUrl, sessionId, msg.useTooling);
-                return { success: true, objects: data };
+                const source = msg.useTooling ? 'tooling' : 'rest';
+                return { success: true, objects: data, source };
             }
 
             if (is('DESCRIBE_SOBJECT')) {

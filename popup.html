@@ -192,12 +192,14 @@ File: `popup.html` (replace body content with this)
             <div class="filters" style="gap: 8px; align-items: center;">
                 <label class="filter-label" for="soql-tooling">Tooling API:</label>
                 <input type="checkbox" id="soql-tooling" aria-label="Use Tooling API">
+                <span id="soql-api-mode" class="soql-mode-label" aria-live="polite" title="Current API">Using REST</span>
 
                 <div id="soql-object-group" style="display: inline-flex; align-items: center; gap: 8px;">
-                    <label class="filter-label" for="soql-object">Object:</label>
+                    <label class="filter-label" for="soql-object">SObject:</label>
                     <select id="soql-object" aria-label="Select SObject">
                         <option value="">Select an object</option>
                     </select>
+                    <span id="soql-object-loading" class="soql-loading" aria-hidden="true" hidden title="Loading objects"></span>
                 </div>
 
                 <!-- New: limit control -->

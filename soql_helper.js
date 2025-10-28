@@ -1,6 +1,13 @@
 (function(){
   'use strict';
 
+  // Prevent double-loading this helper in the same document
+  if (window.__SoqlHelperLoaded) {
+    try { console.warn('[SOQL] soql_helper.js already loaded; skipping second initialization'); } catch {}
+    return;
+  }
+  window.__SoqlHelperLoaded = true;
+
   let attached = false;
   const cleanup = [];
   let guidanceCleanup = null;
@@ -8,6 +15,25 @@
   let lifecycleEpoch = 0;
   let reloadSeq = 0;
   let runSeq = 0;
+
+  const DESCRIBE_TTL_MS = 5 * 60 * 1000;
+
+  // Use a window-backed shared state to avoid redeclaration errors if the script is injected more than once
+  function getSharedState() {
+    const w = window;
+    if (!w.__SOQL_HELPER_STATE__) {
+      w.__SOQL_HELPER_STATE__ = {
+        describeCache: {
+          rest: { names: null, ts: 0 },
+          tooling: { names: null, ts: 0 }
+        },
+        describeInFlight: { rest: null, tooling: null }
+      };
+    }
+    return w.__SOQL_HELPER_STATE__;
+  }
+
+  const nowTs = () => Date.now ? Date.now() : new Date().getTime();
 
   function on(el, evt, fn, opts) {
     if (!el) return;
@@ -30,7 +56,14 @@
     try {
       const group = document.getElementById('soql-object-group');
       if (!group) return;
-      getObjectSelectorPref().then((show) => { group.style.display = show ? 'inline-flex' : 'none'; });
+        getObjectSelectorPref().then((show) => {
+        const shouldShow = !!show; // visible regardless of Tooling state
+        group.style.display = shouldShow ? 'inline-flex' : 'none';
+        try {
+          const sel = group.querySelector('#soql-object');
+          if (sel) sel.disabled = !shouldShow;
+        } catch {}
+      });
     } catch {}
   }
 
@@ -50,25 +83,21 @@
       .sort((a, b) => a.localeCompare(b));
   }
 
-  // Quote identifier if it contains unsafe characters or starts with a digit
   function quoteIdentifier(name) {
     const n = String(name || '');
     if (!n) return n;
-    // safe if starts with letter/_ and contains only letters, digits, underscore
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return n;
-    // already quoted
     if ((n.startsWith('`') && n.endsWith('`')) || (n.startsWith('"') && n.endsWith('"'))) return n;
     return '`' + n.replace(/`/g, '\\`') + '`';
   }
 
-  // Build a rich error details block with hints and request preview
   function buildErrorDetailsHTML(errText, meta) {
     try {
       const E = (s) => (typeof Utils?.escapeHtml === 'function' ? Utils.escapeHtml(String(s)) : String(s));
       const msg = String(errText || '');
       const lower = msg.toLowerCase();
       let status = null;
-      const m = msg.match(/\((\d{3})\)/); // e.g. "Query failed (403): ..."
+      const m = msg.match(/\((\d{3})\)/);
       if (m) status = m[1];
 
       const hints = [];
@@ -93,11 +122,11 @@
       if (queryPreview) rows.push(`<div><strong>Query</strong>: <code>${E(queryPreview)}${meta.query && meta.query.length > 140 ? '…' : ''}</code></div>`);
 
       return (
-        `<div class="log-details">` +
+        `<div class=\"log-details\">` +
           `<details>` +
             `<summary>Details & tips</summary>` +
-            `<div class="log-grid">` + rows.join('') + `</div>` +
-            `<div class="log-hints"><ul>` + hints.map(h => `<li>${E(h)}</li>`).join('') + `</ul></div>` +
+            `<div class=\"log-grid\">` + rows.join('') + `</div>` +
+            `<div class=\"log-hints\"><ul>` + hints.map(h => `<li>${E(h)}</li>`).join('') + `</ul></div>` +
           `</details>` +
         `</div>`
       );
@@ -116,24 +145,17 @@
             const lastErr = (chrome.runtime && chrome.runtime.lastError) ? chrome.runtime.lastError.message : null;
             if (lastErr) { done([], lastErr); return; }
             if (!resp || !resp.success) {
-              const msg = String(resp?.error || '').toLowerCase();
-              if (/(^|[^\d])(401|403)([^\d]|$)/.test(msg)) {
-                try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
-                try { await new Promise((res) => chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, () => res())); } catch {}
-                const inst2 = await Utils.getInstanceUrl();
-                const payload2 = { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling };
-                if (inst2) payload2.instanceUrl = inst2;
-                chrome.runtime.sendMessage(payload2, (resp2) => {
-                  const lastErr2 = (chrome.runtime && chrome.runtime.lastError) ? chrome.runtime.lastError.message : null;
-                  if (lastErr2) { done([], lastErr2); return; }
-                  if (!resp2 || !resp2.success) { done([], resp2?.error || 'Authentication error (401/403) while fetching object list'); return; }
-                  done(describeObjectsToNames(resp2.objects), null);
-                });
-                return;
-              }
               done([], resp?.error || 'Describe failed');
               return;
             }
+            // Optional: validate returned source if provided
+            try {
+              const src = (typeof resp.source === 'string') ? resp.source.toLowerCase() : null;
+              if (src && ((tooling && src !== 'tooling') || (!tooling && src !== 'rest'))) {
+                done([], `Mismatched describe source: expected ${tooling ? 'tooling' : 'rest'}, got ${resp.source}`);
+                return;
+              }
+            } catch {}
             done(describeObjectsToNames(resp.objects), null);
           });
         });
@@ -141,54 +163,136 @@
     });
   }
 
+  function getDescribeCached(tooling) {
+    const STATE = getSharedState();
+    const key = tooling ? 'tooling' : 'rest';
+    const cache = STATE.describeCache[key];
+    const fresh = cache.names && (nowTs() - cache.ts < DESCRIBE_TTL_MS);
+    if (fresh) {
+      return Promise.resolve({ names: cache.names.slice(), error: null, fromCache: true });
+    }
+    if (STATE.describeInFlight[key]) {
+      return STATE.describeInFlight[key];
+    }
+    const p = fetchDescribe(!!tooling).then((res) => {
+      if (Array.isArray(res.names) && res.names.length > 0 && !res.error) {
+        STATE.describeCache[key] = { names: res.names.slice(), ts: nowTs() };
+      }
+      STATE.describeInFlight[key] = null;
+      return { names: res.names || [], error: res.error || null, fromCache: false };
+    }).catch((e) => {
+      STATE.describeInFlight[key] = null;
+      return { names: [], error: String(e || 'Describe failed'), fromCache: false };
+    });
+    STATE.describeInFlight[key] = p;
+    return p;
+  }
+
+  function setModeLabel(tooling) {
+    try {
+      const mode = document.getElementById('soql-api-mode');
+      if (!mode) return;
+      mode.textContent = tooling ? 'Using Tooling' : 'Using SObject';
+    } catch {}
+  }
+
+  function setObjectLoading(on) {
+    try {
+      const sp = document.getElementById('soql-object-loading');
+      if (!sp) return;
+      if (on) { sp.hidden = false; sp.setAttribute('aria-hidden', 'false'); }
+      else { sp.hidden = true; sp.setAttribute('aria-hidden', 'true'); }
+    } catch {}
+  }
+
   function reloadObjects(tooling) {
     const sel = document.getElementById('soql-object');
     if (!sel) return;
 
+    setModeLabel(!!tooling);
+    setObjectLoading(true);
+
     const epoch = lifecycleEpoch;
     const seq = ++reloadSeq;
 
-    sel.innerHTML = '';
-    const def = document.createElement('option');
-    def.value = '';
-    def.textContent = 'Select an object';
-    sel.appendChild(def);
+    const prevVal = sel.value || '';
 
-    fetchDescribe(!!tooling).then((res) => {
-      // Ignore stale callbacks
-      if (epoch !== lifecycleEpoch || seq !== reloadSeq) return;
-      if (!sel.isConnected) return;
+    function resetSelect() {
+      sel.innerHTML = '';
+      const def = document.createElement('option');
+      def.value = '';
+      def.textContent = tooling ? 'Select a Tooling object' : 'Select an SObject';
+      sel.appendChild(def);
+    }
 
-      const names = Array.isArray(res?.names) ? res.names : [];
-      const error = res && typeof res.error === 'string' ? res.error : null;
+    function renderSimple(names) {
+      if (epoch !== lifecycleEpoch || seq !== reloadSeq || !sel.isConnected) return; // stale
+      resetSelect();
+      const frag = document.createDocumentFragment();
+      (Array.isArray(names) ? names : []).forEach((name) => {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name; frag.appendChild(opt);
+      });
+      try { sel.appendChild(frag); } catch {}
+      if (prevVal) { try { sel.value = prevVal; } catch {} }
+      setObjectLoading(false);
+    }
 
-      if (names.length === 0) {
+    resetSelect();
+
+    const wantTooling = !!tooling;
+
+    if (wantTooling) {
+      getDescribeCached(true).then((res) => {
+        if (epoch !== lifecycleEpoch || seq !== reloadSeq || !sel.isConnected) return;
+        const names = Array.isArray(res?.names) ? res.names : [];
+        if (names.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'No objects loaded';
+          opt.disabled = true;
+          try { sel.appendChild(opt); } catch {}
+          setObjectLoading(false);
+          if (res && typeof res.error === 'string' && res.error) {
+            try {
+              const results = document.getElementById('soql-results');
+              if (results && results.isConnected) {
+                const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(res.error) : String(res.error);
+                const details = buildErrorDetailsHTML(res.error, { action: 'DESCRIBE_GLOBAL', useTooling: true });
+                results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
+              }
+            } catch {}
+          }
+          return;
+        }
+        renderSimple(names);
+      });
+      return;
+    }
+
+    getDescribeCached(false).then((restRes) => {
+      if (epoch !== lifecycleEpoch || seq !== reloadSeq || !sel.isConnected) return;
+      const restNames = Array.isArray(restRes?.names) ? restRes.names : [];
+      if (restNames.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
         opt.textContent = 'No objects loaded';
         opt.disabled = true;
         try { sel.appendChild(opt); } catch {}
-
-        // Also surface error cause to the user if available using log-entry styling
-        if (error) {
+        setObjectLoading(false);
+        if (restRes && typeof restRes.error === 'string' && restRes.error) {
           try {
             const results = document.getElementById('soql-results');
             if (results && results.isConnected) {
-              const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(error) : String(error);
-              const details = buildErrorDetailsHTML(error, { action: 'DESCRIBE_GLOBAL', useTooling: !!tooling });
+              const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(restRes.error) : String(restRes.error);
+              const details = buildErrorDetailsHTML(restRes.error, { action: 'DESCRIBE_GLOBAL', useTooling: false });
               results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
             }
           } catch {}
         }
         return;
       }
-
-      const frag = document.createDocumentFragment();
-      names.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name; opt.textContent = name; frag.appendChild(opt);
-      });
-      try { sel.appendChild(frag); } catch {}
+      renderSimple(restNames);
     });
   }
 
@@ -220,6 +324,13 @@
 
     if (toolingCb) {
       on(toolingCb, 'change', () => {
+        const STATE = getSharedState();
+        STATE.describeCache.rest = { names: null, ts: 0 };
+        STATE.describeCache.tooling = { names: null, ts: 0 };
+        STATE.describeInFlight.rest = null;
+        STATE.describeInFlight.tooling = null;
+        setModeLabel(!!toolingCb.checked);
+        setObjectLoading(true);
         clearUi();
         applyObjectSelectorVisibility();
         reloadObjects(!!toolingCb.checked);
@@ -249,17 +360,18 @@
         renderPlaceholder();
       });
     }
-      if (window.SoqlGuidance?.init) {
-          try {
-              guidanceCleanup = window.SoqlGuidance.init({ root: document });
-              if (typeof guidanceCleanup === 'function') {
-                  const fn = guidanceCleanup;
-                  cleanup.push(() => { try { fn(); } catch {}; guidanceCleanup = null; });
-              }
-          } catch {}
-      }
 
-      if (runBtn && queryEl && results) {
+    if (window.SoqlGuidance?.init) {
+      try {
+        guidanceCleanup = window.SoqlGuidance.init({ root: document });
+        if (typeof guidanceCleanup === 'function') {
+          const fn = guidanceCleanup;
+          cleanup.push(() => { try { fn(); } catch {}; guidanceCleanup = null; });
+        }
+      } catch {}
+    }
+
+    if (runBtn && queryEl && results) {
       on(runBtn, 'click', () => {
         const q = (queryEl.value || '').trim();
         const tooling = !!document.getElementById('soql-tooling')?.checked;
@@ -272,11 +384,9 @@
           return;
         }
         try {
-          // Capture lifecycle + sequence for this run
           const epoch = lifecycleEpoch;
           const seq = ++runSeq;
 
-          // Loading state: disable Run and show spinner
           try { runBtn.disabled = true; runBtn.setAttribute('aria-busy', 'true'); } catch {}
           if (results && results.isConnected) {
             results.innerHTML = `<div class=\"loading\"><div class=\"loading-spinner\"></div><div>Running query… (limit ${limitVal})</div></div>`;
@@ -368,6 +478,17 @@
     applyObjectSelectorVisibility();
     wireUiOnly();
 
+    // Flush caches on first attach to avoid stale lists from previous sessions
+    try {
+      const STATE = (typeof getSharedState === 'function') ? getSharedState() : null;
+      if (STATE) {
+        STATE.describeCache.rest = { names: null, ts: 0 };
+        STATE.describeCache.tooling = { names: null, ts: 0 };
+        STATE.describeInFlight.rest = null;
+        STATE.describeInFlight.tooling = null;
+      }
+    } catch {}
+
     const tooling = !!document.getElementById('soql-tooling')?.checked;
     reloadObjects(tooling);
 
@@ -381,24 +502,27 @@
     const isActive = soqlPane.classList.contains('active') && !soqlPane.hasAttribute('hidden');
     if (isActive) attachIfNeeded();
   });
-  try { observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class','hidden'] }); } catch {}
+  try {
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class','hidden'] });
+  } catch {}
   cleanup.push(() => { try { observer.disconnect(); } catch {} });
 
   function detach() {
     cleanup.splice(0).forEach(fn => { try { fn(); } catch {} });
     attached = false;
-      if (typeof guidanceCleanup === 'function') {
-          try { guidanceCleanup(); } catch {}
-      }
-      guidanceCleanup = null;
-      try { window.SoqlGuidance?.detach?.(); } catch {}
-      // Bump epoch so pending callbacks ignore DOM updates
-      lifecycleEpoch++;
-      // Best-effort: clear loading state if any
-      try {
-        const runBtn = document.getElementById('soql-run');
-        if (runBtn) { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); }
-      } catch {}
+    if (typeof guidanceCleanup === 'function') { try { guidanceCleanup(); } catch {} }
+    guidanceCleanup = null;
+    try { window.SoqlGuidance?.detach?.(); } catch {}
+    lifecycleEpoch++;
+    try {
+      const runBtn = document.getElementById('soql-run');
+      if (runBtn) { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); }
+    } catch {}
+    const STATE = getSharedState();
+    STATE.describeCache.rest = { names: null, ts: 0 };
+    STATE.describeCache.tooling = { names: null, ts: 0 };
+    STATE.describeInFlight.rest = null;
+    STATE.describeInFlight.tooling = null;
   }
 
   window.SoqlHelper = { detach };
