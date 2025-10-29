@@ -355,17 +355,81 @@
         applyKeyword(STATE.currentSuggestionKeyword, STATE.currentSuggestionKeywordMatch);
     }
 
+    function detectPhase(el, q) {
+        try {
+            const val = String(q || '');
+            const hasSelect = /\bselect\b/i.test(val);
+            const hasFromClause = /\bfrom\b\s+[A-Za-z0-9_.]+/i.test(val);
+            const inFieldsCtx = getCurrentFieldToken(el);
+            if (inFieldsCtx && inFieldsCtx.inFields) return 'SELECTING_FIELDS';
+            const fromCtx = getCurrentFromToken(el);
+            if (fromCtx && fromCtx.inFrom) {
+                // If token incomplete or object not chosen yet
+                const tok = String(fromCtx.token || '');
+                const chosen = getFromObject(val);
+                if (!chosen || (tok && tok.toLowerCase() !== String(chosen).toLowerCase())) {
+                    return 'CHOOSING_OBJECT';
+                }
+            }
+            const whereCtx = getCurrentWhereToken(el);
+            if (whereCtx && whereCtx.inWhere) return 'FILTERING';
+            // LIMITING when caret appears after the word LIMIT or limit exists and caret at end
+            const limitMatch = /(\blimit\b)([\s\S]*)$/i.exec(val);
+            if (limitMatch) {
+                const caret = Math.max(0, Math.min(el?.selectionStart ?? val.length, val.length));
+                const limPos = limitMatch.index + (limitMatch[1] || '').length;
+                if (caret >= limPos) return 'LIMITING';
+            }
+            if (hasSelect && hasFromClause) return 'READY';
+            return 'IDLE';
+        } catch { return 'IDLE'; }
+    }
+
+    function filterAndDedupeEntriesByPhase(phase, engineResult) {
+        const out = [];
+        const seen = new Set();
+        function push(type, entry) {
+            const key = `${type}|${entry?.id || ''}|${entry?.message || entry?.title || ''}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            out.push({ type, entry });
+        }
+        const qEl = STATE.elements.query;
+        const q = qEl?.value || '';
+        const minimalValid = /\bselect\b[\s\S]*\bfrom\b\s+[A-Za-z0-9_.]+/i.test(q);
+        const suppressWhere = phase !== 'FILTERING';
+        const suppressLimit = phase !== 'LIMITING';
+        const warnTooEarly = (msg) => /\bwhere\b/i.test(msg) || /\blimit\b/i.test(msg);
+
+        (engineResult.errors || []).forEach(e => push('error', e));
+        (engineResult.warnings || []).forEach(e => {
+            const msg = String(e?.message || e?.title || '');
+            // Suppress WHERE/LIMIT warnings unless caret is in that phase; also if minimal valid query, keep hints softer
+            if ((/\bwhere\b/i.test(msg) && suppressWhere) || (/\blimit\b/i.test(msg) && suppressLimit)) return;
+            push('warning', e);
+        });
+        (engineResult.info || []).forEach(e => {
+            const msg = String(e?.message || e?.title || '');
+            // If minimal query and message is about WHERE/LIMIT, allow as info but not duplicate
+            if (minimalValid && warnTooEarly(msg)) {
+                // keep as info only if not already warned
+                push('info', e);
+                return;
+            }
+            push('info', e);
+        });
+        return out;
+    }
+
     function renderStatuses(engineResult) {
         clearStatuses();
-        if (!engineResult) return;
+        if (!engineResult) { try { toggleContainer(false); } catch {} return; }
         const list = STATE.elements.statusList;
         if (!list) return;
-
-        const entries = [];
-        (engineResult.errors || []).forEach(e => entries.push({ type: 'error', entry: e }));
-        (engineResult.warnings || []).forEach(e => entries.push({ type: 'warning', entry: e }));
-        (engineResult.info || []).forEach(e => entries.push({ type: 'info', entry: e }));
-
+        const el = STATE.elements.query;
+        const phase = detectPhase(el, el?.value || '');
+        const entries = filterAndDedupeEntriesByPhase(phase, engineResult);
+        if (!entries.length && !engineResult?.suggestion) { try { toggleContainer(false); } catch {} return; }
         entries.forEach(({ type, entry }) => {
             list.appendChild(createFlag(type, entry));
         });
@@ -558,7 +622,7 @@
      function handleChipActivate(evt) {
          const t = evt.target;
          if (!t || !t.classList || !t.classList.contains('chip')) return;
-         // Chip-level action support (e.g., show-all-fields)
+         // Chip-level action support (e.g., show-all-fields, where-snippet)
          const chipAction = t.getAttribute('data-action');
          if (chipAction) {
              if (chipAction === 'show-all-fields') {
@@ -570,6 +634,16 @@
                  try { evt.preventDefault(); } catch (e) {}
                  try { evt.stopPropagation(); } catch (e) {}
                  return;
+             }
+             if (chipAction === 'where-snippet') {
+                 const snippet = t.getAttribute('data-snippet') || '';
+                 const queryEl = STATE.elements.query;
+                 if (queryEl && snippet) {
+                     insertWhereSnippet(queryEl, snippet);
+                     try { evt.preventDefault(); } catch (e) {}
+                     try { evt.stopPropagation(); } catch (e) {}
+                     return;
+                 }
              }
          }
          if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
@@ -698,17 +772,66 @@
         } catch { return { token: '', inFrom: false, bounds: { fromStart: 0, fromEnd: 0 } }; }
     }
 
-    function appendObjectMatchesFlag(root, el, query) {
-        const list = STATE.elements.statusList;
-        if (!list || !el) return;
-        const { token, inFrom } = getCurrentFromToken(el);
-        if (!inFrom) return;
-        const allObjects = getCurrentObjectNames(root);
-        if (!Array.isArray(allObjects) || allObjects.length === 0) return;
-        const p = (token || '').toLowerCase();
-        if (!p) return; // require at least 1 char before showing
-        const matches = allObjects.filter(n => String(n).toLowerCase().startsWith(p)).slice(0, 12);
-        if (matches.length === 0) return;
+    // WHERE context helpers and suggestions (scoped within IIFE to access STATE)
+    function getCurrentWhereToken(el) {
+      try {
+        const q = String(el?.value || '');
+        const m = /(\bwhere\s+)([\s\S]*?)(?=\s+(group\s+by|order\s+by|limit|offset)\b|$)/i.exec(q);
+        if (!m) return { token: '', inWhere: false, bounds: { whereStart: 0, whereEnd: 0 } };
+        const whereStart = m.index + m[1].length;
+        const whereEnd = whereStart + m[2].length;
+        const selStart = Math.max(0, Math.min(el.selectionStart ?? whereEnd, q.length));
+        const inWhere = selStart >= whereStart && selStart <= whereEnd;
+        const rel = Math.max(0, selStart - whereStart);
+        const seg = m[2];
+        const left = seg.slice(0, rel);
+        const right = seg.slice(rel);
+        const leftTokenMatch = left.match(/[A-Za-z0-9_:.]+$/);
+        const rightTokenMatch = right.match(/^[A-Za-z0-9_:.]+/);
+        const token = ((leftTokenMatch ? leftTokenMatch[0] : '') + (rightTokenMatch ? rightTokenMatch[0] : '')).trim();
+        return { token, inWhere, bounds: { whereStart, whereEnd } };
+      } catch { return { token: '', inWhere: false, bounds: { whereStart: 0, whereEnd: 0 } }; }
+    }
+
+    function insertWhereSnippet(el, snippet) {
+      if (!el || typeof el.value !== 'string') return;
+      const snip = String(snippet || '');
+      if (!snip) return;
+      let q = String(el.value || '');
+      if (!/\bwhere\b/i.test(q)) {
+        try { insertWhereClause(el); } catch {}
+        q = String(el.value || '');
+      }
+      const wctx = getCurrentWhereToken(el);
+      const pos = Math.max(0, Math.min(el.selectionStart ?? (wctx.bounds.whereEnd || q.length), q.length));
+      const before = q.slice(0, pos);
+      const after = q.slice(pos);
+      const needsPre = /[^\s]$/.test(before);
+      const needsPost = /^[^\s]/.test(after);
+      const ins = (needsPre ? ' ' : '') + snip + (needsPost ? ' ' : '');
+      const next = before + ins + after;
+      try { el.value = next; el.focus(); const caret = (before + ins).length; el.setSelectionRange(caret, caret); } catch {}
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function appendWhereMatchesFlag(root, el, query, wctx) {
+      const list = STATE.elements.statusList;
+      if (!list || !el) return;
+      const obj = getFromObject(query);
+      const token = String(wctx?.token || '').toLowerCase();
+      const baseSnippets = [
+        'AND', 'OR', 'NOT', '=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'NOT IN', 'INCLUDES', 'EXCLUDES', 'NULL', 'NOT NULL'
+      ];
+      const dateLiterals = ['TODAY', 'YESTERDAY', 'TOMORROW', 'THIS_WEEK', 'LAST_WEEK', 'NEXT_WEEK', 'THIS_MONTH', 'LAST_MONTH', 'NEXT_MONTH', 'LAST_N_DAYS:7', 'LAST_N_DAYS:30'];
+      let snippets = baseSnippets.concat(dateLiterals);
+      if (token) snippets = snippets.filter(s => s.toLowerCase().startsWith(token));
+      snippets = snippets.slice(0, 10);
+      function render(fields) {
+        const fieldNames = (Array.isArray(fields) ? fields : []).map(f => f?.name).filter(Boolean);
+        const fieldMatches = token
+          ? fieldNames.filter(n => n.toLowerCase().startsWith(token)).slice(0, 10)
+          : fieldNames.slice(0, 6);
+        if (snippets.length === 0 && fieldMatches.length === 0) return;
         const li = document.createElement('div');
         li.className = 'soql-guidance-item';
         li.setAttribute('role', 'listitem');
@@ -719,9 +842,103 @@
         badge.textContent = 'INFO';
         const title = document.createElement('span');
         title.className = 'soql-guidance-flag-text';
-        title.textContent = 'Matching objects';
+        title.textContent = 'WHERE helpers';
         const wrap = document.createElement('div');
         wrap.className = 'chip-wrap';
+        snippets.forEach(txt => {
+          const chip = makeBadge(txt, { 'data-action': 'where-snippet', 'data-snippet': txt });
+          wrap.appendChild(chip);
+        });
+        fieldMatches.forEach(name => {
+          wrap.appendChild(makeBadge(name, { 'data-action': 'where-snippet', 'data-snippet': name }));
+        });
+        div.appendChild(badge);
+        div.appendChild(title);
+        div.appendChild(wrap);
+        li.appendChild(div);
+        list.appendChild(li);
+      }
+      if (obj) {
+        fetchFieldsForObject(root, obj).then(render).catch(() => render([]));
+      } else {
+        render([]);
+      }
+    }
+
+    function appendObjectMatchesFlag(root, el, query) {
+        const list = STATE.elements.statusList;
+        if (!list || !el) return;
+        // Determine phase and current object to avoid premature suggestions
+        const currentObj = getFromObject(query);
+        const { token, inFrom } = getCurrentFromToken(el);
+        if (!inFrom) return;
+        // If an object is already selected and token fully matches it, do not re-suggest
+        if (currentObj && token && token.toLowerCase() === String(currentObj).toLowerCase()) return;
+        const allObjects = getCurrentObjectNames(root);
+        if (!Array.isArray(allObjects) || allObjects.length === 0) return;
+
+        const p = (token || '').toLowerCase();
+
+        // Ranked, case-insensitive matching:
+        // 1) startsWith
+        // 2) contains at a word boundary (e.g., after underscore)
+        // 3) general contains
+        const lower = allObjects.map(n => ({ raw: String(n), low: String(n).toLowerCase() }));
+        let starts = [];
+        let wbContains = [];
+        let anyContains = [];
+        if (p) {
+            starts = lower.filter(o => o.low.startsWith(p));
+            const wbRe = new RegExp(`(?:^|_|__|\.)${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`); // word-ish boundary
+            wbContains = lower.filter(o => !o.low.startsWith(p) && wbRe.test(o.low));
+            anyContains = lower.filter(o => !o.low.startsWith(p) && !wbRe.test(o.low) && o.low.includes(p));
+        } else {
+            // Empty token: show a default slice of the full list (already curated in the dropdown)
+            starts = lower.slice(0, 12);
+        }
+        const seen = new Set();
+        const merged = [];
+        function pushList(arr) {
+            for (const o of arr) {
+                if (!seen.has(o.raw)) { seen.add(o.raw); merged.push(o.raw); }
+                if (merged.length >= 12) break;
+            }
+        }
+        pushList(starts);
+        if (merged.length < 12) pushList(wbContains);
+        if (merged.length < 12) pushList(anyContains);
+
+        const matches = merged;
+
+        const li = document.createElement('div');
+        li.className = 'soql-guidance-item';
+        li.setAttribute('role', 'listitem');
+        const div = document.createElement('div');
+        div.className = 'soql-guidance-flag info';
+        const badge = document.createElement('span');
+        badge.className = 'soql-guidance-flag-badge';
+        badge.textContent = 'INFO';
+        const title = document.createElement('span');
+        title.className = 'soql-guidance-flag-text';
+        title.textContent = p ? 'Matching objects' : 'Objects';
+        const wrap = document.createElement('div');
+        wrap.className = 'chip-wrap';
+
+        if (matches.length === 0) {
+            if (p) {
+                // Keep panel stable with a subtle message instead of vanishing
+                const none = makeBadge('No matches', { 'aria-disabled': 'true' });
+                none.classList.add('chip-disabled');
+                wrap.appendChild(none);
+                div.appendChild(badge);
+                div.appendChild(title);
+                div.appendChild(wrap);
+                li.appendChild(div);
+                list.appendChild(li);
+            }
+            return;
+        }
+
         matches.forEach(name => wrap.appendChild(makeBadge(name, { 'data-badge-type': 'object', 'data-object': name })));
         div.appendChild(badge);
         div.appendChild(title);
@@ -738,46 +955,33 @@
       // Find FROM segment and inject WHERE before next clause (GROUP BY|ORDER BY|LIMIT|OFFSET) or end
       const re = /(from\s+[\s\S]*?)(?=\s+(where|group\s+by|order\s+by|limit|offset)\b|$)/i;
       const m = re.exec(q);
-      const placeholder = 'Id != null';
       if (!m) {
         // No FROM: prepend WHERE after SELECT if possible, else append
         const selRe = /(\bselect\b[\s\S]*?)(?=$)/i;
         const sm = selRe.exec(q);
         if (sm) {
           const idx = sm.index + sm[0].length;
-          // If nothing follows (or a clause follows immediately), insert placeholder
-          const tail = q.slice(idx).trim();
-          const whereText = tail === '' ? ` WHERE ${placeholder} ` : ' WHERE ';
+          // If nothing follows (or a clause follows immediately), just insert WHERE
+          const whereText = ' WHERE ';
           const next = q.slice(0, idx) + whereText + q.slice(idx);
           try { el.value = next; el.focus(); el.setSelectionRange(idx + whereText.length, idx + whereText.length); } catch {}
           el.dispatchEvent(new Event('input', { bubbles: true }));
           return;
         }
         const tailTrim = q.replace(/\s+$/,'');
-        const whereText = tailTrim === '' ? `WHERE ${placeholder}` : 'WHERE ';
+        const whereText = tailTrim === '' ? 'WHERE' : 'WHERE ';
         const next = q + (q.endsWith(' ') ? '' : ' ') + whereText;
         try { el.value = next; el.focus(); el.setSelectionRange(next.length, next.length); } catch {}
         el.dispatchEvent(new Event('input', { bubbles: true }));
         return;
       }
       const insertPos = m.index + m[0].length;
-      // If the text after insertPos immediately begins with another clause (e.g., LIMIT), insert a placeholder condition
-      const after = q.slice(insertPos);
-      const afterTrim = after.replace(/^\s+/, '');
-      const beginsWithClause = /^(where\b|group\s+by\b|order\s+by\b|limit\b|offset\b)/i.test(afterTrim);
-      const whereText = beginsWithClause || afterTrim === '' ? ` WHERE ${placeholder} ` : ' WHERE ';
+      // Insert a plain WHERE regardless of following clauses
+      const whereText = ' WHERE ';
       const next = q.slice(0, insertPos) + whereText + q.slice(insertPos);
       try { el.value = next; el.focus(); el.setSelectionRange(insertPos + whereText.length, insertPos + whereText.length); } catch {}
-      // Record placeholder location so we can remove it when the user begins typing
-      try {
-          const whole = String(el.value || '');
-          const placeholderIndex = whole.indexOf(placeholder, insertPos);
-          if (placeholderIndex !== -1) {
-              STATE.lastWherePlaceholder = { text: placeholder, start: placeholderIndex, end: placeholderIndex + placeholder.length };
-          } else {
-              STATE.lastWherePlaceholder = null;
-          }
-      } catch { STATE.lastWherePlaceholder = null; }
+      // Do not track placeholder anymore
+      try { STATE.lastWherePlaceholder = null; } catch { /* noop */ }
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
@@ -859,23 +1063,34 @@
                     const prevCh = caret > 0 ? val.charAt(caret - 1) : '';
                     if (prevCh === ',') STATE.pendingShowFields = true;
                 } catch {}
-                ensureEngine(configUrl).then((engine) => {
-                    runEvaluation(engine);
-                    // Append dynamic matching fields suggestions when caret is in SELECT fields
-                    try {
-                        const ctx = getCurrentFieldToken(el);
-                        if (ctx && ctx.inFields && (ctx.token || STATE.pendingShowFields)) {
-                            appendFieldMatchesFlag(document, el, val);
-                        }
-                    } catch {}
-                    // Append object suggestions when caret is in FROM object
-                    try {
-                        const ctx = getCurrentFromToken(el);
-                        if (ctx && ctx.inFrom) {
-                            appendObjectMatchesFlag(document, el, val);
-                        }
-                    } catch {}
-                });
+                // Debounce evaluations to reduce flicker and redundant work
+                try { if (STATE.inputTmr) { clearTimeout(STATE.inputTmr); } } catch {}
+                STATE.inputTmr = setTimeout(() => {
+                  ensureEngine(configUrl).then((engine) => {
+                      runEvaluation(engine);
+                      // Append dynamic matching fields suggestions when caret is in SELECT fields
+                      try {
+                          const ctx = getCurrentFieldToken(el);
+                          if (ctx && ctx.inFields && (ctx.token || STATE.pendingShowFields)) {
+                              appendFieldMatchesFlag(document, el, val);
+                          }
+                      } catch {}
+                      // Append object suggestions when caret is in FROM object (supports empty token)
+                      try {
+                          const ctx = getCurrentFromToken(el);
+                          if (ctx && ctx.inFrom) {
+                              appendObjectMatchesFlag(document, el, val);
+                          }
+                      } catch {}
+                      // Append WHERE starter suggestions (operators/date literals/fields)
+                      try {
+                          const wctx = getCurrentWhereToken(el);
+                          if (wctx && wctx.inWhere) {
+                              appendWhereMatchesFlag(document, el, val, wctx);
+                          }
+                      } catch {}
+                  });
+                }, 120);
             });
         }
 
@@ -953,3 +1168,4 @@
     // expose
     try { window.SoqlGuidance = { init, detach }; } catch {}
 })();
+

@@ -67,16 +67,55 @@
     } catch {}
   }
 
-  // Shared helper: normalize and extract queryable object names in sorted order
-  function describeObjectsToNames(objs) {
+
+  // Shared helper: normalize and extract object names. When Tooling is OFF, always filter to business/data SObjects.
+  function describeObjectsToNames(objs, opts) {
     const arr = Array.isArray(objs) ? objs : [];
+    const useTooling = !!(opts && opts.useTooling);
+
+    // Common denylist: exclude some very noisy admin/setup families (names)
+    const excludeAdminPattern = /^(Auth|Async|Process|Setup|UserEntityAccess|ObjectPermissions|PermissionSet|PermissionSetAssignment|Profile|QueueSobject|RecordType|EventLogFile|FieldDefinition|EntityDefinition|UserFieldAccess|InstalledPackage|UserPermissionAccess|UserAppMenu|BrandingSet|CorsWhitelistEntry|ExternalDataSource|Duplicate|UserProv|Matching|OrgPreference|Content[A-Z]|Knowledge[A-Z]|Flow|AIPrediction|UserLoginHistory)/;
+
+    // Small allowlist for common standard data objects (helps when capability flags are missing in tests)
+    const standardAllow = new Set(['Account','Contact','Lead','Opportunity','Case','Task','Event','User','Campaign','CampaignMember','Product2','Pricebook2','PricebookEntry','Asset','Contract','Order','OrderItem','Quote','QuoteLineItem']);
+
+    const toBool = (v, def = false) => (typeof v === 'boolean' ? v : (typeof v === 'string' ? v.toLowerCase() === 'true' : !!def));
+
     return arr
       .filter((o) => {
         if (!o) return false;
-        const val = o.queryable;
-        if (typeof val === 'boolean') return val === true;
-        if (typeof val === 'string') return val.toLowerCase() === 'true';
-        return false; // strict: missing flag => not included
+        const name = String(o?.name || o?.label || '').trim();
+        if (!name) return false;
+
+        // Always require queryable
+        const isQueryable = toBool(o.queryable, false);
+        if (!isQueryable) return false;
+
+        // Apply stricter filter for REST mode (Tooling OFF)
+        if (!useTooling) {
+          const isDeprecatedHidden = toBool(o.deprecatedAndHidden, false);
+          if (isDeprecatedHidden) return false;
+
+          const isCustom = toBool(o.custom, false) || /__(c|mdt)$/i.test(name);
+
+          // Capability checks: if flags are missing, treat as unknown (do not exclude)
+          const createable = (o.createable == null) ? true : toBool(o.createable, false);
+          const updateable = (o.updateable == null) ? true : toBool(o.updateable, false);
+          const retrieveable = (o.retrieveable == null) ? true : toBool(o.retrieveable, false);
+          const hasDataCaps = (createable || updateable || retrieveable);
+
+          // Optionally require searchable === true (if present). If missing, do not exclude.
+          const searchable = (o.searchable == null) ? true : toBool(o.searchable, false);
+
+          // Denylist by family names
+          if (excludeAdminPattern.test(name)) return false;
+
+          // Keep if clearly a data object: custom types or standard allowlist or has data-like capabilities and searchable
+          const likelyData = isCustom || standardAllow.has(name) || (hasDataCaps && searchable);
+          if (!likelyData) return false;
+        }
+
+        return true;
       })
       .map((o) => o?.name || o?.label || '')
       .filter(Boolean)
@@ -156,7 +195,9 @@
                 return;
               }
             } catch {}
-            done(describeObjectsToNames(resp.objects), null);
+            // Build options based solely on the Tooling API toggle
+            const opts = { useTooling: !!tooling };
+            done(describeObjectsToNames(resp.objects, opts), null);
           });
         });
       } catch (e) { try { console.error('Describe Global failed', e); } catch {} done([], e); }
@@ -188,20 +229,16 @@
     return p;
   }
 
-  function setModeLabel(tooling) {
+  async function warmUpSession() {
     try {
-      const mode = document.getElementById('soql-api-mode');
-      if (!mode) return;
-      mode.textContent = tooling ? 'Using Tooling' : 'Using SObject';
-    } catch {}
-  }
-
-  function setObjectLoading(on) {
-    try {
-      const sp = document.getElementById('soql-object-loading');
-      if (!sp) return;
-      if (on) { sp.hidden = false; sp.setAttribute('aria-hidden', 'false'); }
-      else { sp.hidden = true; sp.setAttribute('aria-hidden', 'true'); }
+      // Ask background to refresh session info (side effect: may ensure cookies/session are ready)
+      await new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ action: 'GET_SESSION_INFO' }, () => resolve());
+        } catch { resolve(); }
+      });
+      // Refresh instance URL cache
+      try { await Utils.getInstanceUrl(); } catch {}
     } catch {}
   }
 
@@ -209,13 +246,19 @@
     const sel = document.getElementById('soql-object');
     if (!sel) return;
 
-    setModeLabel(!!tooling);
-    setObjectLoading(true);
-
     const epoch = lifecycleEpoch;
     const seq = ++reloadSeq;
 
     const prevVal = sel.value || '';
+
+    function setLoading() {
+      sel.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Loading objects…';
+      opt.disabled = true;
+      sel.appendChild(opt);
+    }
 
     function resetSelect() {
       sel.innerHTML = '';
@@ -235,65 +278,61 @@
       });
       try { sel.appendChild(frag); } catch {}
       if (prevVal) { try { sel.value = prevVal; } catch {} }
-      setObjectLoading(false);
     }
 
-    resetSelect();
+    setLoading();
 
     const wantTooling = !!tooling;
 
-    if (wantTooling) {
-      getDescribeCached(true).then((res) => {
+    const tryLoad = (isTooling, attempt) => {
+      const getter = () => getDescribeCached(!!isTooling);
+      getter().then(async (res) => {
         if (epoch !== lifecycleEpoch || seq !== reloadSeq || !sel.isConnected) return;
         const names = Array.isArray(res?.names) ? res.names : [];
-        if (names.length === 0) {
-          const opt = document.createElement('option');
-          opt.value = '';
-          opt.textContent = 'No objects loaded';
-          opt.disabled = true;
-          try { sel.appendChild(opt); } catch {}
-          setObjectLoading(false);
-          if (res && typeof res.error === 'string' && res.error) {
-            try {
-              const results = document.getElementById('soql-results');
-              if (results && results.isConnected) {
-                const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(res.error) : String(res.error);
-                const details = buildErrorDetailsHTML(res.error, { action: 'DESCRIBE_GLOBAL', useTooling: true });
-                results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
-              }
-            } catch {}
-          }
+        const hasAny = names.length > 0;
+        if (hasAny) {
+          renderSimple(names);
           return;
         }
-        renderSimple(names);
-      });
-      return;
-    }
-
-    getDescribeCached(false).then((restRes) => {
-      if (epoch !== lifecycleEpoch || seq !== reloadSeq || !sel.isConnected) return;
-      const restNames = Array.isArray(restRes?.names) ? restRes.names : [];
-      if (restNames.length === 0) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = 'No objects loaded';
-        opt.disabled = true;
-        try { sel.appendChild(opt); } catch {}
-        setObjectLoading(false);
-        if (restRes && typeof restRes.error === 'string' && restRes.error) {
+        // If first attempt returned empty, do a one-time warm-up and retry
+        if ((attempt || 0) === 0) {
+          await warmUpSession();
+          // Clear caches so next fetch actually re-runs
           try {
-            const results = document.getElementById('soql-results');
-            if (results && results.isConnected) {
-              const msgSafe = (typeof Utils?.escapeHtml === 'function') ? Utils.escapeHtml(restRes.error) : String(restRes.error);
-              const details = buildErrorDetailsHTML(restRes.error, { action: 'DESCRIBE_GLOBAL', useTooling: false });
-              results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Failed to load objects: ${msgSafe}</span></div></div>${details}</div>`;
+            const STATE = getSharedState();
+            if (STATE) {
+              STATE.describeCache.rest = { names: null, ts: 0 };
+              STATE.describeCache.tooling = { names: null, ts: 0 };
+              STATE.describeInFlight.rest = null;
+              STATE.describeInFlight.tooling = null;
             }
           } catch {}
+          // Retry once
+          return tryLoad(isTooling, 1);
         }
-        return;
-      }
-      renderSimple(restNames);
-    });
+        // Final: show a helpful empty state
+        if (epoch !== lifecycleEpoch || seq !== reloadSeq || !sel.isConnected) return;
+        resetSelect();
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No objects loaded — open a Salesforce tab and try again';
+        opt.disabled = true;
+        try { sel.appendChild(opt); } catch {}
+      });
+    };
+
+    tryLoad(wantTooling, 0);
+  }
+
+  function setSoqlState(state) {
+    try {
+      const el = document.getElementById('soql-query');
+      if (!el) return;
+      el.classList.remove('soql-error', 'soql-success', 'soql-inprogress');
+      if (state === 'error') el.classList.add('soql-error');
+      else if (state === 'success') el.classList.add('soql-success');
+      else if (state === 'inprogress') el.classList.add('soql-inprogress');
+    } catch {}
   }
 
   function wireUiOnly() {
@@ -329,12 +368,17 @@
         STATE.describeCache.tooling = { names: null, ts: 0 };
         STATE.describeInFlight.rest = null;
         STATE.describeInFlight.tooling = null;
-        setModeLabel(!!toolingCb.checked);
-        setObjectLoading(true);
         clearUi();
+        setSoqlState('inprogress');
         applyObjectSelectorVisibility();
         reloadObjects(!!toolingCb.checked);
       });
+    }
+
+    // Initialize editor state and keep it in-progress while editing
+    if (queryEl) {
+      try { setSoqlState('inprogress'); } catch {}
+      on(queryEl, 'input', () => { setSoqlState('inprogress'); });
     }
 
     // Update LIMIT in the auto-generated template when the limit control changes
@@ -353,11 +397,15 @@
     if (objSel && queryEl) {
       on(objSel, 'change', () => {
         const v = (objSel.value || '').trim();
-        if (!v) { clearUi(); return; }
+        if (!v) { clearUi(); setSoqlState('inprogress'); return; }
         const qName = quoteIdentifier(v);
         const lim = getLimitValue();
         queryEl.value = `SELECT Id FROM ${qName} LIMIT ${lim}`;
+        try { setSoqlState('inprogress'); } catch {}
         renderPlaceholder();
+        // Move focus to the query editor and blur the object selector to dismiss any native suggestions/dropdowns
+        try { objSel.blur(); } catch {}
+        try { setTimeout(() => { if (queryEl && queryEl.isConnected) { queryEl.focus(); } }, 0); } catch {}
       });
     }
 
@@ -377,6 +425,7 @@
         const tooling = !!document.getElementById('soql-tooling')?.checked;
         const limitVal = getLimitValue();
         if (!q) {
+          try { setSoqlState('error'); } catch {}
           results.innerHTML = `
             <div class=\"log-entry\">\n              <div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">Please type a SOQL query.</span></div></div>
             </div>
@@ -428,12 +477,14 @@
                 try { console.error('SOQL RUN failed', { error: resp?.error, payload: usedPayload, retried }); } catch {}
                 const msgSafe = Utils.escapeHtml(resp?.error || 'Query failed');
                 const details = buildErrorDetailsHTML(resp?.error, { useTooling: tooling, limit: payload.limit, instanceUrl: usedPayload.instanceUrl, query: q, retried });
+                try { setSoqlState('error'); } catch {}
                 if (results && results.isConnected) {
                   results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${msgSafe}</span></div></div>${details}</div>`;
                 }
                 return;
               }
               const total = Number(resp.totalSize || (Array.isArray(resp.records) ? resp.records.length : 0));
+              try { setSoqlState('success'); } catch {}
               if (results && results.isConnected) {
                 results.innerHTML = `
                   <div class=\"log-entry\">\n                    <div class=\"log-header\">\n                      <div class=\"log-left\">\n                        <span class=\"log-badge event\">event</span>\n                        <span class=\"log-message\">Returned ${total} record(s)</span>\n                      </div>\n                    </div>\n                    <div class=\"log-details\"><details><summary>Records</summary><pre class=\"log-json\">${Utils.escapeHtml(JSON.stringify(resp.records || [], null, 2))}</pre></details></div>\n                  </div>
@@ -444,6 +495,7 @@
               if (epoch !== lifecycleEpoch || seq !== runSeq) return;
               try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
               try { console.error('SOQL RUN chain error', e); } catch {}
+              try { setSoqlState('error'); } catch {}
               if (results && results.isConnected) {
                 results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
               }
@@ -453,6 +505,7 @@
             if (epoch !== lifecycleEpoch || seq !== runSeq) return;
             try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
             try { console.error('SOQL RUN instanceUrl error', e); } catch {}
+            try { setSoqlState('error'); } catch {}
             if (results && results.isConnected) {
               results.innerHTML = `<div class=\"log-entry\"><div class=\"log-header\"><div class=\"log-left\"><span class=\"log-badge error\">error</span><span class=\"log-message\">${Utils.escapeHtml(String(e))}</span></div></div></div>`;
             }
@@ -468,7 +521,7 @@
     }
 
     if (clearBtn && results) {
-      on(clearBtn, 'click', () => { clearUi(); });
+      on(clearBtn, 'click', () => { clearUi(); try { setSoqlState('inprogress'); } catch {} });
     }
   }
 

@@ -628,16 +628,24 @@ async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
     const data = await res.json();
     const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
     return list.map(s => {
-        const rawQueryable = s?.queryable;
-        let queryable = false;
-        if (typeof rawQueryable === 'boolean') queryable = rawQueryable === true;
-        else if (typeof rawQueryable === 'string') queryable = rawQueryable.toLowerCase() === 'true';
+        const toBool = (v) => (typeof v === 'boolean' ? v : (typeof v === 'string' ? v.toLowerCase() === 'true' : false));
+        const queryable = toBool(s?.queryable);
+        const createable = toBool(s?.createable);
+        const updateable = toBool(s?.updateable);
+        const retrieveable = toBool(s?.retrieveable);
+        const searchable = toBool(s?.searchable);
+        const deprecatedAndHidden = toBool(s?.deprecatedAndHidden);
         return ({
             name: s?.name || s?.keyPrefix || '',
             label: s?.label || s?.name || s?.keyPrefix || '',
             custom: !!s?.custom,
             keyPrefix: s?.keyPrefix || null,
-            queryable
+            queryable,
+            createable,
+            updateable,
+            retrieveable,
+            searchable,
+            deprecatedAndHidden
         });
     });
 }

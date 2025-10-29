@@ -587,24 +587,20 @@ h1 {
 #tab-soql #soql-query { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
 /* SOQL mode label and loading spinner */
-.soql-mode-label {
-  font-size: 12px;
-  color: #555;
-  padding: 2px 6px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  background: #fafafa;
+.soql-mode-label { display: none; }
+.soql-loading { display: none; }
+@keyframes soql-spin { from { } to { } }
+
+/* SOQL editor state visuals: in-progress (blue default), error (red), success (green) */
+/* We keep the current blue styling for in-progress by not overriding it. */
+#soql-query.soql-error {
+  border-color: #d93025 !important;
+  box-shadow: 0 0 0 2px rgba(217, 48, 37, 0.15) !important;
 }
-.soql-loading {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #ccc;
-  border-top-color: #00A1E0;
-  border-radius: 50%;
-  display: inline-block;
-  animation: soql-spin 0.8s linear infinite;
+#soql-query.soql-success {
+  border-color: #188038 !important;
+  box-shadow: 0 0 0 2px rgba(24, 128, 56, 0.15) !important;
 }
-@keyframes soql-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+#soql-query.soql-inprogress {
+  /* intentionally minimal to preserve existing blue focus/border styles */
 }
