@@ -72,45 +72,26 @@
   function describeObjectsToNames(objs, opts) {
     const arr = Array.isArray(objs) ? objs : [];
     const useTooling = !!(opts && opts.useTooling);
-
-    // Common denylist: exclude some very noisy admin/setup families (names)
     const excludeAdminPattern = /^(Auth|Async|Process|Setup|UserEntityAccess|ObjectPermissions|PermissionSet|PermissionSetAssignment|Profile|QueueSobject|RecordType|EventLogFile|FieldDefinition|EntityDefinition|UserFieldAccess|InstalledPackage|UserPermissionAccess|UserAppMenu|BrandingSet|CorsWhitelistEntry|ExternalDataSource|Duplicate|UserProv|Matching|OrgPreference|Content[A-Z]|Knowledge[A-Z]|Flow|AIPrediction|UserLoginHistory)/;
-
-    // Small allowlist for common standard data objects (helps when capability flags are missing in tests)
     const standardAllow = new Set(['Account','Contact','Lead','Opportunity','Case','Task','Event','User','Campaign','CampaignMember','Product2','Pricebook2','PricebookEntry','Asset','Contract','Order','OrderItem','Quote','QuoteLineItem']);
-
     const toBool = (v, def = false) => (typeof v === 'boolean' ? v : (typeof v === 'string' ? v.toLowerCase() === 'true' : !!def));
-
     return arr
       .filter((o) => {
         if (!o) return false;
         const name = String(o?.name || o?.label || '').trim();
         if (!name) return false;
-
-        // Always require queryable
         const isQueryable = toBool(o.queryable, false);
         if (!isQueryable) return false;
-
-        // Apply stricter filter for REST mode (Tooling OFF)
         if (!useTooling) {
           const isDeprecatedHidden = toBool(o.deprecatedAndHidden, false);
-          if (isDeprecatedHidden) return false;
-
+            if (isDeprecatedHidden) return false;
           const isCustom = toBool(o.custom, false) || /__(c|mdt)$/i.test(name);
-
-          // Capability checks: if flags are missing, treat as unknown (do not exclude)
           const createable = (o.createable == null) ? true : toBool(o.createable, false);
           const updateable = (o.updateable == null) ? true : toBool(o.updateable, false);
           const retrieveable = (o.retrieveable == null) ? true : toBool(o.retrieveable, false);
           const hasDataCaps = (createable || updateable || retrieveable);
-
-          // Optionally require searchable === true (if present). If missing, do not exclude.
           const searchable = (o.searchable == null) ? true : toBool(o.searchable, false);
-
-          // Denylist by family names
           if (excludeAdminPattern.test(name)) return false;
-
-          // Keep if clearly a data object: custom types or standard allowlist or has data-like capabilities and searchable
           const likelyData = isCustom || standardAllow.has(name) || (hasDataCaps && searchable);
           if (!likelyData) return false;
         }
@@ -336,6 +317,14 @@
   }
 
   function wireUiOnly() {
+    
+  // Advanced grid session state (resets on new query)
+  const advState = {
+    sort: [], // [{key, dir: 'asc'|'desc'}]
+    filters: {}, // key -> text
+    colWidths: {}, // key -> px
+    order: null, // array of column keys
+  };
     const runBtn = document.getElementById('soql-run');
     const clearBtn = document.getElementById('soql-clear');
     const queryEl = document.getElementById('soql-query');
@@ -343,6 +332,211 @@
     const objSel = document.getElementById('soql-object');
     const toolingCb = document.getElementById('soql-tooling');
     const limitEl = document.getElementById('soql-limit');
+    const viewAdvSwitch = document.getElementById('soql-view-advanced');
+
+    // Multi-query tabs elements
+    const tabsBar = document.getElementById('soql-tabbar');
+    const tabsWrap = document.getElementById('soql-tabs');
+    const tabAddBtn = document.getElementById('soql-tab-add');
+
+    // Cache last successful response for re-rendering across view modes
+    let lastSoqlResp = null;
+    let lastSoqlMeta = null;
+
+    // ========== Multi-query tabs state ==========
+    const TAB_STORAGE_KEY = 'soqlTabsV1';
+    let tabs = [];
+    let activeTabId = null;
+
+    function uid() { return Math.random().toString(36).slice(2, 10); }
+
+    function parseFromObject(q) {
+      try {
+        const s = String(q || '');
+        const m = s.match(/\bfrom\s+([`"\[]?[A-Za-z0-9_.`"\]]+)/i);
+        if (!m) return '';
+        let raw = m[1] || '';
+        // strip quotes/backticks/brackets
+        raw = raw.replace(/^[`"\[]/, '').replace(/[`"\]]$/, '');
+        // Only last segment for relationship paths
+        const parts = raw.split('.');
+        return parts[parts.length - 1];
+      } catch { return ''; }
+    }
+
+    function buildTitleForQuery(q) {
+      const obj = parseFromObject(q);
+      return obj ? obj : 'Untitled';
+    }
+
+    function uniquifyTitle(base) {
+      const titles = new Map();
+      for (const t of tabs) {
+        const key = (t.title || '').toLowerCase();
+        titles.set(key, (titles.get(key) || 0) + 1);
+      }
+      let title = base;
+      let n = 1;
+      while (tabs.some(t => (t.title || '').toLowerCase() === (title || '').toLowerCase())) {
+        n += 1;
+        title = base + ' (' + n + ')';
+      }
+      return title;
+    }
+
+    function saveTabs() {
+      try {
+        const payload = { tabs, activeTabId };
+        chrome.storage?.local?.set?.({ [TAB_STORAGE_KEY]: payload }, () => {});
+      } catch {}
+    }
+
+    function loadTabs() {
+      return new Promise((resolve) => {
+        try {
+          chrome.storage?.local?.get?.({ [TAB_STORAGE_KEY]: null }, (r) => {
+            const payload = r ? r[TAB_STORAGE_KEY] : null;
+            if (payload && Array.isArray(payload.tabs) && payload.tabs.length) {
+              tabs = payload.tabs;
+              activeTabId = payload.activeTabId || tabs[0].id;
+            } else {
+              const id = uid();
+              tabs = [{ id, title: 'Untitled', query: '', tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: 'raw', advState: null, lastResp: null, lastMeta: null }];
+              activeTabId = id;
+            }
+            resolve();
+          });
+        } catch {
+          const id = uid();
+          tabs = [{ id, title: 'Untitled', query: '', tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: 'raw', advState: null, lastResp: null, lastMeta: null }];
+          activeTabId = id;
+          resolve();
+        }
+      });
+    }
+
+    function renderTabsBar() {
+      if (!tabsWrap) return;
+      tabsWrap.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (const t of tabs) {
+        const b = document.createElement('button');
+        b.className = 'soql-tab' + (t.id === activeTabId ? ' active' : '');
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', t.id === activeTabId ? 'true' : 'false');
+        b.dataset.id = t.id;
+        const span = document.createElement('span');
+        span.className = 'title';
+        span.textContent = t.title || 'Untitled';
+        const close = document.createElement('button');
+        close.className = 'close';
+        close.type = 'button';
+        close.title = 'Close tab';
+        close.textContent = '×';
+        close.addEventListener('click', (e) => { e.stopPropagation(); closeTab(t.id); });
+        b.appendChild(span);
+        b.appendChild(close);
+        b.addEventListener('click', () => setActiveTab(t.id));
+        frag.appendChild(b);
+      }
+      tabsWrap.appendChild(frag);
+    }
+
+    function setActiveTab(id) {
+      const t = tabs.find(x => x.id === id);
+      if (!t) return;
+      activeTabId = id;
+      // Populate UI inputs
+      if (queryEl) queryEl.value = t.query || '';
+      if (toolingCb) toolingCb.checked = !!t.tooling;
+      if (limitEl) limitEl.value = String(t.limit || 200);
+      if (viewAdvSwitch) viewAdvSwitch.checked = (t.viewMode === 'advanced');
+      try { viewAdvSwitch && viewAdvSwitch.setAttribute('aria-checked', viewAdvSwitch.checked ? 'true' : 'false'); } catch {}
+
+      // Restore last response render if present
+      lastSoqlResp = t.lastResp || null;
+      lastSoqlMeta = t.lastMeta || null;
+      // Reset advState from tab if present
+      if (t.advState && typeof t.advState === 'object') {
+        advState.sort = Array.isArray(t.advState.sort) ? t.advState.sort : [];
+        advState.filters = t.advState.filters || {};
+        advState.colWidths = t.advState.colWidths || {};
+        advState.order = Array.isArray(t.advState.order) ? t.advState.order : null;
+      } else {
+        advState.sort = []; advState.filters = {}; advState.colWidths = {}; advState.order = null;
+      }
+      renderTabsBar();
+      if (lastSoqlResp) { renderByMode(lastSoqlResp); } else { renderPlaceholder(); }
+      saveTabs();
+    }
+
+    function addTab(initialQuery) {
+      const q = String(initialQuery || '').trim();
+      const base = buildTitleForQuery(q) || 'Untitled';
+      const unique = tabs.some(t => (t.title || '').toLowerCase() === base.toLowerCase()) ? uniquifyTitle(base) : base;
+      const id = uid();
+      const t = { id, title: unique, query: q, tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw', advState: null, lastResp: null, lastMeta: null };
+      tabs.push(t);
+      setActiveTab(id);
+      saveTabs();
+    }
+
+    function closeTab(id) {
+      const idx = tabs.findIndex(t => t.id === id);
+      if (idx < 0) return;
+      const wasActive = (activeTabId === id);
+      tabs.splice(idx, 1);
+      if (tabs.length === 0) {
+        addTab('');
+      } else if (wasActive) {
+        const next = tabs[Math.max(0, idx - 1)];
+        setActiveTab(next.id);
+      } else {
+        renderTabsBar();
+        saveTabs();
+      }
+    }
+
+    function updateActiveTabFromInputs({ andRender } = {}) {
+      const t = tabs.find(x => x.id === activeTabId);
+      if (!t) return;
+      t.query = queryEl ? (queryEl.value || '') : t.query;
+      t.tooling = toolingCb ? !!toolingCb.checked : t.tooling;
+      t.limit = limitEl ? getLimitValue() : t.limit;
+      t.viewMode = (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw';
+      // derive title from FROM object and ensure uniqueness among others
+      let newTitle = buildTitleForQuery(t.query) || 'Untitled';
+      if (!newTitle) newTitle = 'Untitled';
+      if (newTitle.toLowerCase() !== (t.title || '').toLowerCase()) {
+        // Ensure uniqueness: if another tab already has same title, suffix
+        let candidate = newTitle;
+        let n = 1;
+        while (tabs.some(x => x.id !== t.id && (x.title || '').toLowerCase() === candidate.toLowerCase())) {
+          n += 1; candidate = newTitle + ' (' + n + ')';
+        }
+        t.title = candidate;
+        renderTabsBar();
+      }
+      saveTabs();
+      if (andRender) { rerenderCurrent(); }
+    }
+
+    function saveAdvStateIntoTab() {
+      const t = tabs.find(x => x.id === activeTabId);
+      if (!t) return;
+      t.advState = { sort: advState.sort.slice(), filters: { ...(advState.filters||{}) }, colWidths: { ...(advState.colWidths||{}) }, order: advState.order ? advState.order.slice() : null };
+    }
+
+    // Wire tabbar buttons
+    if (tabAddBtn) on(tabAddBtn, 'click', () => addTab(''));
+
+    // Load and render tabs initially
+    if (tabsBar) {
+      loadTabs().then(() => {
+        renderTabsBar();
+        setActiveTab(activeTabId);
+      });
+    }
 
     function getLimitValue() {
       const v = Number((limitEl && limitEl.value) ? limitEl.value : 200);
@@ -356,9 +550,328 @@
         <div class=\"placeholder\">\n          <p>SOQL Query Builder</p>\n          <p class=\"placeholder-note\">Type a query and click Run.</p>\n        </div>
       `;
     }
+
+    function getViewModePref(){
+      return new Promise((resolve) => {
+        try {
+          chrome.storage?.local?.get?.({ soqlViewMode: 'raw' }, (r) => {
+            if (chrome.runtime && chrome.runtime.lastError) { resolve('raw'); return; }
+            const v = (r && r.soqlViewMode) || 'raw';
+            resolve(v === 'advanced' ? 'advanced' : 'raw');
+          });
+        } catch { resolve('raw'); }
+      });
+    }
+    function setViewModePref(mode){
+      try { chrome.storage?.local?.set?.({ soqlViewMode: mode === 'advanced' ? 'advanced' : 'raw' }, () => {}); } catch {}
+    }
+
     function clearUi() {
       if (queryEl) queryEl.value = '';
+      lastSoqlResp = null; lastSoqlMeta = null;
       renderPlaceholder();
+    }
+
+    function renderRaw(resp){
+      if (!results) return;
+      const total = Number(resp?.totalSize || (Array.isArray(resp?.records) ? resp.records.length : 0));
+      results.innerHTML = `
+        <div class=\"log-entry\">\n          <div class=\"log-header\">\n            <div class=\"log-left\">\n              <span class=\"log-badge event\">event</span>\n              <span class=\"log-message\">Returned ${total} record(s)</span>\n            </div>\n          </div>\n          <div class=\"log-details\"><details open><summary>Records</summary><pre class=\"log-json\">${Utils.escapeHtml(JSON.stringify(resp?.records || [], null, 2))}</pre></details></div>\n        </div>
+      `;
+    }
+
+    function isSalesforceId(val){
+      const s = String(val || '');
+      return /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(s);
+    }
+
+    function buildIdLinkHtml(id, label){
+      const safeId = Utils.escapeHtml(id);
+      const safeLabel = Utils.escapeHtml(label || id);
+      return `<a href=\"#\" class=\"sf-id-link\" data-sfid=\"${safeId}\" title=\"Open record\">${safeLabel}</a>`;
+    }
+
+    // Call after rendering advanced grid
+    function renderAdvanced(resp) {
+      // Build enhanced Excel-like grid
+      if (!results) return;
+      if (!results) return;
+      const rawRows = Array.isArray(resp?.records) ? resp.records : [];
+      // Determine headers
+      const cols = new Set();
+      rawRows.forEach((r) => {
+        if (!r || typeof r !== 'object') return;
+        Object.keys(r).forEach((k) => { if (k !== 'attributes') cols.add(k); });
+      });
+      let headers = advState.order && advState.order.length ? advState.order.filter(k=>cols.has(k)) : Array.from(cols);
+      if (!advState.order || advState.order.length === 0) advState.order = headers.slice();
+      const escape = (v) => Utils.escapeHtml(String(v));
+
+      // Apply filters
+      const filterText = (txt) => String(txt || '').toLowerCase();
+      const recordValString = (v) => {
+        if (v == null) return '';
+        if (typeof v === 'object') {
+          const rid = v.Id || v.id || null;
+          const nm = v.Name || v.name || null;
+          if (rid && isSalesforceId(rid)) return nm ? `${nm} (${rid})` : `${rid}`;
+          try { return JSON.stringify(v); } catch { return String(v); }
+        }
+        return String(v);
+      };
+      const activeFilters = Object.keys(advState.filters || {}).filter(k => (advState.filters[k] || '').trim() !== '');
+      const filteredRows = activeFilters.length === 0 ? rawRows : rawRows.filter((r) => {
+        return activeFilters.every((key) => {
+          const needle = filterText(advState.filters[key] || '');
+          const hay = filterText(recordValString(r[key]));
+          return hay.indexOf(needle) !== -1;
+        });
+      });
+
+      // Apply sorting
+      const sorters = Array.isArray(advState.sort) ? advState.sort : [];
+      const sortedRows = sorters.length === 0 ? filteredRows.slice() : filteredRows.slice().sort((a,b) => {
+        for (const s of sorters) {
+          const ka = recordValString(a[s.key]);
+          const kb = recordValString(b[s.key]);
+          if (ka === kb) continue;
+          const cmp = ka < kb ? -1 : 1;
+          return s.dir === 'desc' ? -cmp : cmp;
+        }
+        return 0;
+      });
+
+      // Build body rows
+      const htmlRows = sortedRows.map((r) => {
+        const tds = headers.map((h) => {
+          const width = advState.colWidths && advState.colWidths[h] ? ` style=\"width:${advState.colWidths[h]}px;\"` : '';
+          let v = r[h];
+          if (v == null) return `<td${width}></td>`;
+          if (typeof v === 'object') {
+            const rid = v.Id || v.id || null;
+            const nm = v.Name || v.name || null;
+            if (rid && isSalesforceId(rid)) {
+              const label = nm ? `${nm}` : `${rid}`;
+              return `<td${width}><div class=\"cell\">${buildIdLinkHtml(rid, label)}</div></td>`;
+            }
+            try { return `<td${width}><div class=\"cell\"><code>${escape(JSON.stringify(v))}</code></div></td>`; } catch { return `<td${width}></td>`; }
+          }
+          if (typeof v === 'string' && isSalesforceId(v)) {
+            return `<td${width}><div class=\"cell\">${buildIdLinkHtml(v)}</div></td>`;
+          }
+          return `<td${width} title=\"${escape(recordValString(v))}\"><div class=\"cell\">${escape(v)}</div></td>`;
+        }).join('');
+        return `<tr>${tds}</tr>`;
+      }).join('');
+
+      // Build header with sort indicators and filter inputs
+      const sortMap = Object.create(null);
+      (advState.sort || []).forEach((s, i) => { sortMap[s.key] = { dir: s.dir, idx: i+1 }; });
+      const ths = headers.map(h => {
+        const sortInfo = sortMap[h];
+        const dir = sortInfo ? sortInfo.dir : '';
+        const ind = dir === 'asc' ? '▲' : (dir === 'desc' ? '▼' : '');
+        const orderBadge = sortInfo ? `<span class=\"sort-order\">${sortInfo.idx}</span>` : '';
+        const width = advState.colWidths && advState.colWidths[h] ? `width:${advState.colWidths[h]}px;` : '';
+        return `<th draggable=\"true\" data-key=\"${escape(h)}\" class=\"hdr ${dir ? 'sorted-'+dir : ''}\" aria-sort=\"${dir || 'none'}\" style=\"position:sticky; top:0; ${width}\">
+                  <div class=\"hdr-inner\" title=\"Click to sort; Shift+Click for multi-sort\">
+                    <span class=\"hdr-name\">${escape(h)}</span>
+                    <span class=\"sort-ind\">${ind}</span>
+                    ${orderBadge}
+                  </div>
+                  <span class=\"col-resizer\" data-col=\"${escape(h)}\" style=\"position:absolute; right:0; top:0; width:6px; cursor:col-resize; user-select:none; height:100%;\"></span>
+                </th>`;
+      }).join('');
+      const filterRow = headers.map(h => {
+        const val = Utils.escapeHtml(advState.filters && advState.filters[h] ? advState.filters[h] : '');
+        const width = advState.colWidths && advState.colWidths[h] ? ` style=\"width:${advState.colWidths[h]}px;\"` : '';
+        return `<th${width}><input class=\"col-filter\" data-key=\"${escape(h)}\" type=\"text\" placeholder=\"Filter\" value=\"${val}\" /></th>`;
+      }).join('');
+
+      const statusHtml = `<div class="soql-adv-status">${filteredRows.length} of ${rawRows.length} row(s)</div>`;
+
+      const actionsHtml = `
+        <div class=\"btn-group soql-adv-btnbar\" style=\"display:flex; gap:8px; padding:6px 0; justify-content:flex-end; align-items:center; width:100%; flex-wrap:nowrap;\">\n        </div>`;
+      const table = `
+        <div class=\"soql-adv-wrap\">\n          <div class=\"soql-adv-actions\" style=\"display:flex; justify-content:flex-end;\">${actionsHtml}</div>\n          <div class=\"soql-adv-table-wrap\" style=\"overflow:auto;\">\n            <table class=\"soql-adv-table\" style=\"border-collapse:collapse; table-layout:fixed; width:max-content; min-width:100%;\">\n              <thead><tr>${ths}</tr><tr class=\"filter-row\">${filterRow}</tr></thead>\n              <tbody>${htmlRows}</tbody>\n            </table>\n          </div>\n          ${statusHtml}\n          <div class=\"sf-id-menu\" style=\"position:absolute; display:none; z-index:1000; background:#fff; border:1px solid #e1e5ea; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.12);\">\n            <button data-cmd=\"copy\" style=\"display:block; width:100%; padding:8px 12px; text-align:left; background:none; border:0; cursor:pointer;\">Copy Id</button>\n            <button data-cmd=\"open\" style=\"display:block; width:100%; padding:8px 12px; text-align:left; background:none; border:0; cursor:pointer;\">Open in new tab</button>\n          </div>\n        </div>`;
+      results.innerHTML = table;
+
+      // Remove export button wiring (not needed)
+      try {
+        const tableEl = results.querySelector('table.soql-adv-table');
+        const headRow = tableEl ? tableEl.querySelector('thead tr') : null;
+        const thEls = headRow ? Array.from(headRow.children) : [];
+        // Sorting
+        thEls.forEach((th) => {
+          const key = th.getAttribute('data-key');
+          const inner = th.querySelector('.hdr-inner') || th;
+          on(inner, 'click', (evt) => {
+            const multi = !!evt.shiftKey;
+            const existingIdx = (advState.sort || []).findIndex(s => s.key === key);
+            let nextDir = 'asc';
+            if (existingIdx >= 0) {
+              const cur = advState.sort[existingIdx];
+              nextDir = cur.dir === 'asc' ? 'desc' : (cur.dir === 'desc' ? 'none' : 'asc');
+            }
+            if (!multi) advState.sort = [];
+            if (nextDir === 'none') {
+              if (existingIdx >= 0) advState.sort.splice(existingIdx, 1);
+            } else {
+              if (existingIdx >= 0) advState.sort[existingIdx].dir = nextDir; else advState.sort.push({ key, dir: nextDir });
+            }
+            rerenderCurrent();
+          });
+        });
+        // Drag reorder
+        let dragKey = null;
+        thEls.forEach((th) => {
+          const key = th.getAttribute('data-key');
+          on(th, 'dragstart', () => { dragKey = key; });
+          on(th, 'dragover', (e) => { try { e.preventDefault(); } catch {} });
+          on(th, 'drop', (e) => {
+            try { e.preventDefault(); } catch {}
+            const targetKey = th.getAttribute('data-key');
+            if (!dragKey || !targetKey || dragKey === targetKey) return;
+            const order = advState.order ? advState.order.slice() : headers.slice();
+            const from = order.indexOf(dragKey);
+            const to = order.indexOf(targetKey);
+            if (from < 0 || to < 0) return;
+            order.splice(from, 1);
+            order.splice(to, 0, dragKey);
+            advState.order = order;
+            rerenderCurrent();
+          });
+        });
+      } catch {}
+
+      // Wire filter inputs (debounced)
+      try {
+        const inputs = Array.from(results.querySelectorAll('input.col-filter'));
+        let tId = null;
+        const schedule = () => { if (tId) clearTimeout(tId); tId = setTimeout(() => rerenderCurrent(), 200); };
+        inputs.forEach((inp) => {
+          const key = inp.getAttribute('data-key');
+          on(inp, 'input', () => { advState.filters[key] = inp.value || ''; schedule(); });
+        });
+      } catch {}
+
+      // Wire id link interactions
+      const menu = results.querySelector('.sf-id-menu');
+      let menuForId = null;
+      function hideMenu(){ if (menu) { menu.style.display = 'none'; } menuForId = null; }
+      on(document, 'click', (e) => {
+        const a = e.target?.closest ? e.target.closest('.sf-id-link') : null;
+        if (a && a.dataset?.sfid) {
+          e.preventDefault();
+          const id = a.dataset.sfid;
+          menuForId = id;
+          const rect = a.getBoundingClientRect();
+          const x = rect.left + window.scrollX;
+          const y = rect.bottom + window.scrollY + 4;
+          if (menu) { menu.style.left = x + 'px'; menu.style.top = y + 'px'; menu.style.display = 'block'; }
+          return;
+        }
+        hideMenu();
+      });
+      on(document, 'keydown', (e) => { if (e.key === 'Escape') hideMenu(); });
+      on(menu, 'click', async (e) => {
+        const cmd = e.target?.getAttribute ? e.target.getAttribute('data-cmd') : '';
+        if (!cmd || !menuForId) return;
+        if (cmd === 'copy') {
+          try { await navigator.clipboard.writeText(menuForId); Utils.showToast && Utils.showToast('Id copied'); } catch {}
+          hideMenu();
+        } else if (cmd === 'open') {
+          try {
+            const origin = await Utils.getInstanceUrl();
+            if (origin) window.open(origin + '/' + menuForId, '_blank');
+          } catch {}
+          hideMenu();
+        }
+      });
+
+      // Column resizing like Excel
+      try {
+        const tableEl = results.querySelector('table.soql-adv-table');
+        const headRow = tableEl ? tableEl.querySelector('thead tr') : null; // first header row
+        const ths = headRow ? Array.from(headRow.children) : [];
+        const bodyRows = tableEl ? Array.from(tableEl.querySelectorAll('tbody tr')) : [];
+        const minWidth = 60;
+        function setColWidth(idx, px){
+          const w = Math.max(minWidth, Math.floor(px));
+          const th = ths[idx];
+          if (!th) return;
+          th.style.width = w + 'px';
+          const key = th.getAttribute('data-key');
+          if (key) advState.colWidths[key] = w;
+          // apply to cells
+          for (const tr of bodyRows) {
+            const td = tr.children[idx];
+            if (td) td.style.width = w + 'px';
+          }
+        }
+        function autoFit(idx){
+          const th = ths[idx]; if (!th) return;
+          let max = 0;
+          // header name
+          const nameEl = th.querySelector('.hdr-name');
+          if (nameEl) max = Math.max(max, nameEl.scrollWidth + 24);
+          // filter input (second header row)
+          try {
+            const filterRow = tableEl.querySelector('thead tr.filter-row');
+            const filterTh = filterRow ? filterRow.children[idx] : null;
+            const inp = filterTh ? filterTh.querySelector('input') : null;
+            if (inp) max = Math.max(max, inp.scrollWidth + 24);
+          } catch {}
+          // body cells
+          for (const tr of bodyRows) {
+            const td = tr.children[idx];
+            if (!td) continue;
+            const cell = td.querySelector('.cell') || td;
+            max = Math.max(max, cell.scrollWidth + 24);
+          }
+          if (max > 0) setColWidth(idx, max);
+        }
+        ths.forEach((th, idx) => {
+          const handle = th.querySelector('.col-resizer');
+          if (!handle) return;
+          let startX = 0; let startW = 0; let dragging = false;
+          const mm = (evt) => {
+            if (!dragging) return;
+            const dx = evt.clientX - startX;
+            setColWidth(idx, startW + dx);
+            try { evt.preventDefault(); } catch {}
+          };
+          const mu = () => {
+            if (!dragging) return;
+            dragging = false;
+            document.body.style.cursor = '';
+            document.body.classList.remove('no-select');
+          };
+          on(handle, 'mousedown', (evt) => {
+            startX = evt.clientX;
+            startW = th.getBoundingClientRect().width;
+            dragging = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.classList.add('no-select');
+          });
+          // Double-click to auto-fit
+          on(handle, 'dblclick', () => { autoFit(idx); });
+          on(document, 'mousemove', mm);
+          on(document, 'mouseup', mu);
+        });
+      } catch {}
+    }
+
+    function renderByMode(resp){
+      const mode = (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw';
+      if (mode === 'advanced') renderAdvanced(resp); else renderRaw(resp);
+    }
+
+    function rerenderCurrent(){
+      if (!lastSoqlResp) { renderPlaceholder(); return; }
+      renderByMode(lastSoqlResp);
+      // persist current adv grid state with the tab
+      try { saveAdvStateIntoTab(); saveTabs(); } catch {}
     }
 
     if (toolingCb) {
@@ -371,6 +884,7 @@
         clearUi();
         setSoqlState('inprogress');
         applyObjectSelectorVisibility();
+        updateActiveTabFromInputs({ andRender: false });
         reloadObjects(!!toolingCb.checked);
       });
     }
@@ -378,7 +892,7 @@
     // Initialize editor state and keep it in-progress while editing
     if (queryEl) {
       try { setSoqlState('inprogress'); } catch {}
-      on(queryEl, 'input', () => { setSoqlState('inprogress'); });
+      on(queryEl, 'input', () => { setSoqlState('inprogress'); updateActiveTabFromInputs({ andRender: false }); });
     }
 
     // Update LIMIT in the auto-generated template when the limit control changes
@@ -390,19 +904,35 @@
         const m = val.match(/^select\s+id\s+from\s+(.+?)\s+limit\s+\d+\s*$/i);
         if (m && m[1]) {
           queryEl.value = `SELECT Id FROM ${m[1]} LIMIT ${lim}`;
+          try { queryEl.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
         }
+        updateActiveTabFromInputs({ andRender: false });
       });
     }
 
     if (objSel && queryEl) {
       on(objSel, 'change', () => {
         const v = (objSel.value || '').trim();
-        if (!v) { clearUi(); setSoqlState('inprogress'); return; }
+        if (!v) { clearUi(); setSoqlState('inprogress'); updateActiveTabFromInputs({ andRender: true }); return; }
         const qName = quoteIdentifier(v);
         const lim = getLimitValue();
-        queryEl.value = `SELECT Id FROM ${qName} LIMIT ${lim}`;
+        const templateQuery = `SELECT Id FROM ${qName} LIMIT ${lim}`;
         try { setSoqlState('inprogress'); } catch {}
-        renderPlaceholder();
+        // Decide whether to create a new tab or reuse the current one
+        let usedNewTab = false;
+        try {
+          const t = tabs.find(x => x.id === activeTabId);
+          const hasContent = !!(t && ((t.query && t.query.trim() !== '') || t.lastResp));
+          if (hasContent) {
+            addTab(templateQuery);
+            usedNewTab = true;
+          }
+        } catch {}
+        if (!usedNewTab) {
+          queryEl.value = templateQuery;
+          renderPlaceholder();
+          updateActiveTabFromInputs({ andRender: false });
+        }
         // Move focus to the query editor and blur the object selector to dismiss any native suggestions/dropdowns
         try { objSel.blur(); } catch {}
         try { setTimeout(() => { if (queryEl && queryEl.isConnected) { queryEl.focus(); } }, 0); } catch {}
@@ -417,6 +947,21 @@
           cleanup.push(() => { try { fn(); } catch {}; guidanceCleanup = null; });
         }
       } catch {}
+    }
+
+    // Initialize view mode from storage and wire changes (switch)
+    if (viewAdvSwitch) {
+      getViewModePref().then((mode) => {
+        try { viewAdvSwitch.checked = (mode === 'advanced'); } catch {}
+        try { viewAdvSwitch.setAttribute('aria-checked', viewAdvSwitch.checked ? 'true' : 'false'); } catch {}
+      });
+      on(viewAdvSwitch, 'change', () => {
+        const mode = (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw';
+        try { viewAdvSwitch.setAttribute('aria-checked', viewAdvSwitch.checked ? 'true' : 'false'); } catch {}
+        setViewModePref(mode);
+        updateActiveTabFromInputs({ andRender: false });
+        if (lastSoqlResp) renderByMode(lastSoqlResp);
+      });
     }
 
     if (runBtn && queryEl && results) {
@@ -474,7 +1019,7 @@
               try { runBtn.disabled = false; runBtn.removeAttribute('aria-busy'); } catch {}
 
               if (!resp || !resp.success) {
-                try { console.error('SOQL RUN failed', { error: resp?.error, payload: usedPayload, retried }); } catch {}
+                try { console.error('SOQL RUN failed', JSON.stringify({ error: resp?.error, payload: usedPayload, retried }, null, 2)); } catch {}
                 const msgSafe = Utils.escapeHtml(resp?.error || 'Query failed');
                 const details = buildErrorDetailsHTML(resp?.error, { useTooling: tooling, limit: payload.limit, instanceUrl: usedPayload.instanceUrl, query: q, retried });
                 try { setSoqlState('error'); } catch {}
@@ -485,10 +1030,22 @@
               }
               const total = Number(resp.totalSize || (Array.isArray(resp.records) ? resp.records.length : 0));
               try { setSoqlState('success'); } catch {}
+              // Reset Advanced grid session state on new successful result
+              advState.sort = [];
+              advState.filters = {};
+              advState.colWidths = {};
+              advState.order = null;
+              lastSoqlResp = resp;
+              lastSoqlMeta = { useTooling: tooling, limit: payload.limit, instanceUrl: usedPayload.instanceUrl, query: q };
+              // Persist into active tab (last results + meta)
+              try {
+                const t = tabs.find(x => x.id === activeTabId);
+                if (t) { t.lastResp = lastSoqlResp; t.lastMeta = lastSoqlMeta; saveTabs(); }
+              } catch {}
               if (results && results.isConnected) {
-                results.innerHTML = `
-                  <div class=\"log-entry\">\n                    <div class=\"log-header\">\n                      <div class=\"log-left\">\n                        <span class=\"log-badge event\">event</span>\n                        <span class=\"log-message\">Returned ${total} record(s)</span>\n                      </div>\n                    </div>\n                    <div class=\"log-details\"><details><summary>Records</summary><pre class=\"log-json\">${Utils.escapeHtml(JSON.stringify(resp.records || [], null, 2))}</pre></details></div>\n                  </div>
-                `;
+                renderByMode(resp);
+                // Save grid state after initial render (no-op for raw)
+                try { saveAdvStateIntoTab(); saveTabs(); } catch {}
               }
             }).catch((e) => {
               // Ignore stale
@@ -521,7 +1078,14 @@
     }
 
     if (clearBtn && results) {
-      on(clearBtn, 'click', () => { clearUi(); try { setSoqlState('inprogress'); } catch {} });
+      on(clearBtn, 'click', () => { 
+        clearUi(); 
+        try { setSoqlState('inprogress'); } catch {}
+        try {
+          const t = tabs.find(x => x.id === activeTabId);
+          if (t) { t.query = ''; t.lastResp = null; t.lastMeta = null; t.advState = null; saveTabs(); }
+        } catch {}
+      });
     }
   }
 

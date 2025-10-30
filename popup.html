@@ -205,12 +205,19 @@ File: `popup.html` (replace body content with this)
                 <label class="filter-label" for="soql-limit" title="Max records to fetch">Limit:</label>
                 <input id="soql-limit" type="number" min="1" max="5000" value="200" style="width: 90px; padding: 6px 8px;" aria-label="Max records to fetch" />
 
+
                 <button id="soql-run" class="icon-btn btn-sm" title="Run Query" aria-label="Run Query">
                     <span aria-hidden="true">▶</span>
                 </button>
                 <button id="soql-clear" class="icon-btn btn-sm" title="Clear results" aria-label="Clear results">
                     <span aria-hidden="true">🗑</span>
                 </button>
+            </div>
+
+            <!-- SOQL query tabs bar -->
+            <div id="soql-tabbar" class="soql-tabbar" role="tablist" aria-label="SOQL query tabs">
+                <div class="soql-tabs" id="soql-tabs"></div>
+                <button id="soql-tab-add" class="icon-btn btn-sm" title="New query tab" aria-label="New query tab">＋</button>
             </div>
 
             <div class="search-box">
@@ -224,6 +231,18 @@ File: `popup.html` (replace body content with this)
                 </div>
             </div>
 
+            <!-- Unified action bar: Advanced toggle + export buttons -->
+            <div class="soql-actionbar" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; padding:6px 0;">
+                <label class="filter-label" for="soql-view-advanced" title="Toggle Advanced Results" style="margin-right:4px;">Advanced:</label>
+                <input type="checkbox" id="soql-view-advanced" role="switch" aria-label="Advanced results view (on/off)" style="margin-right:16px;" />
+                <span id="soql-status" style="margin-right:auto; font-size:12px; color:#555; padding:2px 4px;">Raw view</span>
+                <div id="soql-export-buttons" style="display:none; gap:8px; align-items:center;">
+                  <button class="btn-chip" id="soql-exp-json" title="Copy JSON to clipboard"><span class="ico">📋</span><span class="lbl">JSON</span></button>
+                  <button class="btn-chip" id="soql-exp-csv" title="Copy CSV to clipboard"><span class="ico">📋</span><span class="lbl">CSV</span></button>
+                  <button class="btn-chip" id="soql-exp-tsv" title="Copy TSV (Excel) to clipboard"><span class="ico">📋</span><span class="lbl">Excel</span></button>
+                  <button class="btn-chip" id="soql-exp-download" title="Download CSV file"><span class="ico">⬇️</span><span class="lbl">Download CSV</span></button>
+                </div>
+            </div>
             <div id="soql-results" class="logs-container">
 
             </div>
