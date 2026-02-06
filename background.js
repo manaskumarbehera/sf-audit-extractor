@@ -1,4 +1,5 @@
 import { SALESFORCE_SUFFIXES, DEFAULT_API_VERSION, LMS_CHANNELS_SOQL } from './constants.js';
+import { sanitizeUrl, normalizeApiBase, originFromUrl } from './url_helper.js';
 
 let platformWindowId = null;
 let appWindowId = null;
@@ -286,6 +287,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, totalSize: result.totalSize, records: result.records, done: true };
             }
 
+            if (is('PUBLISH_PLATFORM_EVENT')) {
+                const eventApiName = String(msg?.eventApiName || '').trim();
+                if (!eventApiName) return { success: false, error: 'Missing event API name' };
+                const payload = msg?.payload;
+                if (!payload || typeof payload !== 'object') return { success: false, error: 'Invalid payload' };
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
+                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
+                const result = await publishPlatformEvent(instanceUrl, sessionId, eventApiName, payload);
+                return result;
+            }
+
             return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL'] };
         } catch (e) {
             return { success: false, error: String(e) };
@@ -349,50 +368,6 @@ function isSalesforceUrl(url) {
         return SALESFORCE_SUFFIXES.some((s) => h === s || h.endsWith('.' + s));
     } catch {
         return false;
-    }
-}
-
-function originFromUrl(url) {
-    try {
-        return new URL(url).origin;
-    } catch {
-        const m = String(url || '').match(/^(https:\/\/[^/]+)/i);
-        return m ? m[1] : null;
-    }
-}
-
-function sanitizeUrl(url) {
-    if (!url) return null;
-    try {
-        return new URL(url).origin;
-    } catch {
-        return null;
-    }
-}
-
-function normalizeApiBase(url) {
-    const o = sanitizeUrl(url);
-    if (!o) return null;
-    const u = new URL(o);
-    const h = u.hostname.toLowerCase();
-
-    if (h.endsWith('.lightning.force.com')) {
-        u.hostname = h.replace(/\.lightning\.force\.com$/, '.my.salesforce.com');
-    } else if (h.endsWith('.visual.force.com')) {
-        u.hostname = h.replace(/\.visual\.force\.com$/, '.my.salesforce.com');
-    } else if (h.endsWith('.force.com') && !h.endsWith('.my.salesforce.com')) {
-        u.hostname = h.replace(/\.force\.com$/, '.salesforce.com');
-    }
-    return u.origin;
-}
-
-async function findSalesforceOrigin() {
-    try {
-        const tabs = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*'] });
-        const t = Array.isArray(tabs) && tabs.length ? tabs[0] : null;
-        return t?.url ? sanitizeUrl(t.url) : null;
-    } catch {
-        return null;
     }
 }
 
@@ -629,65 +604,174 @@ async function getApiVersion() {
 async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('Invalid instance URL');
+    if (!sessionId) throw new Error('Session ID is required');
+
     const v = await getApiVersion();
     const url = useTooling
         ? `${base}/services/data/${v}/tooling/sobjects`
         : `${base}/services/data/${v}/sobjects`;
-    const res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' }, credentials: 'omit' });
-    if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Describe Global failed (${res.status}): ${text || res.statusText}`);
+
+    // Retry logic for transient network failures
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+            const res = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${sessionId}`,
+                    Accept: 'application/json'
+                },
+                credentials: 'omit',
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => '');
+                // Include the URL that was attempted for easier debugging
+                throw new Error(`Describe Global failed (${res.status}) for URL ${url}: ${text || res.statusText}`);
+            }
+
+            const data = await res.json();
+            const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
+            return list.map(s => {
+                const toBool = (v) => (typeof v === 'boolean' ? v : (typeof v === 'string' ? v.toLowerCase() === 'true' : false));
+                const queryable = toBool(s?.queryable);
+                const createable = toBool(s?.createable);
+                const updateable = toBool(s?.updateable);
+                const retrieveable = toBool(s?.retrieveable);
+                const searchable = toBool(s?.searchable);
+                const deprecatedAndHidden = toBool(s?.deprecatedAndHidden);
+                return ({
+                    name: s?.name || s?.keyPrefix || '',
+                    label: s?.label || s?.name || s?.keyPrefix || '',
+                    custom: !!s?.custom,
+                    keyPrefix: s?.keyPrefix || null,
+                    queryable,
+                    createable,
+                    updateable,
+                    retrieveable,
+                    searchable,
+                    deprecatedAndHidden
+                });
+            });
+        } catch (err) {
+            lastError = err;
+            const errStr = String(err);
+            const isRetryable = errStr.includes('Failed to fetch') ||
+                               errStr.includes('NetworkError') ||
+                               errStr.includes('AbortError') ||
+                               errStr.includes('network') ||
+                               errStr.includes('timeout') ||
+                               err.name === 'AbortError';
+
+            if (isRetryable && attempt < maxRetries) {
+                // Wait before retrying (exponential backoff: 1s, 2s, 4s...)
+                await new Promise(r => setTimeout(r, Math.pow(2, attempt - 1) * 1000));
+                continue;
+            }
+
+            // Non-retryable error or max retries reached
+            break;
+        }
     }
-    const data = await res.json();
-    const list = Array.isArray(data?.sobjects) ? data.sobjects : [];
-    return list.map(s => {
-        const toBool = (v) => (typeof v === 'boolean' ? v : (typeof v === 'string' ? v.toLowerCase() === 'true' : false));
-        const queryable = toBool(s?.queryable);
-        const createable = toBool(s?.createable);
-        const updateable = toBool(s?.updateable);
-        const retrieveable = toBool(s?.retrieveable);
-        const searchable = toBool(s?.searchable);
-        const deprecatedAndHidden = toBool(s?.deprecatedAndHidden);
-        return ({
-            name: s?.name || s?.keyPrefix || '',
-            label: s?.label || s?.name || s?.keyPrefix || '',
-            custom: !!s?.custom,
-            keyPrefix: s?.keyPrefix || null,
-            queryable,
-            createable,
-            updateable,
-            retrieveable,
-            searchable,
-            deprecatedAndHidden
-        });
-    });
+
+    // Enhance error message for common issues
+    const errMsg = String(lastError || 'Unknown error');
+    if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+        throw new Error(`Network error fetching SObjects from ${url}. This may be caused by: 1) Invalid or expired session - try refreshing the page, 2) Network connectivity issues, 3) Salesforce instance is unreachable. Original error: ${errMsg}`);
+    }
+    if (lastError?.name === 'AbortError' || errMsg.includes('AbortError')) {
+        throw new Error(`Request timed out fetching SObjects from ${url}. The Salesforce server may be slow or unreachable.`);
+    }
+    throw lastError || new Error('Failed to fetch SObjects');
 }
 
 async function describeSObject(instanceUrl, sessionId, name, useTooling = false) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('Invalid instance URL');
+    if (!sessionId) throw new Error('Session ID is required');
+
     const v = await getApiVersion();
     const url = useTooling
         ? `${base}/services/data/${v}/tooling/sobjects/${encodeURIComponent(name)}/describe`
         : `${base}/services/data/${v}/sobjects/${encodeURIComponent(name)}/describe`;
-    const res = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${sessionId}`, Accept: 'application/json' }, credentials: 'omit' });
-    if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Describe ${name} failed (${res.status}): ${text || res.statusText}`);
+
+    // Retry logic for transient network failures
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+            const res = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${sessionId}`,
+                    Accept: 'application/json'
+                },
+                credentials: 'omit',
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => '');
+                throw new Error(`Describe ${name} failed (${res.status}): ${text || res.statusText}`);
+            }
+
+            const json = await res.json();
+            // Keep as-is but trim heavy props; include relationshipName for relationship field suggestions
+            const fields = Array.isArray(json.fields)
+                ? json.fields.map(f => ({
+                    name: f.name,
+                    label: f.label || f.name,
+                    type: f.type,
+                    nillable: f.nillable,
+                    referenceTo: f.referenceTo || [],
+                    relationshipName: f.relationshipName || null
+                }))
+                : [];
+            return { name: json.name || name, label: json.label || name, fields };
+        } catch (err) {
+            lastError = err;
+            const errStr = String(err);
+            const isRetryable = errStr.includes('Failed to fetch') ||
+                               errStr.includes('NetworkError') ||
+                               errStr.includes('AbortError') ||
+                               errStr.includes('network') ||
+                               errStr.includes('timeout') ||
+                               err.name === 'AbortError';
+
+            if (isRetryable && attempt < maxRetries) {
+                // Wait before retrying (exponential backoff: 1s, 2s, 4s...)
+                await new Promise(r => setTimeout(r, Math.pow(2, attempt - 1) * 1000));
+                continue;
+            }
+
+            // Non-retryable error or max retries reached
+            break;
+        }
     }
-    const json = await res.json();
-    // Keep as-is but trim heavy props; include relationshipName for relationship field suggestions
-    const fields = Array.isArray(json.fields)
-        ? json.fields.map(f => ({
-            name: f.name,
-            label: f.label || f.name,
-            type: f.type,
-            nillable: f.nillable,
-            referenceTo: f.referenceTo || [],
-            relationshipName: f.relationshipName || null
-        }))
-        : [];
-    return { name: json.name || name, label: json.label || name, fields };
+
+    // Enhance error message for common issues
+    const errMsg = String(lastError || 'Unknown error');
+    if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+        throw new Error(`Network error describing ${name} from ${url}. This may be caused by: 1) Invalid or expired session - try refreshing the page, 2) Network connectivity issues, 3) Salesforce instance is unreachable. Original error: ${errMsg}`);
+    }
+    if (lastError?.name === 'AbortError' || errMsg.includes('AbortError')) {
+        throw new Error(`Request timed out describing ${name} from ${url}. The Salesforce server may be slow or unreachable.`);
+    }
+    throw lastError || new Error(`Failed to describe ${name}`);
 }
 
 async function runSoql(instanceUrl, sessionId, query, limit, useTooling = false) {
@@ -728,3 +812,44 @@ async function runSoql(instanceUrl, sessionId, query, limit, useTooling = false)
 
     return { totalSize: records.length, records };
 }
+
+async function publishPlatformEvent(instanceUrl, sessionId, eventApiName, payload) {
+    const base = String(instanceUrl || '').replace(/\/+$/, '');
+    if (!base) throw new Error('Invalid instance URL');
+    const v = await getApiVersion();
+    const url = `${base}/services/data/${v}/sobjects/${encodeURIComponent(eventApiName)}`;
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${sessionId}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        credentials: 'omit'
+    });
+
+    const responseText = await res.text();
+    let responseData;
+    try {
+        responseData = JSON.parse(responseText);
+    } catch {
+        responseData = { rawResponse: responseText };
+    }
+
+    if (!res.ok) {
+        const errorMessage = Array.isArray(responseData) && responseData[0]?.message
+            ? responseData[0].message
+            : responseData?.message || `HTTP ${res.status}: ${res.statusText}`;
+        return { success: false, error: errorMessage, details: responseData };
+    }
+
+    return {
+        success: true,
+        id: responseData?.id || null,
+        message: 'Platform Event published successfully',
+        response: responseData
+    };
+}
+

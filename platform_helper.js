@@ -2,7 +2,7 @@
   'use strict';
 
   const state = {
-    apiVersion: '56.0',
+    apiVersion: '66.0',
     platformEventsLoaded: false,
     peSubscriptions: new Set(),
     pePendingOps: new Set(),
@@ -14,13 +14,16 @@
     connectLoopActive: false,
     peLogPaused: false,
     peLogAutoScrollEnabled: true,
+    // Publish modal state
+    publishModalEventName: null,
+    publishModalFields: [],
   };
 
   let opts = {
     getSession: () => null,
     setSession: () => {},
     refreshSessionFromTab: async () => null,
-    apiVersion: '56.0'
+    apiVersion: '66.0'
   };
 
   let dom = {};
@@ -150,6 +153,13 @@
 
   async function cometdEnsureConnected() {
     if (state.cometdState === 'connected' || state.cometdState === 'connecting') return;
+
+    // Refresh session before handshake to ensure we have valid credentials
+    try {
+      await opts.refreshSessionFromTab();
+      state.cometdBaseUrl = getCometdBase();
+    } catch {}
+
     await cometdHandshake();
     startConnectLoop();
   }
@@ -157,8 +167,9 @@
   async function withAuthRetry(fn, label) {
     try {
       let res = await fn();
-      if (res && (res.status === 401 || res.status === 403)) {
-        appendPeLog(`${label} unauthorized (${res.status}). Refreshing session...`, { status: res.status });
+      // Handle 400/401/403 as potentially auth-related issues
+      if (res && (res.status === 400 || res.status === 401 || res.status === 403)) {
+        appendPeLog(`${label} failed (${res.status}). Refreshing session and retrying...`, { status: res.status });
         try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
         try { await opts.refreshSessionFromTab(); } catch {}
         state.cometdBaseUrl = getCometdBase();
@@ -179,10 +190,9 @@
     state.cometdState = 'handshaking';
     updateCometdStatus(false, 'Handshaking...');
     const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
-    state.apiVersion = String(norm || '56.0');
+    state.apiVersion = String(norm || '66.0');
     state.cometdBaseUrl = getCometdBase();
 
-    const token = getAccessToken();
     const body = [{
       channel: '/meta/handshake',
       version: '1.0',
@@ -191,17 +201,34 @@
       advice: { timeout: 60000, interval: 0 }
     }];
 
-    const res = await withAuthRetry(() => Utils.fetchWithTimeout(`${state.cometdBaseUrl}/handshake`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json;charset=UTF-8',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(body)
-    }), 'Handshake');
+    appendPeLog(`Attempting handshake to ${state.cometdBaseUrl}...`);
 
-    if (!res.ok) throw new Error(`Handshake failed: ${res.status} ${res.statusText}`);
+    // Get token inside the retry function so it's refreshed on retry
+    const res = await withAuthRetry(() => {
+      const token = getAccessToken();
+      if (!token) {
+        throw new Error('No access token available. Please log in to Salesforce.');
+      }
+      return Utils.fetchWithTimeout(`${state.cometdBaseUrl}/handshake`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json;charset=UTF-8',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+    }, 'Handshake');
+
+    if (!res.ok) {
+      // Try to get response body for better error info
+      let errorDetail = '';
+      try {
+        const errorBody = await res.text();
+        errorDetail = errorBody ? ` - ${errorBody.substring(0, 200)}` : '';
+      } catch {}
+      throw new Error(`Handshake failed: ${res.status} ${res.statusText}${errorDetail}`);
+    }
     const arr = await res.json();
     const m = Array.isArray(arr) ? arr[0] : null;
     if (!m || !m.successful) throw new Error(`Handshake unsuccessful: ${JSON.stringify(m || {})}`);
@@ -336,8 +363,28 @@
       dom.peListEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading Platform Events...</p></div>';
     }
     try {
+      // Refresh session first to ensure we have valid credentials and instance URL
+      try {
+        await opts.refreshSessionFromTab();
+      } catch {}
+
       // Use background describeGlobal (centralized session handling) with retries.
       let base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+
+      // If no instance URL from session, try to resolve it
+      if (!base) {
+        try {
+          const resolved = await Utils.getInstanceUrl();
+          if (resolved) base = String(resolved).replace(/\/+$/, '');
+        } catch {}
+      }
+
+      if (!base) {
+        throw new Error('Could not determine Salesforce instance URL. Please ensure you are logged in to Salesforce.');
+      }
+
+      appendPeLog(`Loading Platform Events from ${base}...`);
+
       let resp = null;
       let attempts = 0;
       const maxAttempts = 3;
@@ -357,21 +404,35 @@
         if (resp && resp.success) break;
 
         const errText = String(resp?.error || '').toLowerCase();
+        appendPeLog(`Attempt ${attempts}/${maxAttempts} failed: ${resp?.error || 'unknown'}`, null, 'error');
+
         // If unauthorized, try refreshing session and retry
         if (errText.includes('401') || errText.includes('403') || errText.includes('unauthor')) {
-          appendPeLog(`SObjects list unauthorized. Refreshing session...`);
+          appendPeLog(`Refreshing session due to authorization error...`);
           try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
           try { await opts.refreshSessionFromTab(); } catch {}
-          base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || base;
+          const newBase = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+          if (newBase) base = newBase;
           continue;
         }
 
         // If not found / 404, attempt to re-resolve instance URL from foreground or cookies and retry
         if (errText.includes('404') || errText.includes('not found')) {
+          appendPeLog(`Got 404 for ${base}. Trying to re-resolve instance URL...`);
+          try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+          try { await opts.refreshSessionFromTab(); } catch {}
+          const newBase = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+          if (newBase && newBase !== base) {
+            base = newBase;
+            appendPeLog(`Resolved new instance URL: ${base}`);
+            continue;
+          }
+          // Also try Utils.getInstanceUrl as fallback
           try {
             const resolved = await Utils.getInstanceUrl();
-            if (resolved) {
+            if (resolved && resolved !== base) {
               base = String(resolved).replace(/\/+$/, '');
+              appendPeLog(`Resolved instance URL via fallback: ${base}`);
               continue;
             }
           } catch {}
@@ -412,6 +473,9 @@
         <div class="list-item${isSub ? ' subscribed' : ''}" data-event-api-name="${Utils.escapeHtml(api)}">
           <div class="item-actions leading">
             <button class="${btnClass}" aria-label="${btnLabel}" title="${btnLabel}">${icon}</button>
+            <button class="pe-trigger-btn" aria-label="Publish Event" title="Publish Event">
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
             <span class="listening-indicator" aria-label="Listening" title="Listening" role="img">
               <span class="bar"></span><span class="bar"></span><span class="bar"></span>
             </span>
@@ -472,6 +536,301 @@
     }
   }
 
+  // =====================================================
+  // Platform Event Publish Modal Functions
+  // =====================================================
+
+  function openPublishModal(eventApiName) {
+    if (!dom.publishModal) return;
+    state.publishModalEventName = eventApiName;
+    state.publishModalFields = [];
+
+    // Set event name display
+    if (dom.publishModalEventName) {
+      dom.publishModalEventName.textContent = eventApiName;
+    }
+
+    // Clear previous state
+    if (dom.publishModalPayload) {
+      dom.publishModalPayload.value = '{\n  \n}';
+      dom.publishModalPayload.classList.remove('error');
+    }
+    if (dom.publishModalError) {
+      dom.publishModalError.hidden = true;
+      dom.publishModalError.textContent = '';
+    }
+    if (dom.publishModalFieldsList) {
+      dom.publishModalFieldsList.innerHTML = '<span class="placeholder-note">Loading fields...</span>';
+    }
+
+    // Show modal
+    dom.publishModal.hidden = false;
+
+    // Focus textarea
+    setTimeout(() => {
+      if (dom.publishModalPayload) dom.publishModalPayload.focus();
+    }, 100);
+
+    // Fetch event fields (describe)
+    fetchEventFields(eventApiName);
+  }
+
+  function closePublishModal() {
+    if (!dom.publishModal) return;
+    dom.publishModal.hidden = true;
+    state.publishModalEventName = null;
+    state.publishModalFields = [];
+  }
+
+  async function fetchEventFields(eventApiName) {
+    if (!dom.publishModalFieldsList) return;
+
+    try {
+      const base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+      if (!base) {
+        dom.publishModalFieldsList.innerHTML = '<span class="placeholder-note">Not connected</span>';
+        return;
+      }
+
+      // Use background to describe the Platform Event sObject
+      const resp = await new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ action: 'DESCRIBE_SOBJECT', instanceUrl: base, name: eventApiName, useTooling: false }, (r) => {
+            if (chrome.runtime.lastError) return resolve({ success: false, error: chrome.runtime.lastError.message });
+            resolve(r || { success: false, error: 'no-response' });
+          });
+        } catch (e) { resolve({ success: false, error: String(e) }); }
+      });
+
+      if (!resp || !resp.success || !resp.describe) {
+        dom.publishModalFieldsList.innerHTML = `<span class="placeholder-note">Could not load fields: ${Utils.escapeHtml(resp?.error || 'Unknown error')}</span>`;
+        return;
+      }
+
+      const describe = resp.describe;
+      const fields = Array.isArray(describe.fields) ? describe.fields : [];
+
+      // Filter to only createable/writable custom fields (exclude system fields like ReplayId, CreatedById, etc.)
+      const writableFields = fields.filter(f => {
+        const name = f.name || '';
+        // Exclude standard system fields
+        const systemFields = ['Id', 'ReplayId', 'CreatedById', 'CreatedDate', 'EventUuid'];
+        if (systemFields.includes(name)) return false;
+        // Include custom fields (__c) or fields that look writable
+        return name.endsWith('__c') || (f.nillable !== false && !name.startsWith('System'));
+      });
+
+      state.publishModalFields = writableFields;
+
+      if (writableFields.length === 0) {
+        dom.publishModalFieldsList.innerHTML = '<span class="placeholder-note">No writable fields found</span>';
+        // Generate empty template
+        generatePayloadTemplate([]);
+        return;
+      }
+
+      // Render field chips
+      const chipsHtml = writableFields.map(f => {
+        const required = f.nillable === false;
+        const typeLabel = f.type || 'text';
+        return `<span class="field-chip${required ? ' required' : ''}" data-field-name="${Utils.escapeHtml(f.name)}" data-field-type="${Utils.escapeHtml(typeLabel)}" title="${required ? 'Required - ' : ''}${Utils.escapeHtml(f.label || f.name)} (${typeLabel})">${Utils.escapeHtml(f.name)}<span class="field-type">${Utils.escapeHtml(typeLabel)}</span></span>`;
+      }).join('');
+
+      dom.publishModalFieldsList.innerHTML = chipsHtml;
+
+      // Generate payload template
+      generatePayloadTemplate(writableFields);
+
+    } catch (e) {
+      dom.publishModalFieldsList.innerHTML = `<span class="placeholder-note">Error: ${Utils.escapeHtml(String(e))}</span>`;
+    }
+  }
+
+  function generatePayloadTemplate(fields) {
+    if (!dom.publishModalPayload) return;
+
+    if (!fields || fields.length === 0) {
+      dom.publishModalPayload.value = '{\n  \n}';
+      return;
+    }
+
+    // Build a template JSON with placeholder values based on field types
+    const template = {};
+    for (const f of fields) {
+      const name = f.name;
+      const type = (f.type || 'string').toLowerCase();
+
+      // Generate appropriate placeholder value
+      let placeholder;
+      switch (type) {
+        case 'boolean':
+          placeholder = false;
+          break;
+        case 'int':
+        case 'integer':
+        case 'double':
+        case 'currency':
+        case 'percent':
+          placeholder = 0;
+          break;
+        case 'date':
+          placeholder = new Date().toISOString().split('T')[0];
+          break;
+        case 'datetime':
+          placeholder = new Date().toISOString();
+          break;
+        case 'reference':
+        case 'id':
+          placeholder = '';
+          break;
+        default:
+          placeholder = '';
+      }
+      template[name] = placeholder;
+    }
+
+    dom.publishModalPayload.value = JSON.stringify(template, null, 2);
+  }
+
+  function insertFieldIntoPayload(fieldName) {
+    if (!dom.publishModalPayload) return;
+
+    const textarea = dom.publishModalPayload;
+    const currentText = textarea.value;
+
+    // Try to parse current JSON
+    try {
+      const obj = JSON.parse(currentText);
+      if (!(fieldName in obj)) {
+        obj[fieldName] = '';
+      }
+      textarea.value = JSON.stringify(obj, null, 2);
+    } catch {
+      // If invalid JSON, just insert at cursor
+      const start = textarea.selectionStart;
+      const before = currentText.substring(0, start);
+      const after = currentText.substring(textarea.selectionEnd);
+      const insert = `"${fieldName}": ""`;
+      textarea.value = before + insert + after;
+      textarea.selectionStart = textarea.selectionEnd = start + insert.length - 1;
+    }
+    textarea.focus();
+  }
+
+  function formatPayloadJson() {
+    if (!dom.publishModalPayload) return;
+
+    const textarea = dom.publishModalPayload;
+    try {
+      const obj = JSON.parse(textarea.value);
+      textarea.value = JSON.stringify(obj, null, 2);
+      textarea.classList.remove('error');
+      if (dom.publishModalError) {
+        dom.publishModalError.hidden = true;
+      }
+    } catch (e) {
+      textarea.classList.add('error');
+      if (dom.publishModalError) {
+        dom.publishModalError.textContent = `Invalid JSON: ${e.message}`;
+        dom.publishModalError.hidden = false;
+      }
+    }
+  }
+
+  function validatePayloadJson() {
+    if (!dom.publishModalPayload) return null;
+
+    const text = dom.publishModalPayload.value.trim();
+    if (!text) {
+      showPayloadError('Payload cannot be empty');
+      return null;
+    }
+
+    try {
+      const obj = JSON.parse(text);
+      if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+        showPayloadError('Payload must be a JSON object');
+        return null;
+      }
+      dom.publishModalPayload.classList.remove('error');
+      if (dom.publishModalError) dom.publishModalError.hidden = true;
+      return obj;
+    } catch (e) {
+      showPayloadError(`Invalid JSON: ${e.message}`);
+      return null;
+    }
+  }
+
+  function showPayloadError(message) {
+    if (dom.publishModalPayload) dom.publishModalPayload.classList.add('error');
+    if (dom.publishModalError) {
+      dom.publishModalError.textContent = message;
+      dom.publishModalError.hidden = false;
+    }
+  }
+
+  async function submitPublishEvent() {
+    if (!ensureSession()) return;
+
+    const eventApiName = state.publishModalEventName;
+    if (!eventApiName) {
+      showPayloadError('No event selected');
+      return;
+    }
+
+    const payload = validatePayloadJson();
+    if (!payload) return;
+
+    const submitBtn = dom.publishModalSubmit;
+    const btnText = submitBtn?.querySelector('.btn-text');
+    const btnLoading = submitBtn?.querySelector('.btn-loading');
+
+    try {
+      // Show loading state
+      if (submitBtn) submitBtn.disabled = true;
+      if (btnText) btnText.hidden = true;
+      if (btnLoading) btnLoading.hidden = false;
+
+      const base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+
+      // Call background to publish the event
+      const resp = await new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage({
+            action: 'PUBLISH_PLATFORM_EVENT',
+            instanceUrl: base,
+            eventApiName: eventApiName,
+            payload: payload
+          }, (r) => {
+            if (chrome.runtime.lastError) return resolve({ success: false, error: chrome.runtime.lastError.message });
+            resolve(r || { success: false, error: 'no-response' });
+          });
+        } catch (e) { resolve({ success: false, error: String(e) }); }
+      });
+
+      if (!resp || !resp.success) {
+        const errorMsg = resp?.error || 'Failed to publish event';
+        showPayloadError(errorMsg);
+        appendPeLog(`Publish failed for ${eventApiName}: ${errorMsg}`, resp?.details, 'error');
+        return;
+      }
+
+      // Success!
+      appendPeLog(`✓ Published ${eventApiName}`, { payload, response: resp.response }, 'event');
+      Utils.showToast && Utils.showToast('Event published successfully!', 'success');
+      closePublishModal();
+
+    } catch (e) {
+      showPayloadError(`Error: ${String(e)}`);
+      appendPeLog(`Publish error: ${String(e)}`, null, 'error');
+    } finally {
+      // Restore button state
+      if (submitBtn) submitBtn.disabled = false;
+      if (btnText) btnText.hidden = false;
+      if (btnLoading) btnLoading.hidden = true;
+    }
+  }
+
   function attachHandlers(){
     if (dom.peRefreshBtn) {
       dom.peRefreshBtn.addEventListener('click', async () => {
@@ -487,11 +846,19 @@
         const target = e.target;
         if (!(target instanceof Element)) return;
         const toggleBtn = target.closest('.pe-toggle');
+        const triggerBtn = target.closest('.pe-trigger-btn');
         const parentItem = target.closest('[data-event-api-name]');
         if (!parentItem) return;
         const apiName = parentItem.getAttribute('data-event-api-name');
         if (!apiName) return;
         const channel = `/event/${apiName}`;
+
+        // Handle trigger/publish button click
+        if (triggerBtn) {
+          openPublishModal(apiName);
+          return;
+        }
+
         if (toggleBtn) {
           if (state.pePendingOps.has(channel)) { appendPeLog(`Action already in progress for ${channel}`); return; }
           state.pePendingOps.add(channel);
@@ -515,6 +882,46 @@
         try { await navigator.clipboard.writeText(text); const old = t.textContent; t.textContent = 'Copied'; setTimeout(() => { t.textContent = old || 'Copy'; }, 800); } catch {}
       }
     });
+
+    // Publish modal handlers
+    if (dom.publishModalClose) {
+      dom.publishModalClose.addEventListener('click', closePublishModal);
+    }
+    if (dom.publishModalCancel) {
+      dom.publishModalCancel.addEventListener('click', closePublishModal);
+    }
+    if (dom.publishModalSubmit) {
+      dom.publishModalSubmit.addEventListener('click', submitPublishEvent);
+    }
+    if (dom.publishModalFormatBtn) {
+      dom.publishModalFormatBtn.addEventListener('click', formatPayloadJson);
+    }
+    if (dom.publishModalFieldsList) {
+      dom.publishModalFieldsList.addEventListener('click', (e) => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+        const chip = target.closest('.field-chip');
+        if (chip) {
+          const fieldName = chip.getAttribute('data-field-name');
+          if (fieldName) insertFieldIntoPayload(fieldName);
+        }
+      });
+    }
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && dom.publishModal && !dom.publishModal.hidden) {
+        closePublishModal();
+      }
+    });
+    // Close modal on overlay click
+    if (dom.publishModal) {
+      dom.publishModal.addEventListener('click', (e) => {
+        if (e.target === dom.publishModal) {
+          closePublishModal();
+        }
+      });
+    }
+
     updateAutoScrollUI();
     updatePauseUI();
 
@@ -526,7 +933,7 @@
   function init(options){
     opts = { ...opts, ...options };
     const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
-    state.apiVersion = String(norm || '56.0');
+    state.apiVersion = String(norm || '66.0');
     dom = {
       peRefreshBtn: document.getElementById('pe-refresh'),
       peListEl: document.getElementById('platform-events-list'),
@@ -535,7 +942,17 @@
       peLogClearBtn: document.getElementById('pe-log-clear'),
       peLogPauseBtn: document.getElementById('pe-log-pause'),
       peLogAutoscrollBtn: document.getElementById('pe-log-autoscroll-btn'),
-      peLogFilterSel: document.getElementById('pe-log-filter')
+      peLogFilterSel: document.getElementById('pe-log-filter'),
+      // Publish modal elements
+      publishModal: document.getElementById('pe-publish-modal'),
+      publishModalClose: document.getElementById('pe-modal-close'),
+      publishModalEventName: document.getElementById('pe-modal-event-name'),
+      publishModalPayload: document.getElementById('pe-payload-textarea'),
+      publishModalFormatBtn: document.getElementById('pe-payload-format'),
+      publishModalError: document.getElementById('pe-payload-error'),
+      publishModalFieldsList: document.getElementById('pe-modal-fields-list'),
+      publishModalCancel: document.getElementById('pe-modal-cancel'),
+      publishModalSubmit: document.getElementById('pe-modal-publish')
     };
     attachHandlers();
   }

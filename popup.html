@@ -34,6 +34,7 @@ File: `popup.html` (replace body content with this)
             </div>
             <label for="api-version" class="api-version-label" title="Salesforce API version">API</label>
             <select id="api-version" class="api-version-select" aria-label="Salesforce API version">
+                <option value="66.0">66.0</option>
                 <option value="65.0">65.0</option>
                 <option value="64.0">64.0</option>
                 <option value="63.0">63.0</option>
@@ -348,6 +349,46 @@ File: `popup.html` (replace body content with this)
         </div>
 
     </section>
+
+    <!-- Platform Event Publish Modal -->
+    <div id="pe-publish-modal" class="modal-overlay" hidden>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Publish Platform Event</h3>
+                <button id="pe-modal-close" class="icon-btn modal-close" aria-label="Close modal" title="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-event-info">
+                    <label class="filter-label">Event:</label>
+                    <span id="pe-modal-event-name" class="event-name-badge"></span>
+                </div>
+                <div class="modal-field-group">
+                    <label class="filter-label" for="pe-payload-textarea">Payload (JSON):</label>
+                    <div class="payload-editor-wrap">
+                        <textarea id="pe-payload-textarea" rows="10" placeholder='{ "Field__c": "value" }' aria-label="Platform Event payload JSON"></textarea>
+                        <button id="pe-payload-format" class="icon-btn format-btn" aria-label="Format JSON" title="Format JSON">{ }</button>
+                    </div>
+                    <div id="pe-payload-error" class="field-error" hidden></div>
+                </div>
+                <div class="modal-hint">
+                    <details>
+                        <summary>Available Fields</summary>
+                        <div id="pe-modal-fields-list" class="fields-list">
+                            <span class="placeholder-note">Loading fields...</span>
+                        </div>
+                    </details>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="pe-modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="pe-modal-publish" class="btn btn-primary">
+                    <span class="btn-text">Publish Event</span>
+                    <span class="btn-loading" hidden>⏳</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <footer class="app-footer" role="contentinfo">
         <div class="footer-inner">
             <span>Developed by </span>
