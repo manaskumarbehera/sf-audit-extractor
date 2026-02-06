@@ -1,0 +1,22 @@
+INPUT:
+query { uiapi { query { Opportunity(first: 50) { edges { node { Id AccountId { value } } } pageInfo { endCursor hasNextPage } } } } }
+
+FORMATTED:
+query {
+  uiapi {
+    query {
+      Opportunity(first: 50) {
+        edges {
+          node {
+            Id AccountId {
+              value
+            }
+          }
+        }
+        pageInfo {
+          endCursor hasNextPage
+        }
+      }
+    }
+  }
+}
