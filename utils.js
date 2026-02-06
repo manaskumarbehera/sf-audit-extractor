@@ -96,6 +96,15 @@
     }
   }
 
+  function looksLikeSalesforceOrigin(origin) {
+    if (!origin) return false;
+    try {
+      const u = new URL(origin);
+      const h = (u.hostname || '').toLowerCase();
+      return h.endsWith('.salesforce.com') || h.endsWith('.force.com') || h.endsWith('.salesforce-setup.com') || h.endsWith('.my.salesforce.com') || h === 'salesforce.com' || h === 'force.com';
+    } catch { return false; }
+  }
+
   function setInstanceUrlCache(value) {
     if (!value) { instanceUrlCache = { value: null, ts: 0 }; return; }
     const origin = safeOrigin(value);
@@ -107,21 +116,36 @@
     // Return fresh cache if available
     if (isFresh(instanceUrlCache)) return instanceUrlCache.value;
 
+    // Check for a transferred app session (popout) stored in chrome.storage
+    try {
+      const stored = await new Promise((resolve) => {
+        try { chrome.storage.local.get({ appSession: null }, (r) => resolve(r || {})); } catch { resolve({ appSession: null }); }
+      });
+      const appSess = stored?.appSession || null;
+      if (appSess && appSess.instanceUrl) {
+        const origin = safeOrigin(appSess.instanceUrl);
+        if (origin && looksLikeSalesforceOrigin(origin)) {
+          setInstanceUrlCache(origin);
+          return instanceUrlCache.value;
+        }
+      }
+    } catch {}
+
     // Try foreground first
     let foregroundOrigin = null;
     try {
       const resp = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
       if (resp && resp.success && resp.isLoggedIn && resp.instanceUrl) {
         foregroundOrigin = safeOrigin(resp.instanceUrl);
-        if (foregroundOrigin) {
-          // If cache differs from foreground, treat as org change and replace cache
-          if (instanceUrlCache.value && instanceUrlCache.value !== foregroundOrigin) {
-            setInstanceUrlCache(foregroundOrigin);
-          } else {
-            setInstanceUrlCache(foregroundOrigin);
-          }
-          return instanceUrlCache.value;
-        }
+        if (foregroundOrigin && looksLikeSalesforceOrigin(foregroundOrigin)) {
+           // If cache differs from foreground, treat as org change and replace cache
+           if (instanceUrlCache.value && instanceUrlCache.value !== foregroundOrigin) {
+             setInstanceUrlCache(foregroundOrigin);
+           } else {
+             setInstanceUrlCache(foregroundOrigin);
+           }
+           return instanceUrlCache.value;
+         }
       } else {
         // Foreground responded but not logged in or error-like: clear cache to force background detection
         if (instanceUrlCache.value) setInstanceUrlCache(null);
@@ -138,8 +162,8 @@
           if (chrome.runtime.lastError) { resolve(null); return; }
           const url = resp?.instanceUrl || null;
           const origin = safeOrigin(url);
-          if (origin) setInstanceUrlCache(origin); else setInstanceUrlCache(null);
-          resolve(instanceUrlCache.value);
+          if (origin && looksLikeSalesforceOrigin(origin)) setInstanceUrlCache(origin); else setInstanceUrlCache(null);
+           resolve(instanceUrlCache.value);
         });
       } catch { resolve(null); }
     });
@@ -226,5 +250,6 @@
   window.Utils = { escapeHtml, sleep, fetchWithTimeout, svgPlus, svgMinus, showToast, download,
     findSalesforceTab, sendMessageToSalesforceTab, getInstanceUrl, openRecordInNewTab, fallbackCopyText,
     getApiVersionNumber, getApiVersionPath, getAccessToken, getSessionInfo,
-    normalizeApiVersion, joinUrl, setInstanceUrlCache, getCachedInstanceUrl };
+    normalizeApiVersion, joinUrl, setInstanceUrlCache, getCachedInstanceUrl, looksLikeSalesforceOrigin };
 })();
+

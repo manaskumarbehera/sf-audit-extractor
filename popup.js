@@ -69,6 +69,21 @@
 
         const apiVersion = await loadAndBindApiVersion();
 
+        // If we are a popped-out standalone window, try to load a transferred session from storage
+        try {
+            const stored = await new Promise((resolve) => {
+                try { chrome.storage.local.get({ appSession: null }, (r) => resolve(r || {})); } catch { resolve({ appSession: null }); }
+            });
+            if (stored && stored.appSession) {
+                sessionInfo = stored.appSession;
+                try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(sessionInfo.instanceUrl || null); } catch {}
+                // reflect connected status in UI if possible
+                if (sessionInfo && sessionInfo.isLoggedIn) updateStatus(true, 'Connected to Salesforce (transferred session)');
+                // clear consumed session so it doesn't linger across future launches
+                try { chrome.storage.local.remove('appSession'); } catch {}
+            }
+        } catch {}
+
         await checkSalesforceConnection();
         try {
             const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
@@ -198,21 +213,30 @@
     function attachAppPopHandlers() {
         if (!appPopBtn) return;
         appPopBtn.disabled = true;
+        // Track current popped state locally so we can include session when popping out
+        let appPoppedState = false;
         chrome.runtime.sendMessage({ action: 'APP_POP_GET' }, (resp) => {
             if (chrome.runtime.lastError) {
                 updateAppPopButton(false);
                 appPopBtn.disabled = false;
                 return;
             }
-            updateAppPopButton(resp && resp.success ? !!resp.popped : false);
+            appPoppedState = resp && resp.success ? !!resp.popped : false;
+            updateAppPopButton(appPoppedState);
             appPopBtn.disabled = false;
         });
+
         appPopBtn.addEventListener('click', () => {
             if (appPopBtn.disabled) return;
             appPopBtn.disabled = true;
-            chrome.runtime.sendMessage({ action: 'APP_POP_TOGGLE' }, (resp) => {
+            const next = !appPoppedState;
+            const payload = { action: 'APP_POP_SET', popped: next };
+            // When popping out, include current session if available to transfer it
+            if (next && sessionInfo) payload.session = sessionInfo;
+            chrome.runtime.sendMessage(payload, (resp) => {
                 if (!chrome.runtime.lastError && resp && resp.success) {
-                    updateAppPopButton(!!resp.popped);
+                    appPoppedState = !!resp.popped;
+                    updateAppPopButton(appPoppedState);
                 }
                 appPopBtn.disabled = false;
             });

@@ -41,6 +41,13 @@ chrome.windows.onRemoved.addListener((winId) => {
     if (appWindowId && winId === appWindowId) {
         appWindowId = null;
         try { chrome.storage.local.set({ appPoppedOut: false }); } catch {}
+        // Only clear transferred session if the popout was not explicitly popped back in.
+        try {
+            chrome.storage.local.get({ appPoppedOut: false }, (r) => {
+                const stillPopped = !!(r && r.appPoppedOut);
+                if (stillPopped) { try { chrome.storage.local.remove('appSession'); } catch {} }
+            });
+        } catch {}
     }
 });
 
@@ -127,6 +134,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             if (is('APP_POP_SET')) {
                 const next = !!msg?.popped;
                 await chrome.storage.local.set({ appPoppedOut: next });
+                // If a session payload is supplied, persist it for the popped window to read
+                try {
+                    if (msg && msg.session) {
+                        await chrome.storage.local.set({ appSession: msg.session });
+                    }
+                } catch {}
                 if (next) {
                     await openAppWindow();
                 } else if (appWindowId) {

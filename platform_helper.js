@@ -336,23 +336,56 @@
       dom.peListEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading Platform Events...</p></div>';
     }
     try {
-      const accessToken = getAccessToken();
-      const base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
-      const url = `${base}/services/data/v${state.apiVersion}/sobjects`;
-      const doFetch = () => fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
-      let res = await doFetch();
-      if (res && (res.status === 401 || res.status === 403)) {
-        appendPeLog(`SObjects list unauthorized (${res.status}). Refreshing session...`);
-        try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
-        try { await opts.refreshSessionFromTab(); } catch {}
-        const s = opts.getSession();
-        const nextBase = s?.instanceUrl?.replace(/\/+$/, '') || base;
-        const nextUrl = `${nextBase}/services/data/v${state.apiVersion}/sobjects`;
-        res = await fetch(nextUrl, { method: 'GET', headers: { 'Authorization': `Bearer ${Utils.getAccessToken(s)}`, 'Accept': 'application/json' } });
+      // Use background describeGlobal (centralized session handling) with retries.
+      let base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || '';
+      let resp = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        // Ask background to describe global SObjects for the instance
+        resp = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ action: 'DESCRIBE_GLOBAL', instanceUrl: base, useTooling: false }, (r) => {
+              if (chrome.runtime.lastError) return resolve({ success: false, error: chrome.runtime.lastError.message });
+              resolve(r || { success: false, error: 'no-response' });
+            });
+          } catch (e) { resolve({ success: false, error: String(e) }); }
+        });
+
+        if (resp && resp.success) break;
+
+        const errText = String(resp?.error || '').toLowerCase();
+        // If unauthorized, try refreshing session and retry
+        if (errText.includes('401') || errText.includes('403') || errText.includes('unauthor')) {
+          appendPeLog(`SObjects list unauthorized. Refreshing session...`);
+          try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+          try { await opts.refreshSessionFromTab(); } catch {}
+          base = opts.getSession()?.instanceUrl?.replace(/\/+$/, '') || base;
+          continue;
+        }
+
+        // If not found / 404, attempt to re-resolve instance URL from foreground or cookies and retry
+        if (errText.includes('404') || errText.includes('not found')) {
+          try {
+            const resolved = await Utils.getInstanceUrl();
+            if (resolved) {
+              base = String(resolved).replace(/\/+$/, '');
+              continue;
+            }
+          } catch {}
+        }
+
+        // For other errors, no point retrying multiple times
+        break;
       }
-      if (!res.ok) throw new Error(`SObjects list failed: ${res.status} ${res.statusText}`);
-      const data = await res.json();
-      const sobjects = Array.isArray(data?.sobjects) ? data.sobjects : [];
+
+      if (!resp || !resp.success) {
+        throw new Error(`SObjects list failed: ${String(resp?.error || 'unknown')}`);
+      }
+
+      const sobjects = Array.isArray(resp.objects) ? resp.objects : [];
       const events = sobjects.filter(o => o?.name?.endsWith('__e') || typeof o?.eventType === 'string');
       renderPlatformEvents(events);
       state.platformEventsLoaded = true;

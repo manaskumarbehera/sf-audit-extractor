@@ -125,6 +125,8 @@
       if (/instance url not detected/.test(lower)) hints.push('Open a Salesforce tab first so the extension can detect your instance.');
       if (/session not found/.test(lower)) hints.push('Your session expired. Refresh your Salesforce tab to obtain a new session.');
       if (/network|failed to fetch|timeout|ecconnreset/i.test(lower)) hints.push('Network issue. Check VPN/Proxy and try again.');
+      // Common SOQL errors
+      if (/invalid_field/i.test(msg) || /no such column/i.test(msg)) hints.push('One or more fields in the query do not exist on the target object. Check field API names and append __c for custom fields.');
       if (!hints.length) hints.push('Check the query syntax and permissions for the selected API.');
 
       const api = meta?.useTooling ? 'Tooling Query API' : 'REST Query API';
@@ -559,7 +561,7 @@
             const v = (r && r.soqlViewMode) || 'raw';
             resolve(v === 'advanced' ? 'advanced' : 'raw');
           });
-        } catch { resolve('raw'); }
+        } catch (e) { resolve('raw'); }
       });
     }
     function setViewModePref(mode){
@@ -987,7 +989,11 @@
           }
           Utils.getInstanceUrl().then((instanceUrl) => {
             const payload = { action: 'RUN_SOQL', query: q, useTooling: tooling, limit: limitVal };
-            if (instanceUrl) payload.instanceUrl = instanceUrl;
+            try {
+              if (instanceUrl && Utils.looksLikeSalesforceOrigin && Utils.looksLikeSalesforceOrigin(instanceUrl)) {
+                payload.instanceUrl = instanceUrl;
+              }
+            } catch {}
             function runOnce(p){
               return new Promise((resolve) => {
                 chrome.runtime.sendMessage(p, (resp) => {
