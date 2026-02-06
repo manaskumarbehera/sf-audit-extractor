@@ -594,132 +594,378 @@ h1 {
 #tab-soql #soql-object { min-width: 180px; }
 #tab-soql #soql-query { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
-/* SOQL multi-query tabs bar */
-.soql-tabbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; gap: 8px; }
-.soql-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.soql-tab { display: inline-flex; align-items: center; gap: 6px; max-width: 240px; padding: 4px 8px; border: 1px solid #dee2e6; background: #fff; color: #495057; border-radius: 999px; font-size: 12px; cursor: pointer; }
-.soql-tab.active { background: #e7f5ff; border-color: #a5d8ff; color: #1971c2; }
-.soql-tab .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
-.soql-tab .close { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 12px; line-height: 1; }
-.soql-tab .close:hover { color: #c92a2a; }
-
-/* SOQL mode label and loading spinner */
-.soql-mode-label { display: none; }
-.soql-loading { display: none; }
-@keyframes soql-spin { from { } to { } }
-
-/* SOQL editor state visuals: in-progress (blue default), error (red), success (green) */
-/* We keep the current blue styling for in-progress by not overriding it. */
-#soql-query.soql-error {
-  border-color: #d93025 !important;
-  box-shadow: 0 0 0 2px rgba(217, 48, 37, 0.15) !important;
-}
-#soql-query.soql-success {
-  border-color: #188038 !important;
-  box-shadow: 0 0 0 2px rgba(24, 128, 56, 0.15) !important;
-}
-#soql-query.soql-inprogress {
-  /* intentionally minimal to preserve existing blue focus/border styles */
+/* SOQL query tabs */
+.soql-tabbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    border-bottom: 1px solid #e9ecef;
+    background: #f8f9fa;
+    overflow-x: auto;
 }
 
-:root {}
-
-/* Advanced SOQL Excel-like grid */
-.soql-adv-wrap { display: flex; flex-direction: column; gap: 6px; }
-.soql-adv-actions { position: sticky; top: 0; background: #fff; z-index: 2; }
-.soql-adv-status { font-size: 12px; color: #6c757d; padding: 4px 2px; text-align: right; }
-.soql-adv-table-wrap { border: 1px solid #e9ecef; border-radius: 8px; overflow: auto; max-height: 380px; }
-.soql-adv-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; table-layout: fixed; }
-.soql-adv-table thead { position: sticky; top: 0; z-index: 1; }
-.soql-adv-table thead tr { background: #f8f9fa; }
-.soql-adv-table thead th { position: sticky; top: 0; text-align: left; padding: 6px 8px; border-bottom: 1px solid #dee2e6; border-right: 1px solid #f1f3f5; background: #f8f9fa; font-weight: 600; color: #343a40; vertical-align: middle; }
-.soql-adv-table thead th:last-child { border-right: 0; }
-.soql-adv-table thead tr.filter-row th { background: #fff; border-bottom: 1px solid #e9ecef; padding: 4px 6px; }
-.soql-adv-table thead .hdr { cursor: pointer; }
-.soql-adv-table thead .hdr-inner { display: flex; align-items: center; gap: 6px; }
-.soql-adv-table .sort-ind { font-size: 10px; color: #495057; opacity: 0.8; }
-.soql-adv-table .sort-order { display: inline-flex; align-items: center; justify-content: center; min-width: 14px; height: 14px; padding: 0 4px; font-size: 10px; line-height: 14px; color: #1971c2; background: #e7f5ff; border: 1px solid #a5d8ff; border-radius: 999px; }
-.soql-adv-table .col-resizer { background: transparent; }
-.soql-adv-table .col-resizer:hover { background: #228be61a; }
-.soql-adv-table thead input.col-filter { width: 100%; box-sizing: border-box; border: 1px solid #ced4da; border-radius: 4px; padding: 4px 6px; font-size: 12px; outline: none; }
-.soql-adv-table thead input.col-filter:focus { border-color: #74c0fc; box-shadow: 0 0 0 2px rgba(32, 201, 151, 0.0), 0 0 0 2px #e7f5ff inset; }
-.soql-adv-table tbody td { padding: 6px 8px; border-bottom: 1px solid #f1f3f5; border-right: 1px solid #f8f9fa; color: #212529; background: #fff; }
-.soql-adv-table tbody td:last-child { border-right: 0; }
-.soql-adv-table tbody tr:nth-child(even) td { background: #fcfdff; }
-.soql-adv-table tbody tr:hover td { background: #f6faff; }
-.soql-adv-table .cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.soql-adv-table a.sf-id-link { color: #1971c2; text-decoration: none; }
-.soql-adv-table a.sf-id-link:hover { text-decoration: underline; }
-
-
-/* SOQL Advanced: toggle switch and inline export buttons */
-#soql-view-advanced {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 42px;
-  height: 22px;
-  border-radius: 999px;
-  position: relative;
-  background: #dee2e6;
-  border: 1px solid #ced4da;
-  outline: none;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-#soql-view-advanced::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-  transition: transform 0.2s ease;
-}
-#soql-view-advanced:checked {
-  background: #0ea5e9; /* teal/blue to match app tone */
-  border-color: #0ea5e9;
-}
-#soql-view-advanced:checked::after {
-  transform: translateX(20px);
-}
-#soql-view-advanced:focus-visible {
-  box-shadow: 0 0 0 3px rgba(14,165,233,0.25);
+.soql-tablist {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    min-height: 28px;
+    overflow-x: auto;
+    padding-bottom: 2px;
 }
 
-/* Label alignment for Advanced switch in the viewbar */
-.soql-viewbar .filter-label[for="soql-view-advanced"] {
-  margin-right: 4px;
-  font-size: 12px;
-  color: #495057;
+.soql-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    max-width: 160px;
 }
 
-/* Refined inline export buttons (chips) */
-.soql-adv-btnbar { gap: 8px; }
-.btn-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  height: 28px;
-  border: 1px solid #dee2e6;
-  background: #fff;
-  color: #495057;
-  border-radius: 16px;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+.soql-tab:hover {
+    background: #f1f3f5;
+    border-color: #ced4da;
 }
-.btn-chip .ico { font-size: 13px; line-height: 0; }
-.btn-chip .lbl { font-weight: 600; }
-.btn-chip:hover { background: #f8f9fa; border-color: #ced4da; }
-.btn-chip:active { background: #edf2ff; border-color: #a5d8ff; color: #1971c2; }
-.btn-chip:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* Ensure buttons wrap nicely on narrow widths */
-@media (max-width: 980px) {
-  .soql-adv-btnbar { justify-content: flex-end; row-gap: 6px; }
+.soql-tab.active {
+    background: #0176d3;
+    border-color: #0176d3;
+    color: #fff;
+}
+
+.soql-tab .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+.soql-tab .close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 3px;
+    opacity: 0.6;
+    transition: opacity 0.1s, background 0.1s;
+}
+
+.soql-tab .close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.soql-tab.active .close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* View toggle (Raw/Advanced) */
+.soql-view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 20px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 12px;
+    color: #495057;
+}
+
+.soql-view-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.soql-view-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+/* SOQL guided builder */
+.soql-builder-toggle { padding: 6px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e9ecef; }
+.builder-toggle-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #212529; }
+.soql-builder-hint { font-size: 12px; color: #6c757d; }
+.soql-builder { padding: 12px 20px; border-bottom: 1px solid #e9ecef; background: #f8fafc; display: flex; flex-direction: column; gap: 12px; }
+.soql-builder[hidden] { display: none !important; }
+.builder-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.builder-col { flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 8px; }
+.builder-section { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.builder-section-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.builder-title { font-size: 13px; font-weight: 600; color: #212529; }
+.builder-field-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.builder-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.builder-field-add input,
+.builder-filters input,
+.builder-filters select,
+#soql-builder-order-field,
+#soql-builder-order-dir { padding: 8px 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 13px; min-height: 32px; }
+.builder-chip-wrap .chip { background: #eef6ff; border-color: rgba(1,118,211,0.2); }
+.builder-chip-wrap .chip .remove { background: none; border: 0; cursor: pointer; color: #c92a2a; font-size: 12px; }
+.builder-filters { display: flex; flex-direction: column; gap: 6px; }
+.builder-filters .filter-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.builder-filters .filter-row input,
+.builder-filters .filter-row select { flex: 1; }
+.builder-filters .filter-row .filter-remove { width: 28px; height: 28px; }
+.builder-status { font-size: 12px; color: #6c757d; min-height: 18px; }
+.builder-note-section .builder-note { font-size: 12px; color: #495057; }
+
+/* ===================== SOQL Advanced Table ===================== */
+.soql-adv-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+}
+
+.soql-adv-actions {
+    flex-shrink: 0;
+    padding: 0 4px;
+}
+
+.soql-adv-table-wrap {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #e1e5ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.soql-adv-table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: max-content;
+    min-width: 100%;
+    font-size: 13px;
+}
+
+.soql-adv-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.soql-adv-table th {
+    background: linear-gradient(180deg, #f8f9fa 0%, #f1f3f5 100%);
+    border-bottom: 2px solid #dee2e6;
+    padding: 0;
+    text-align: left;
+    font-weight: 600;
+    color: #212529;
+    position: relative;
+    min-width: 100px;
+}
+
+.soql-adv-table th.hdr {
+    vertical-align: top;
+}
+
+.soql-adv-table .hdr-inner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.soql-adv-table .hdr-inner:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.soql-adv-table .hdr-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.soql-adv-table .sort-ind {
+    font-size: 10px;
+    color: #0176d3;
+    min-width: 12px;
+}
+
+.soql-adv-table .sort-order {
+    font-size: 9px;
+    background: #0176d3;
+    color: #fff;
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+}
+
+.soql-adv-table th.sorted-asc .hdr-inner,
+.soql-adv-table th.sorted-desc .hdr-inner {
+    background: rgba(1, 118, 211, 0.08);
+}
+
+.soql-adv-table .col-resizer {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    background: transparent;
+    transition: background 0.15s;
+}
+
+.soql-adv-table .col-resizer:hover {
+    background: rgba(1, 118, 211, 0.3);
+}
+
+/* Filter row */
+.soql-adv-table tr.filter-row th {
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+    padding: 6px 8px;
+}
+
+.soql-adv-table .col-filter {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+    box-sizing: border-box;
+}
+
+.soql-adv-table .col-filter:focus {
+    outline: none;
+    border-color: #0176d3;
+    box-shadow: 0 0 0 2px rgba(1, 118, 211, 0.15);
+}
+
+/* Body cells */
+.soql-adv-table tbody tr {
+    border-bottom: 1px solid #f1f3f5;
+    transition: background 0.1s;
+}
+
+.soql-adv-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.soql-adv-table tbody tr:nth-child(even) {
+    background: #fcfcfd;
+}
+
+.soql-adv-table tbody tr:nth-child(even):hover {
+    background: #f1f3f5;
+}
+
+.soql-adv-table td {
+    padding: 10px 12px;
+    vertical-align: top;
+    border-right: 1px solid #f1f3f5;
+    max-width: 300px;
+}
+
+.soql-adv-table td:last-child {
+    border-right: none;
+}
+
+.soql-adv-table td .cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.soql-adv-table td code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    background: #f1f3f5;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: #495057;
+}
+
+/* ID links */
+.sf-id-link {
+    color: #0176d3;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.sf-id-link:hover {
+    text-decoration: underline;
+}
+
+/* Context menu for ID links */
+.sf-id-menu {
+    position: absolute;
+    display: none;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid #e1e5ea;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    min-width: 140px;
+    overflow: hidden;
+}
+
+.sf-id-menu button {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    font-size: 13px;
+    color: #212529;
+    transition: background 0.1s;
+}
+
+.sf-id-menu button:hover {
+    background: #f1f3f5;
+}
+
+.sf-id-menu button:first-child {
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Status bar */
+.soql-adv-status {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #6c757d;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    border-radius: 0 0 8px 8px;
+}
+
+/* Button bar */
+.soql-adv-btnbar {
+    display: flex;
+    gap: 8px;
+    padding: 6px 0;
+    justify-content: flex-end;
+    align-items: center;
 }

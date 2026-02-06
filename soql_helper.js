@@ -15,8 +15,13 @@
   let lifecycleEpoch = 0;
   let reloadSeq = 0;
   let runSeq = 0;
+  let lastSoqlResp = null;
+  let lastSoqlMeta = null;
 
   const DESCRIBE_TTL_MS = 5 * 60 * 1000;
+  const DESCRIBE_OBJ_TTL_MS = 5 * 60 * 1000;
+  const describeObjCache = new Map();
+  const describeObjInFlight = new Map();
 
   // Use a window-backed shared state to avoid redeclaration errors if the script is injected more than once
   function getSharedState() {
@@ -72,7 +77,7 @@
   function describeObjectsToNames(objs, opts) {
     const arr = Array.isArray(objs) ? objs : [];
     const useTooling = !!(opts && opts.useTooling);
-    const excludeAdminPattern = /^(Auth|Async|Process|Setup|UserEntityAccess|ObjectPermissions|PermissionSet|PermissionSetAssignment|Profile|QueueSobject|RecordType|EventLogFile|FieldDefinition|EntityDefinition|UserFieldAccess|InstalledPackage|UserPermissionAccess|UserAppMenu|BrandingSet|CorsWhitelistEntry|ExternalDataSource|Duplicate|UserProv|Matching|OrgPreference|Content[A-Z]|Knowledge[A-Z]|Flow|AIPrediction|UserLoginHistory)/;
+    const excludeAdminPattern = /^(Apex|Lightning|Auth|Async|Process|Setup|UserEntityAccess|ObjectPermissions|PermissionSet|PermissionSetAssignment|Profile|QueueSobject|RecordType|EventLogFile|FieldDefinition|EntityDefinition|UserFieldAccess|InstalledPackage|UserPermissionAccess|UserAppMenu|BrandingSet|CorsWhitelistEntry|ExternalDataSource|Duplicate|UserProv|Matching|OrgPreference|Content[A-Z]|Knowledge[A-Z]|Flow|AIPrediction|UserLoginHistory)/;
     const standardAllow = new Set(['Account','Contact','Lead','Opportunity','Case','Task','Event','User','Campaign','CampaignMember','Product2','Pricebook2','PricebookEntry','Asset','Contract','Order','OrderItem','Quote','QuoteLineItem']);
     const toBool = (v, def = false) => (typeof v === 'boolean' ? v : (typeof v === 'string' ? v.toLowerCase() === 'true' : !!def));
     return arr
@@ -212,6 +217,43 @@
     return p;
   }
 
+  function getSobjectDescribeCached(name, tooling) {
+    const objName = String(name || '').trim();
+    if (!objName) return Promise.resolve(null);
+    const key = `${tooling ? 'tooling:' : 'rest:'}${objName}`;
+    const now = nowTs();
+    const cached = describeObjCache.get(key);
+    if (cached && (now - cached.ts < DESCRIBE_OBJ_TTL_MS)) {
+      return Promise.resolve(cached.describe || null);
+    }
+    if (describeObjInFlight.has(key)) {
+      return describeObjInFlight.get(key);
+    }
+    const p = new Promise((resolve) => {
+      try {
+        Utils.getInstanceUrl().then((instanceUrl) => {
+          const payload = { action: 'DESCRIBE_SOBJECT', name: objName, useTooling: !!tooling };
+          if (instanceUrl) payload.instanceUrl = instanceUrl;
+          chrome.runtime.sendMessage(payload, (resp) => {
+            describeObjInFlight.delete(key);
+            if (chrome.runtime && chrome.runtime.lastError) { resolve(null); return; }
+            if (resp && resp.success && resp.describe) {
+              describeObjCache.set(key, { describe: resp.describe, ts: nowTs() });
+              resolve(resp.describe);
+              return;
+            }
+            resolve(null);
+          });
+        }).catch(() => { describeObjInFlight.delete(key); resolve(null); });
+      } catch {
+        describeObjInFlight.delete(key);
+        resolve(null);
+      }
+    });
+    describeObjInFlight.set(key, p);
+    return p;
+  }
+
   async function warmUpSession() {
     try {
       // Ask background to refresh session info (side effect: may ensure cookies/session are ready)
@@ -335,15 +377,216 @@
     const toolingCb = document.getElementById('soql-tooling');
     const limitEl = document.getElementById('soql-limit');
     const viewAdvSwitch = document.getElementById('soql-view-advanced');
-
-    // Multi-query tabs elements
-    const tabsBar = document.getElementById('soql-tabbar');
-    const tabsWrap = document.getElementById('soql-tabs');
+    const tabsBar = document.getElementById('soql-tabs');
+    const tabsWrap = tabsBar ? tabsBar.querySelector('.soql-tablist') : null;
     const tabAddBtn = document.getElementById('soql-tab-add');
 
-    // Cache last successful response for re-rendering across view modes
-    let lastSoqlResp = null;
-    let lastSoqlMeta = null;
+    // Guided builder elements
+    const builderToggle = document.getElementById('soql-builder-enabled');
+    const builderPanel = document.getElementById('soql-builder');
+    const builderFieldInput = document.getElementById('soql-builder-field-input');
+    const builderFieldList = document.getElementById('soql-builder-field-list');
+    const builderFieldsWrap = document.getElementById('soql-builder-fields');
+    const builderAddFieldBtn = document.getElementById('soql-builder-add-field');
+    const builderFiltersWrap = document.getElementById('soql-builder-filters');
+    const builderAddFilterBtn = document.getElementById('soql-builder-add-filter');
+    const builderOrderField = document.getElementById('soql-builder-order-field');
+    const builderOrderDir = document.getElementById('soql-builder-order-dir');
+    const builderClearOrder = document.getElementById('soql-builder-clear-order');
+    const builderStatus = document.getElementById('soql-builder-status');
+
+    const builderOps = ['=','!=','>','>=','<','<=','LIKE','IN'];
+
+    function defaultBuilderState(limitVal) {
+      const lim = Number.isFinite(limitVal) ? limitVal : getLimitValue();
+      return { enabled: false, object: '', fields: ['Id'], filters: [], orderBy: null, limit: lim };
+    }
+
+    function cloneBuilderState(src) {
+      const base = src && typeof src === 'object' ? src : defaultBuilderState();
+      return {
+        enabled: !!base.enabled,
+        object: String(base.object || '').trim(),
+        fields: Array.isArray(base.fields) && base.fields.length ? base.fields.slice() : ['Id'],
+        filters: Array.isArray(base.filters) ? base.filters.map((f) => ({ id: f.id || uid(), field: f.field || '', op: f.op || '=', value: f.value || '' })) : [],
+        orderBy: base.orderBy && base.orderBy.field ? { field: base.orderBy.field, dir: base.orderBy.dir === 'desc' ? 'desc' : 'asc' } : null,
+        limit: Number.isFinite(base.limit) ? base.limit : getLimitValue(),
+      };
+    }
+
+    function setBuilderVisibility(enabled) {
+      const on = !!enabled;
+      if (builderPanel) builderPanel.hidden = !on;
+      if (builderToggle) builderToggle.checked = on;
+    }
+
+    function setBuilderStatus(msg) {
+      if (builderStatus) builderStatus.textContent = msg || '';
+    }
+
+    function quoteSoqlValue(v) {
+      const s = String(v || '').trim();
+      if (!s) return "''";
+      if (/^[-]?\d+(?:\.\d+)?$/.test(s)) return s;
+      if (/^(true|false)$/i.test(s)) return s.toLowerCase();
+      if (/^[A-Za-z_][A-Za-z0-9_]*\(.*\)$/.test(s)) return s; // function literal
+      if (/^[A-Z_]+$/.test(s)) return s; // date literal
+      if (s.startsWith("'") && s.endsWith("'")) return s;
+      return `'${s.replace(/'/g, "\\'")}'`;
+    }
+
+    function populateFieldDatalist(fields) {
+      if (!builderFieldList) return;
+      builderFieldList.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      (fields || []).forEach((f) => { const opt = document.createElement('option'); opt.value = f; frag.appendChild(opt); });
+      builderFieldList.appendChild(frag);
+    }
+
+    async function refreshBuilderFields(objectName) {
+      const obj = String(objectName || builderState.object || '').trim();
+      if (!obj) { builderFieldOptions = []; populateFieldDatalist([]); setBuilderStatus('Select an object to load fields.'); return; }
+      setBuilderStatus(`Loading fields for ${obj}…`);
+      const describe = await getSobjectDescribeCached(obj, !!toolingCb?.checked);
+      const fields = Array.isArray(describe?.fields) ? describe.fields : [];
+      builderFieldOptions = fields.map((f) => f?.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
+      populateFieldDatalist(builderFieldOptions);
+      setBuilderStatus(builderFieldOptions.length ? `Loaded ${builderFieldOptions.length} fields` : 'No fields found.');
+    }
+
+    function renderBuilderFields() {
+      if (!builderFieldsWrap) return;
+      builderFieldsWrap.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      (builderState.fields || []).forEach((f) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.dataset.badgeType = 'field';
+        chip.dataset.field = f;
+        chip.textContent = f;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'remove';
+        btn.setAttribute('aria-label', `Remove field ${f}`);
+        btn.textContent = '×';
+        chip.appendChild(btn);
+        frag.appendChild(chip);
+      });
+      builderFieldsWrap.appendChild(frag);
+    }
+
+    function renderBuilderFilters() {
+      if (!builderFiltersWrap) return;
+      builderFiltersWrap.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      (builderState.filters || []).forEach((f) => {
+        const row = document.createElement('div');
+        row.className = 'filter-row';
+        row.dataset.id = f.id;
+        row.innerHTML = `
+          <input class="filter-field" list="soql-builder-field-list" placeholder="Field" aria-label="Filter field" value="${Utils.escapeHtml(f.field || '')}" />
+          <select class="filter-op" aria-label="Filter operator">${builderOps.map(op => `<option value="${op}" ${op === (f.op || '=') ? 'selected' : ''}>${op}</option>`).join('')}</select>
+          <input class="filter-value" placeholder="Value" aria-label="Filter value" value="${Utils.escapeHtml(f.value || '')}" />
+          <button class="icon-btn btn-sm filter-remove" type="button" title="Remove filter">✕</button>
+        `;
+        frag.appendChild(row);
+      });
+      builderFiltersWrap.appendChild(frag);
+    }
+
+    function renderBuilderOrder() {
+      if (builderOrderField) builderOrderField.value = builderState.orderBy?.field || '';
+      if (builderOrderDir) builderOrderDir.value = builderState.orderBy?.dir || 'asc';
+    }
+
+    function syncBuilderUi(opts = {}) {
+      const { loadFields = false } = opts;
+      setBuilderVisibility(builderState.enabled);
+      renderBuilderFields();
+      renderBuilderFilters();
+      renderBuilderOrder();
+      if (builderFieldInput && builderState.fields.length && !builderFieldInput.value) builderFieldInput.value = '';
+      if (loadFields) refreshBuilderFields(builderState.object);
+    }
+
+    function composeQueryFromBuilder(state) {
+      const obj = String(state.object || '').trim();
+      if (!obj) return '';
+      const fields = Array.isArray(state.fields) && state.fields.length ? state.fields : ['Id'];
+      const select = fields.map(quoteIdentifier).join(', ');
+      const where = (state.filters || []).filter(f => (f.field || '').trim() && (f.op || '').trim()).map((f) => {
+        const op = (f.op || '=').toUpperCase();
+        if (op === 'IN') {
+          const parts = String(f.value || '').split(',').map(p => p.trim()).filter(Boolean).map(quoteSoqlValue);
+          const list = parts.length ? parts.join(', ') : "''";
+          return `${quoteIdentifier(f.field)} IN (${list})`;
+        }
+        return `${quoteIdentifier(f.field)} ${op} ${quoteSoqlValue(f.value)}`;
+      }).join(' AND ');
+      const order = state.orderBy && state.orderBy.field ? ` ORDER BY ${quoteIdentifier(state.orderBy.field)} ${state.orderBy.dir === 'desc' ? 'DESC' : 'ASC'}` : '';
+      const limit = Number.isFinite(state.limit) ? ` LIMIT ${state.limit}` : '';
+      return `SELECT ${select} FROM ${quoteIdentifier(obj)}${where ? ' WHERE ' + where : ''}${order}${limit}`;
+    }
+
+    function tryImportQueryToBuilder(q) {
+      const src = String(q || '').trim();
+      if (!src) return;
+      const objMatch = src.match(/\bfrom\s+([`"\[]?[A-Za-z0-9_.`"\]]+)/i);
+      if (objMatch && objMatch[1]) builderState.object = objMatch[1].replace(/^[`"\[]/, '').replace(/[`"\]]$/, '');
+      const selectMatch = src.match(/select\s+(.+?)\s+from/i);
+      if (selectMatch && selectMatch[1]) builderState.fields = selectMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      const whereMatch = src.match(/\bwhere\s+(.+?)(?=\border\s+by\b|\blimit\b|$)/i);
+      if (whereMatch && whereMatch[1]) {
+        const clauses = whereMatch[1].split(/\s+and\s+/i).map(s => s.trim()).filter(Boolean);
+        builderState.filters = clauses.map((cl) => {
+          const inMatch = cl.match(/^([A-Za-z0-9_.`"]+)\s+IN\s*\((.+)\)$/i);
+          if (inMatch) {
+            const vals = inMatch[2].split(',').map(v => v.trim().replace(/^['"]|['"]$/g, '')); // basic trim
+            return { id: uid(), field: inMatch[1].replace(/[`"]/g, ''), op: 'IN', value: vals.join(', ') };
+          }
+          const binMatch = cl.match(/^([A-Za-z0-9_.`"]+)\s*(=|!=|>=|<=|>|<|LIKE)\s*(.+)$/i);
+          if (binMatch) return { id: uid(), field: binMatch[1].replace(/[`"]/g, ''), op: binMatch[2].toUpperCase(), value: binMatch[3].replace(/^['"]|['"]$/g, '') };
+          return { id: uid(), field: '', op: '=', value: '' };
+        });
+      }
+      const limitMatch = src.match(/\blimit\s+(\d+)/i);
+      if (limitMatch && limitMatch[1]) {
+        const lim = Number(limitMatch[1]);
+        if (Number.isFinite(lim) && limitEl) { limitEl.value = String(lim); builderState.limit = lim; }
+      }
+      const orderMatch = src.match(/order\s+by\s+([A-Za-z0-9_.`"]+)(?:\s+(asc|desc))?/i);
+      if (orderMatch && orderMatch[1]) builderState.orderBy = { field: orderMatch[1].replace(/[`"]/g, ''), dir: (orderMatch[2] || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc' };
+    }
+
+    function writeQueryFromBuilder() {
+      if (!builderState.enabled || !queryEl) return;
+      const q = composeQueryFromBuilder(builderState);
+      if (!q) { setBuilderStatus('Select an object to build a query.'); return; }
+      queryEl.value = q;
+      try { queryEl.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+    }
+
+    function handleBuilderChange(opts = {}) {
+      const { writeQuery = true, loadFields = false } = opts;
+      builderState.limit = getLimitValue();
+      if (!builderState.object) setBuilderStatus('Select an object to build a query.');
+      else if (!builderState.fields.length) setBuilderStatus('Add at least one field.');
+      else setBuilderStatus('Builder ready');
+      syncBuilderUi({ loadFields });
+      if (writeQuery) writeQueryFromBuilder();
+      saveBuilderStateIntoTab();
+      saveTabs();
+    }
+
+    function saveBuilderStateIntoTab() {
+      try {
+        const t = tabs.find(x => x.id === activeTabId);
+        if (t) t.builderState = cloneBuilderState(builderState);
+      } catch {}
+    }
+
+    let builderState = defaultBuilderState();
+    let builderFieldOptions = [];
 
     // ========== Multi-query tabs state ==========
     const TAB_STORAGE_KEY = 'soqlTabsV1';
@@ -403,14 +646,14 @@
               activeTabId = payload.activeTabId || tabs[0].id;
             } else {
               const id = uid();
-              tabs = [{ id, title: 'Untitled', query: '', tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: 'raw', advState: null, lastResp: null, lastMeta: null }];
+              tabs = [{ id, title: 'Untitled', query: '', tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: 'raw', advState: null, lastResp: null, lastMeta: null, builderState: defaultBuilderState() }];
               activeTabId = id;
             }
             resolve();
           });
         } catch {
           const id = uid();
-          tabs = [{ id, title: 'Untitled', query: '', tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: 'raw', advState: null, lastResp: null, lastMeta: null }];
+          tabs = [{ id, title: 'Untitled', query: '', tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: 'raw', advState: null, lastResp: null, lastMeta: null, builderState: defaultBuilderState() }];
           activeTabId = id;
           resolve();
         }
@@ -467,6 +710,11 @@
       } else {
         advState.sort = []; advState.filters = {}; advState.colWidths = {}; advState.order = null;
       }
+      // Restore builder state
+      builderState = t.builderState ? cloneBuilderState(t.builderState) : defaultBuilderState();
+      syncBuilderUi({ loadFields: builderState.enabled });
+      if (builderState.enabled) writeQueryFromBuilder();
+
       renderTabsBar();
       if (lastSoqlResp) { renderByMode(lastSoqlResp); } else { renderPlaceholder(); }
       saveTabs();
@@ -477,7 +725,7 @@
       const base = buildTitleForQuery(q) || 'Untitled';
       const unique = tabs.some(t => (t.title || '').toLowerCase() === base.toLowerCase()) ? uniquifyTitle(base) : base;
       const id = uid();
-      const t = { id, title: unique, query: q, tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw', advState: null, lastResp: null, lastMeta: null };
+      const t = { id, title: unique, query: q, tooling: !!toolingCb?.checked, limit: getLimitValue(), viewMode: (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw', advState: null, lastResp: null, lastMeta: null, builderState: cloneBuilderState(builderState) };
       tabs.push(t);
       setActiveTab(id);
       saveTabs();
@@ -506,6 +754,7 @@
       t.tooling = toolingCb ? !!toolingCb.checked : t.tooling;
       t.limit = limitEl ? getLimitValue() : t.limit;
       t.viewMode = (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw';
+      t.builderState = cloneBuilderState(builderState);
       // derive title from FROM object and ensure uniqueness among others
       let newTitle = buildTitleForQuery(t.query) || 'Untitled';
       if (!newTitle) newTitle = 'Untitled';
@@ -903,10 +1152,14 @@
         const lim = getLimitValue();
         const val = (queryEl.value || '').trim();
         // If the query looks like our template, only update the LIMIT number
-        const m = val.match(/^select\s+id\s+from\s+(.+?)\s+limit\s+\d+\s*$/i);
+        const m = val.match(/^select\sid\sfrom\s(.+?)\slimit\s\d+\s*$/i);
         if (m && m[1]) {
           queryEl.value = `SELECT Id FROM ${m[1]} LIMIT ${lim}`;
           try { queryEl.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
+        }
+        if (builderState.enabled) {
+          builderState.limit = lim;
+          handleBuilderChange({ writeQuery: true });
         }
         updateActiveTabFromInputs({ andRender: false });
       });
@@ -916,6 +1169,15 @@
       on(objSel, 'change', () => {
         const v = (objSel.value || '').trim();
         if (!v) { clearUi(); setSoqlState('inprogress'); updateActiveTabFromInputs({ andRender: true }); return; }
+        if (builderState.enabled) {
+          builderState.object = v;
+          builderState.fields = ['Id'];
+          builderState.filters = [];
+          builderState.orderBy = null;
+          builderState.limit = getLimitValue();
+          handleBuilderChange({ writeQuery: true, loadFields: true });
+          return;
+        }
         const qName = quoteIdentifier(v);
         const lim = getLimitValue();
         const templateQuery = `SELECT Id FROM ${qName} LIMIT ${lim}`;
@@ -1086,13 +1348,105 @@
     if (clearBtn && results) {
       on(clearBtn, 'click', () => { 
         clearUi(); 
+        builderState = defaultBuilderState(getLimitValue());
+        if (builderToggle) builderToggle.checked = false;
+        setBuilderVisibility(false);
+        syncBuilderUi({ loadFields: false });
         try { setSoqlState('inprogress'); } catch {}
         try {
           const t = tabs.find(x => x.id === activeTabId);
-          if (t) { t.query = ''; t.lastResp = null; t.lastMeta = null; t.advState = null; saveTabs(); }
+          if (t) { t.query = ''; t.lastResp = null; t.lastMeta = null; t.advState = null; t.builderState = cloneBuilderState(builderState); saveTabs(); }
         } catch {}
       });
     }
+
+    // Builder wiring
+    if (builderToggle) {
+      on(builderToggle, 'change', () => {
+        builderState.enabled = !!builderToggle.checked;
+        if (builderState.enabled) {
+          builderState.object = (objSel?.value || builderState.object || '').trim();
+          tryImportQueryToBuilder(queryEl?.value);
+          handleBuilderChange({ writeQuery: true, loadFields: true });
+        } else {
+          setBuilderVisibility(false);
+          setBuilderStatus('Builder disabled. Toggle to show guided UI.');
+        }
+      });
+    }
+
+    if (builderAddFieldBtn) {
+      on(builderAddFieldBtn, 'click', () => {
+        const val = (builderFieldInput?.value || '').trim();
+        if (!val) return;
+        if (!builderState.fields.includes(val)) builderState.fields.push(val);
+        builderFieldInput.value = '';
+        handleBuilderChange({ writeQuery: true });
+      });
+    }
+    if (builderFieldInput) {
+      on(builderFieldInput, 'keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); builderAddFieldBtn?.click(); }
+      });
+    }
+    if (builderFieldsWrap) {
+      on(builderFieldsWrap, 'click', (e) => {
+        const btn = e.target?.closest?.('button.remove');
+        if (!btn) return;
+        const field = btn.parentElement?.dataset?.field;
+        if (!field) return;
+        builderState.fields = (builderState.fields || []).filter(f => f !== field);
+        handleBuilderChange({ writeQuery: true });
+      });
+    }
+    if (builderAddFilterBtn) {
+      on(builderAddFilterBtn, 'click', () => {
+        builderState.filters = builderState.filters || [];
+        builderState.filters.push({ id: uid(), field: '', op: '=', value: '' });
+        handleBuilderChange({ writeQuery: false });
+      });
+    }
+    if (builderFiltersWrap) {
+      on(builderFiltersWrap, 'input', (e) => {
+        const row = e.target?.closest?.('.filter-row');
+        if (!row) return;
+        const id = row.dataset?.id;
+        const target = builderState.filters.find((f) => f.id === id);
+        if (!target) return;
+        if (e.target.classList.contains('filter-field')) target.field = e.target.value;
+        else if (e.target.classList.contains('filter-op')) target.op = e.target.value;
+        else if (e.target.classList.contains('filter-value')) target.value = e.target.value;
+        handleBuilderChange({ writeQuery: true });
+      });
+      on(builderFiltersWrap, 'click', (e) => {
+        const btn = e.target?.closest?.('.filter-remove');
+        if (!btn) return;
+        const row = btn.closest('.filter-row');
+        const id = row?.dataset?.id;
+        builderState.filters = (builderState.filters || []).filter(f => f.id !== id);
+        handleBuilderChange({ writeQuery: true });
+      });
+    }
+    if (builderOrderField) on(builderOrderField, 'input', () => { const f = (builderOrderField.value || '').trim(); builderState.orderBy = f ? { field: f, dir: builderOrderDir?.value === 'desc' ? 'desc' : 'asc' } : null; handleBuilderChange({ writeQuery: true }); });
+    if (builderOrderDir) on(builderOrderDir, 'change', () => { if (builderState.orderBy) builderState.orderBy.dir = builderOrderDir.value === 'desc' ? 'desc' : 'asc'; handleBuilderChange({ writeQuery: true }); });
+    if (builderClearOrder) on(builderClearOrder, 'click', () => { builderState.orderBy = null; handleBuilderChange({ writeQuery: true }); });
+
+    // Test-only hooks (available after wireUiOnly runs)
+    if (typeof window !== 'undefined') {
+      window.__SoqlTestHooks = {
+        composeQueryFromBuilder,
+        tryImportQueryToBuilder,
+        defaultBuilderState,
+        cloneBuilderState,
+        getBuilderState: () => cloneBuilderState(builderState),
+        setBuilderState: (s) => { builderState = cloneBuilderState(s); },
+        uid,
+      };
+    }
+
+    // Initialize builder UI once
+    syncBuilderUi({ loadFields: false });
+
   }
 
   function attachIfNeeded() {
@@ -1147,6 +1501,7 @@
     STATE.describeInFlight.rest = null;
     STATE.describeInFlight.tooling = null;
   }
+
 
   window.SoqlHelper = { detach };
 })();

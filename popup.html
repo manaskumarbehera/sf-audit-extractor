@@ -215,9 +215,68 @@ File: `popup.html` (replace body content with this)
             </div>
 
             <!-- SOQL query tabs bar -->
-            <div id="soql-tabbar" class="soql-tabbar" role="tablist" aria-label="SOQL query tabs">
-                <div class="soql-tabs" id="soql-tabs"></div>
+            <div id="soql-tabs" class="soql-tabbar" role="tablist" aria-label="SOQL query tabs">
+                <div class="soql-tablist"></div>
                 <button id="soql-tab-add" class="icon-btn btn-sm" title="New query tab" aria-label="New query tab">＋</button>
+            </div>
+
+            <!-- Guided query builder toggle and panel -->
+            <div class="soql-builder-toggle">
+                <label class="builder-toggle-label">
+                    <input type="checkbox" id="soql-builder-enabled" aria-label="Enable guided query builder" />
+                    <span>Guided builder</span>
+                </label>
+                <span class="soql-builder-hint">Compose a query with fields and filters, or turn it off to hand-write SOQL.</span>
+            </div>
+            <div id="soql-builder" class="soql-builder" hidden>
+                <div class="builder-row">
+                    <div class="builder-col">
+                        <div class="builder-section" aria-label="Select fields">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Fields</span>
+                                <button id="soql-builder-add-field" class="btn-chip" type="button" title="Add field">+ Add</button>
+                            </div>
+                            <div class="builder-field-add">
+                                <input id="soql-builder-field-input" list="soql-builder-field-list" placeholder="Start typing a field" aria-label="Field to add" />
+                                <datalist id="soql-builder-field-list"></datalist>
+                            </div>
+                            <div id="soql-builder-fields" class="chip-wrap builder-chip-wrap" aria-live="polite"></div>
+                        </div>
+                    </div>
+                    <div class="builder-col">
+                        <div class="builder-section" aria-label="Add filters">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Filters</span>
+                                <button id="soql-builder-add-filter" class="btn-chip" type="button" title="Add filter">+ Filter</button>
+                            </div>
+                            <div id="soql-builder-filters" class="builder-filters" aria-live="polite"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="builder-row">
+                    <div class="builder-col">
+                        <div class="builder-section" aria-label="Order by">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Order by</span>
+                                <button id="soql-builder-clear-order" class="icon-btn btn-sm" type="button" title="Clear ordering">✕</button>
+                            </div>
+                            <div class="builder-inline">
+                                <input id="soql-builder-order-field" list="soql-builder-field-list" placeholder="Field" aria-label="Order by field" />
+                                <select id="soql-builder-order-dir" aria-label="Order direction">
+                                    <option value="asc">ASC</option>
+                                    <option value="desc">DESC</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="builder-col">
+                        <div class="builder-section builder-note-section" aria-label="Builder status">
+                            <div class="builder-title">Builder status</div>
+                            <div class="builder-note">Limit uses the control above. Tooling toggle also applies here.</div>
+                            <div id="soql-builder-status" class="builder-status" aria-live="polite"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="search-box">
