@@ -487,114 +487,55 @@
                  const fieldsStart = prefixStart + selectPart.length;
                  const fieldsEnd = fieldsStart + fieldsPart.length;
 
-                 const selStart = Math.max(0, Math.min(el.selectionStart ?? fieldsEnd, q.length));
-                 const selEnd = Math.max(0, Math.min(el.selectionEnd ?? selStart, q.length));
-                 const caretInFields = selStart >= fieldsStart && selStart <= fieldsEnd;
+                const selStart = Math.max(0, Math.min(el.selectionStart ?? fieldsEnd, q.length));
 
-                 // helper to set focus/caret safely
-                 function setCaret(pos) { try { el.focus(); el.setSelectionRange(pos, pos); } catch {} }
+                // helper to set focus/caret safely
+                function setCaret(pos) { try { el.focus(); el.setSelectionRange(pos, pos); } catch {} }
 
-                 // Short-circuit when field already exists: keep caret
-                 const existing = fieldsPart.split(',').map(s => s.trim()).filter(Boolean);
-                 if (existing.includes(fieldName)) {
-                   setCaret(selStart);
-                   return q;
-                 }
+                // Short-circuit when field already exists: keep caret
+                const existing = fieldsPart.split(',').map(s => s.trim()).filter(Boolean);
+                if (existing.includes(fieldName)) {
+                  setCaret(selStart);
+                  return q;
+                }
 
-                 if (caretInFields) {
-                   const cutStartSel = Math.min(selStart, selEnd);
-                   const cutEndSel = Math.max(selStart, selEnd);
+                // Always append field at the end of the field list, regardless of cursor position
+                if (!fieldsPart.trim() || /^count\s*\(/i.test(fieldsPart)) {
+                  const before = q.slice(0, fieldsStart);
+                  const after = q.slice(fieldsEnd);
+                  try { el.value = before + fieldName + after; setCaret((before + fieldName).length); } catch {}
+                  return before + fieldName + after;
+                }
 
-                   const rel = selStart - fieldsStart;
-                   const left = fieldsPart.slice(0, Math.max(0, rel));
-                   const right = fieldsPart.slice(Math.max(0, rel));
-                   const leftTokenStartIdx = left.search(/[A-Za-z0-9_.]+$/);
-                   const rightTokenMatch = right.match(/^[A-Za-z0-9_.]+/);
-                   const rightTokenLen = rightTokenMatch ? rightTokenMatch[0].length : 0;
-                   const hasSelection = selStart !== selEnd;
+                const trimmed = fieldsPart.trim();
+                const needsComma = trimmed.length > 0 && !/,\s*$/.test(trimmed);
+                const joiner = needsComma ? ', ' : (trimmed ? ' ' : '');
+                const before = q.slice(0, fieldsStart);
+                const after = q.slice(fieldsEnd);
+                const newFieldsProposed = trimmed + joiner + fieldName;
+                const parts = newFieldsProposed.split(',').map(s => s.trim()).filter(Boolean);
+                const seen = new Set();
+                const dedupParts = [];
+                for (const p of parts) { if (!seen.has(p)) { seen.add(p); dedupParts.push(p); } }
+                const nextFields = dedupParts.join(', ');
+                const nextQuery = before + nextFields + after;
+                try { el.value = nextQuery; setCaret((before + nextFields).length); } catch {}
+                return nextQuery;
+             }
 
-                   // Replace selection if any; otherwise replace token under caret
-                   const replaceStart = hasSelection ? cutStartSel : (leftTokenStartIdx === -1 ? selStart : (fieldsStart + leftTokenStartIdx));
-                   const replaceEnd = hasSelection ? cutEndSel : (selStart + rightTokenLen);
-
-                   const leftFields = q.slice(fieldsStart, replaceStart);
-                   const rightFields = q.slice(replaceEnd, fieldsEnd);
-
-                   // Comma/space rules around insertion
-                   const leftTrimEnd = leftFields.replace(/\s+$/, '');
-                   const rightTrimStart = rightFields.replace(/^\s+/, '');
-                   const prevChar = leftTrimEnd.slice(-1);
-                   const nextChar = rightTrimStart.charAt(0);
-                   const hasLeft = leftTrimEnd.length > 0;
-                   const hasRight = rightTrimStart.length > 0;
-                   const needPreComma = hasLeft && prevChar !== ',';
-                   const needPostComma = hasRight && nextChar !== ',';
-
-                   let ins = fieldName;
-                   if (needPreComma) ins = ', ' + ins; else if (hasLeft && prevChar === ',') ins = ' ' + ins;
-                   if (needPostComma) ins = ins + ', ';
-
-                   // Compose and then dedupe the field list once
-                   const newFieldsProposed = leftFields + ins + rightFields;
-                   const parts = newFieldsProposed.split(',').map(s => s.trim()).filter(Boolean);
-                   const seen = new Set();
-                   const dedupParts = [];
-                   for (const p of parts) { if (!seen.has(p)) { seen.add(p); dedupParts.push(p); } }
-                   const newFields = dedupParts.join(', ');
-
-                   const before = q.slice(0, fieldsStart);
-                   const after = q.slice(fieldsEnd);
-                   const nextQuery = before + newFields + after;
-
-                   // Place caret at end of the inserted field occurrence nearest the insertion point
-                   let caretPos = before.length + newFields.indexOf(fieldName);
-                   if (caretPos >= before.length) {
-                     caretPos += fieldName.length;
-                   } else {
-                     // fallback: keep original caret
-                     caretPos = selStart;
-                   }
-                   try { el.value = nextQuery; setCaret(caretPos); } catch {}
-                   return nextQuery;
-                 }
-
-                 // Caret not in fields: append with comma if needed
-                 if (!fieldsPart.trim() || /^count\s*\(/i.test(fieldsPart)) {
-                   const before = q.slice(0, fieldsStart);
-                   const after = q.slice(fieldsEnd);
-                   try { el.value = before + fieldName + after; setCaret((before + fieldName).length); } catch {}
-                   return before + fieldName + after;
-                 }
-
-                 const trimmed = fieldsPart.trim();
-                 const needsComma = trimmed.length > 0 && !/,\s*$/.test(trimmed);
-                 const joiner = needsComma ? ', ' : (trimmed ? ' ' : '');
-                 const before = q.slice(0, fieldsStart);
-                 const after = q.slice(fieldsEnd);
-                 const newFieldsProposed = trimmed + joiner + fieldName;
-                 const parts = newFieldsProposed.split(',').map(s => s.trim()).filter(Boolean);
-                 const seen = new Set();
-                 const dedupParts = [];
-                 for (const p of parts) { if (!seen.has(p)) { seen.add(p); dedupParts.push(p); } }
-                 const nextFields = dedupParts.join(', ');
-                 const nextQuery = before + nextFields + after;
-                 try { el.value = nextQuery; setCaret((before + nextFields).length); } catch {}
-                 return nextQuery;
-               }
-
-               // No SELECT/FROM structure; add minimal one near FROM if present
-               const hasFrom = /\bfrom\s+[A-Za-z0-9_.]+/i.test(q);
-               if (hasFrom) {
-                 const fromMatch = /\bfrom\s+[A-Za-z0-9_.]+/i.exec(q);
-                 const before = q.slice(0, fromMatch.index);
-                 const after = q.slice(fromMatch.index);
-                 const nextQuery = `${before}SELECT ${fieldName} ${after}`;
-                 try { el.value = nextQuery; el.focus(); el.setSelectionRange((before + 'SELECT ' + fieldName).length, (before + 'SELECT ' + fieldName).length); } catch {}
-                 return nextQuery;
-               }
-               const nextQuery = `SELECT ${fieldName}`;
-               try { el.value = nextQuery; el.focus(); el.setSelectionRange(nextQuery.length, nextQuery.length); } catch {}
+             // No SELECT/FROM structure; add minimal one near FROM if present
+             const hasFrom = /\bfrom\s+[A-Za-z0-9_.]+/i.test(q);
+             if (hasFrom) {
+               const fromMatch = /\bfrom\s+[A-Za-z0-9_.]+/i.exec(q);
+               const before = q.slice(0, fromMatch.index);
+               const after = q.slice(fromMatch.index);
+               const nextQuery = `${before}SELECT ${fieldName} ${after}`;
+               try { el.value = nextQuery; el.focus(); el.setSelectionRange((before + 'SELECT ' + fieldName).length, (before + 'SELECT ' + fieldName).length); } catch {}
                return nextQuery;
+             }
+             const nextQuery = `SELECT ${fieldName}`;
+             try { el.value = nextQuery; el.focus(); el.setSelectionRange(nextQuery.length, nextQuery.length); } catch {}
+             return nextQuery;
          }
 
          // Fallback legacy string signature

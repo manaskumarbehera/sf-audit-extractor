@@ -237,6 +237,10 @@
                 if (!chrome.runtime.lastError && resp && resp.success) {
                     appPoppedState = !!resp.popped;
                     updateAppPopButton(appPoppedState);
+                    // Close the popup window when successfully popping out (only if this is the extension popup, not standalone)
+                    if (next && appPoppedState && !window.location.hash.includes('standalone')) {
+                        window.close();
+                    }
                 }
                 appPopBtn.disabled = false;
             });

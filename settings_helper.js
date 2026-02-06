@@ -172,7 +172,7 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
                 return group;
             }
 
-            const { soqlShowObjectSelector = true, graphqlShowObjectSelector = true } = await chrome.storage?.local?.get?.({ soqlShowObjectSelector: true, graphqlShowObjectSelector: true }) || {};
+            const { soqlShowObjectSelector = true, graphqlShowObjectSelector = true, graphqlAutoFormat = true } = await chrome.storage?.local?.get?.({ soqlShowObjectSelector: true, graphqlShowObjectSelector: true, graphqlAutoFormat: true }) || {};
 
             // SOQL editor group: only "Show Object selector" checkbox
             const soqlGroup = ensureEditorGroup('soql-editor-settings', 'SOQL Query Editor');
@@ -194,10 +194,11 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
                 });
             }
 
-            // GraphQL editor group: only "Show Object selector" checkbox
+            // GraphQL editor group: Show Object selector and Auto-format checkboxes
             const gqlGroup = ensureEditorGroup('graphql-editor-settings', 'GraphQL Query Editor');
             const gqlListEl = gqlGroup.querySelector('.settings-list');
             if (gqlListEl) {
+                // Object selector checkbox
                 const cbLabel = document.createElement('label');
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
@@ -210,6 +211,22 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
                 gqlListEl.appendChild(cbLabel);
                 cb.addEventListener('change', async () => {
                     try { await chrome.storage?.local?.set?.({ graphqlShowObjectSelector: !!cb.checked }); } catch {}
+                    try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
+                });
+
+                // Auto-format checkbox
+                const autoFormatLabel = document.createElement('label');
+                const autoFormatCb = document.createElement('input');
+                autoFormatCb.type = 'checkbox';
+                autoFormatCb.id = 'setting-graphql-auto-format';
+                autoFormatCb.checked = !!graphqlAutoFormat;
+                const autoFormatSpan = document.createElement('span');
+                autoFormatSpan.textContent = 'Auto-format queries on load';
+                autoFormatLabel.appendChild(autoFormatCb);
+                autoFormatLabel.appendChild(autoFormatSpan);
+                gqlListEl.appendChild(autoFormatLabel);
+                autoFormatCb.addEventListener('change', async () => {
+                    try { await chrome.storage?.local?.set?.({ graphqlAutoFormat: !!autoFormatCb.checked }); } catch {}
                     try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
                 });
             }
@@ -273,6 +290,13 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         } catch { return true; }
     }
 
+    async function getGraphqlAutoFormatPreference() {
+        try {
+            const { graphqlAutoFormat = true } = await chrome.storage?.local?.get?.({ graphqlAutoFormat: true }) || {};
+            return !!graphqlAutoFormat;
+        } catch { return true; }
+    }
+
     window.SettingsHelper = {
         injectFlexCss,
         ensureSettingsTabExists,
@@ -281,8 +305,8 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         firstVisibleTabName,
         showTab,
         DEFAULT_HIDDEN_TABS,
-        SETTINGS_TAB,
         getSoqlObjectSelectorVisibility,
-        getGraphqlObjectSelectorVisibility
+        getGraphqlObjectSelectorVisibility,
+        getGraphqlAutoFormatPreference,
     };
 })();

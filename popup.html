@@ -308,12 +308,249 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
         <div id="tab-graphql" class="tab-pane" data-tab="graphql" hidden>
-            <div class="logs-container">
-                <div class="placeholder">
-                    <p>GraphQL Query Builder</p>
-                    <p class="placeholder-note">Coming soon. Create GraphQL queries for Salesforce APIs.</p>
+            <!-- Screen 1: Object Selection -->
+            <div id="graphql-screen-objects" class="graphql-screen active">
+                <div class="graphql-objects-picker">
+                    <div class="graphql-picker-header">
+                        <h2>Select an Object</h2>
+                        <p class="graphql-picker-subtitle">Choose a Salesforce object to query with GraphQL</p>
+                    </div>
+                    <div class="graphql-picker-search">
+                        <input id="graphql-objects-search" type="search" placeholder="🔍 Search objects..." aria-label="Search objects" />
+                    </div>
+                    <div id="graphql-objects-grid" class="graphql-objects-grid" aria-live="polite">
+                        <div class="placeholder-note">Loading objects...</div>
+                    </div>
+                    <div class="graphql-picker-footer">
+                        <button id="graphql-refresh-objects" class="btn btn-secondary" type="button">⟳ Refresh Objects</button>
+                        <button id="graphql-advanced-mode" class="btn btn-tertiary" type="button">Advanced Mode</button>
+                    </div>
                 </div>
             </div>
+
+            <!-- Screen 2: Query Builder -->
+            <div id="graphql-screen-builder" class="graphql-screen hidden">
+                <div class="graphql-builder-header">
+                    <div class="graphql-builder-title">
+                        <button id="graphql-back-to-objects" class="icon-btn" type="button" title="Back to objects">←</button>
+                        <h2>GraphQL: <span id="graphql-current-object">-</span></h2>
+                    </div>
+                    <div class="graphql-header-controls">
+                        <label class="builder-toggle-label">
+                            <input type="checkbox" id="graphql-builder-enabled" aria-label="Enable query builder" />
+                            <span>Builder</span>
+                        </label>
+                        <span id="graphql-schema-status" class="schema-status" aria-live="polite">Ready</span>
+                    </div>
+                </div>
+
+                <div class="graphql-builder-container">
+                    <!-- Left Panel: Composition (Builder) -->
+                    <div class="graphql-builder-left" id="graphql-builder-panel">
+                        <datalist id="graphql-builder-field-list"></datalist>
+
+                        <!-- Fields Section -->
+                        <div class="builder-section">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Fields</span>
+                                <button id="graphql-builder-add-field" class="btn-chip btn-sm" type="button" title="Add field">+ Add</button>
+                            </div>
+                            <div class="builder-field-add">
+                                <input id="graphql-builder-field-input" list="graphql-builder-field-list" placeholder="Field name..." aria-label="Field name" />
+                            </div>
+                            <div id="graphql-builder-fields" class="builder-field-chips" aria-live="polite"></div>
+                        </div>
+
+                        <!-- Filters Section -->
+                        <div class="builder-section">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Filters</span>
+                                <button id="graphql-builder-add-filter" class="btn-chip btn-sm" type="button" title="Add filter">+ Filter</button>
+                            </div>
+                            <div id="graphql-builder-filters" class="builder-filters" aria-live="polite"></div>
+                        </div>
+
+                        <!-- Order By Section -->
+                        <div class="builder-section">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Order By</span>
+                                <button id="graphql-builder-clear-order" class="icon-btn btn-sm" type="button" title="Clear ordering">✕</button>
+                            </div>
+                            <div class="builder-inline">
+                                <input id="graphql-builder-order-field" list="graphql-builder-field-list" placeholder="Field" aria-label="Order by field" />
+                                <select id="graphql-builder-order-dir" aria-label="Order direction">
+                                    <option value="asc">ASC</option>
+                                    <option value="desc">DESC</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Pagination Section -->
+                        <div class="builder-section">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Pagination</span>
+                            </div>
+                            <div class="builder-pagination">
+                                <label class="filter-label" for="graphql-limit">Limit:</label>
+                                <input id="graphql-limit" type="number" value="50" min="1" aria-label="Result limit" />
+                                <label class="filter-label" for="graphql-offset">Offset:</label>
+                                <input id="graphql-offset" type="number" value="0" min="0" aria-label="Result offset" />
+                                <label class="filter-label" for="graphql-after">After:</label>
+                                <input id="graphql-after" type="text" aria-label="After cursor" placeholder="cursor" />
+                            </div>
+                        </div>
+
+                        <!-- Builder Status -->
+                        <div class="builder-section builder-status-section">
+                            <div id="graphql-builder-status" class="builder-status" aria-live="polite">Ready</div>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: Endpoint Banner + Query/Variables/Results Split -->
+                    <div class="graphql-builder-right">
+                        <!-- Endpoint Banner (Top) -->
+                        <div class="endpoint-banner">
+                            <div class="endpoint-banner-item">
+                                <span class="endpoint-label">Endpoint:</span>
+                                <code id="graphql-endpoint-url">/services/data/vXX.X/graphql</code>
+                            </div>
+                            <div class="endpoint-banner-item">
+                                <span class="endpoint-label">Object:</span>
+                                <code id="graphql-endpoint-object">-</code>
+                            </div>
+                            <div class="endpoint-banner-item">
+                                <span class="endpoint-label">Size:</span>
+                                <code id="graphql-body-size">0 bytes</code>
+                            </div>
+                            <div class="endpoint-banner-item">
+                                <span class="endpoint-label">Method:</span>
+                                <code>POST</code>
+                            </div>
+                        </div>
+
+                        <!-- Split Container: Query (left) + Variables/Results (right split) -->
+                        <div class="graphql-split-container">
+                            <!-- Left Side: Query Editor -->
+                            <div class="graphql-query-section">
+                                <div class="section-header">
+                                    <span class="section-title">Query</span>
+                                    <div class="section-actions">
+                                        <button id="graphql-format-query" class="action-btn" type="button" title="Format (⌘B)">
+                                            <span class="action-icon">{ }</span>
+                                            <span class="action-label">Format</span>
+                                        </button>
+                                        <button id="graphql-copy-query" class="action-btn" type="button" title="Copy">
+                                            <span class="action-icon">📋</span>
+                                            <span class="action-label">Copy</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <textarea id="graphql-query" placeholder='query {
+  uiapi {
+    query {
+      Account {
+        edges {
+          node {
+            Id
+            Name { value }
+          }
+        }
+      }
+    }
+  }
+}' aria-label="GraphQL query"></textarea>
+                            </div>
+
+                            <!-- Vertical Splitter -->
+                            <div class="graphql-splitter" id="graphql-splitter" title="Drag to resize"></div>
+
+                            <!-- Right Side: Variables (top) + Results (bottom) -->
+                            <div class="graphql-right-panel">
+                                <!-- Variables Section -->
+                                <div class="graphql-variables-section">
+                                    <div class="section-header">
+                                        <span class="section-title">Variables</span>
+                                        <div class="section-actions">
+                                            <button id="graphql-format-vars" class="action-btn" type="button" title="Format JSON (⌘B)">
+                                                <span class="action-icon">{ }</span>
+                                                <span class="action-label">Format</span>
+                                            </button>
+                                            <button id="graphql-copy-vars" class="action-btn" type="button" title="Copy">
+                                                <span class="action-icon">📋</span>
+                                                <span class="action-label">Copy</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <textarea id="graphql-variables" placeholder='{
+  "limit": 10,
+  "offset": 0
+}' aria-label="GraphQL variables (JSON)"></textarea>
+                                </div>
+
+                                <!-- Horizontal Splitter -->
+                                <div class="graphql-splitter-h" id="graphql-splitter-h" title="Drag to resize"></div>
+
+                                <!-- Results Section -->
+                                <div class="graphql-results-section">
+                                    <div class="section-header">
+                                        <span class="section-title">Response</span>
+                                        <div class="section-actions">
+                                            <button id="graphql-copy-results" class="action-btn" type="button" title="Copy Results">
+                                                <span class="action-icon">📋</span>
+                                                <span class="action-label">Copy</span>
+                                            </button>
+                                            <button id="graphql-expand-results" class="action-btn" type="button" title="Toggle Expand">
+                                                <span class="action-icon">⊞</span>
+                                                <span class="action-label">Expand</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div id="graphql-results-container" class="results-container">
+                                        <pre id="graphql-results" class="results-pre"><span class="placeholder-note">Run a query to see results</span></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="graphql-builder-actions">
+                            <button id="graphql-run" class="btn btn-primary" type="button">▶ Run Query</button>
+                            <button id="graphql-clear" class="btn btn-secondary" type="button">Clear Results</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 3: Results -->
+            <div id="graphql-screen-results" class="graphql-screen hidden">
+                <div class="graphql-results-header">
+                    <div class="results-title">
+                        <button id="graphql-back-to-builder" class="icon-btn" type="button" title="Back to builder">←</button>
+                        <h2>Results: <span id="graphql-results-object">-</span></h2>
+                    </div>
+                    <div class="results-controls">
+                        <button id="graphql-results-clear" class="icon-btn" type="button" title="Clear results">🗑</button>
+                    </div>
+                </div>
+
+                <div class="graphql-pageinfo" id="graphql-pageinfo" aria-live="polite">
+                    <div id="graphql-pageinfo-body">No page info</div>
+                    <div class="graphql-pageinfo-actions">
+                        <button id="graphql-pageinfo-apply" class="btn-chip btn-sm" type="button" title="Use endCursor as After" disabled>Use endCursor</button>
+                        <button id="graphql-pageinfo-clear" class="btn-chip btn-sm" type="button" title="Clear cursor">Clear cursor</button>
+                    </div>
+                </div>
+
+                <div id="graphql-results-container" class="graphql-results-container">
+                    <div class="logs-container" id="graphql-results">
+                        <div class="placeholder-note">Run a GraphQL query to see results.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden: Schema search & editor (advanced) -->
+            <div id="graphql-schema-results" class="hidden" aria-live="polite"></div>
+            <div id="graphql-editor" class="hidden" aria-label="GraphQL editor"></div>
         </div>
         <div id="tab-data" class="tab-pane" data-tab="data" hidden>
             <div class="logs-container">
@@ -355,7 +592,7 @@ File: `popup.html` (replace body content with this)
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">Publish Platform Event</h3>
-                <button id="pe-modal-close" class="icon-btn modal-close" aria-label="Close modal" title="Close">×</button>
+                <button id="pe-modal-close" class="icon-btn modal-close" aria-label="Close modal" title="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="modal-event-info">
@@ -397,6 +634,7 @@ File: `popup.html` (replace body content with this)
     </footer>
 </div>
 
+<!-- Load core scripts for popup functionality -->
 <script src="utils.js"></script>
 <script src="platform_helper.js"></script>
 <script src="lms_helper.js"></script>
@@ -404,6 +642,9 @@ File: `popup.html` (replace body content with this)
 <script src="soql_helper.js"></script>
 <script src="scripts/soql/soql_guidance_engine.js"></script>
 <script src="scripts/soql/soql_guidance.js"></script>
+<script src="graphql_helper.js"></script>
+<script src="settings_helper.js"></script>
 <script type="module" src="popup.js"></script>
 </body>
 </html>
+

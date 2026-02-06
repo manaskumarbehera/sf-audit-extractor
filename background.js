@@ -129,7 +129,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, pinned: next, windowId: platformWindowId };
             }
             if (is('APP_POP_GET')) {
-                const popped = !!appWindowId;
+                let popped = !!appWindowId;
+                if (!popped) {
+                    try {
+                        const { appPoppedOut } = await chrome.storage.local.get({ appPoppedOut: false });
+                        if (appPoppedOut) {
+                            await openAppWindow();
+                            popped = !!appWindowId;
+                        }
+                    } catch {}
+                }
                 return { success: true, popped, windowId: appWindowId };
             }
             if (is('APP_POP_SET')) {
@@ -287,11 +296,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, totalSize: result.totalSize, records: result.records, done: true };
             }
 
-            if (is('PUBLISH_PLATFORM_EVENT')) {
-                const eventApiName = String(msg?.eventApiName || '').trim();
-                if (!eventApiName) return { success: false, error: 'Missing event API name' };
-                const payload = msg?.payload;
-                if (!payload || typeof payload !== 'object') return { success: false, error: 'Invalid payload' };
+            if (is('RUN_GRAPHQL')) {
                 const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 const instanceUrl = normalizeApiBase(rawUrl);
                 if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
@@ -300,9 +305,45 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     const sess = await getSalesforceSession(instanceUrl);
                     sessionId = sess.sessionId || null;
                 }
-                if (!sessionId) return { success: false, error: 'Salesforce session not found.' };
-                const result = await publishPlatformEvent(instanceUrl, sessionId, eventApiName, payload);
+                const accessToken = msg?.accessToken || null;
+                if (!sessionId && !accessToken) return { success: false, error: 'Salesforce session not found.' };
+                const query = String(msg?.query || '').trim();
+                if (!query) return { success: false, error: 'Empty query' };
+                const variables = msg?.variables && typeof msg.variables === 'object' ? msg.variables : undefined;
+                const apiVersion = msg?.apiVersion ? String(msg.apiVersion) : null;
+                const result = await runGraphql(instanceUrl, sessionId, query, variables, { accessToken, apiVersion });
                 return result;
+            }
+
+            if (is('PUBLISH_PLATFORM_EVENT')) {
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
+                if (!sessionId) return { success: false, error: 'Salesforce session not found. Log in and retry.' };
+                const payload = msg?.payload && typeof msg.payload === 'object' ? msg.payload : {};
+                const eventApiName = msg?.eventApiName || msg?.eventName || '';
+                if (!eventApiName) return { success: false, error: 'Event API name required.' };
+                return await publishPlatformEvent(instanceUrl, sessionId, eventApiName, payload);
+            }
+
+            if (is('GRAPHQL_INTROSPECT')) {
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+                let sessionId = msg?.sessionId || null;
+                if (!sessionId) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                }
+                const accessToken = msg?.accessToken || null;
+                if (!sessionId && !accessToken) return { success: false, error: 'Salesforce session not found.' };
+                const apiVersion = msg?.apiVersion ? String(msg.apiVersion) : null;
+                return await runGraphqlIntrospection(instanceUrl, { sessionId, accessToken, apiVersion });
             }
 
             return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL'] };
@@ -813,6 +854,54 @@ async function runSoql(instanceUrl, sessionId, query, limit, useTooling = false)
     return { totalSize: records.length, records };
 }
 
+async function runGraphql(instanceUrl, sessionId, query, variables, opts = {}) {
+    const base = String(instanceUrl || '').replace(/\/+$/, '');
+    if (!base) throw new Error('Invalid instance URL');
+    const v = opts.apiVersion ? String(opts.apiVersion).replace(/^v/i, 'v') : await getApiVersion();
+    const url = `${base}/services/data/${v}/graphql`;
+    const token = opts.accessToken || sessionId;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ query, variables }),
+        credentials: 'omit'
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+    // For introspection, check if we got the schema even if there are warnings
+    const hasSchema = data?.data?.__schema;
+
+    // Fail only if HTTP error AND (no data OR it's not an introspection with schema)
+    if (!res.ok) {
+        const errMsg = data?.errors?.map?.((e) => e.message).join('; ') || res.statusText || 'GraphQL failed';
+        // But if we got schema data, return success anyway (some APIs return 200 with errors field)
+        if (hasSchema) {
+            return { success: true, data: data?.data };
+        }
+        return { success: false, error: errMsg, data };
+    }
+
+    // HTTP 200 - consider it success if we have data (even with warnings in errors array)
+    if (data?.data) {
+        return { success: true, data: data?.data };
+    }
+
+    // HTTP 200 but no data - this is a real error
+    const errMsg = data?.errors?.map?.((e) => e.message).join('; ') || 'GraphQL failed';
+    return { success: false, error: errMsg, data };
+}
+
+async function runGraphqlIntrospection(instanceUrl, { sessionId, accessToken, apiVersion } = {}) {
+    const introspectionQuery = `query IntrospectionQuery {\n  __schema {\n    queryType { name }\n    mutationType { name }\n    subscriptionType { name }\n    types {\n      kind\n      name\n      description\n      fields(includeDeprecated: true) {\n        name\n        description\n        args { name description type { kind name ofType { kind name ofType { kind name } } } defaultValue }\n        type { kind name ofType { kind name ofType { kind name } } }\n        isDeprecated\n        deprecationReason\n      }\n      inputFields { name description type { kind name ofType { kind name ofType { kind name } } } defaultValue }\n      interfaces { kind name ofType { kind name ofType { kind name } } }\n      enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason }\n      possibleTypes { kind name ofType { kind name ofType { kind name } } }\n    }\n    directives { name description locations args { name description type { kind name ofType { kind name ofType { kind name } } } defaultValue } }\n  }\n}`;
+    return await runGraphql(instanceUrl, sessionId, introspectionQuery, undefined, { accessToken, apiVersion });
+}
+
 async function publishPlatformEvent(instanceUrl, sessionId, eventApiName, payload) {
     const base = String(instanceUrl || '').replace(/\/+$/, '');
     if (!base) throw new Error('Invalid instance URL');
@@ -852,4 +941,3 @@ async function publishPlatformEvent(instanceUrl, sessionId, eventApiName, payloa
         response: responseData
     };
 }
-

@@ -223,11 +223,21 @@
     if (!res.ok) {
       // Try to get response body for better error info
       let errorDetail = '';
+      let parsedMsg = '';
       try {
         const errorBody = await res.text();
         errorDetail = errorBody ? ` - ${errorBody.substring(0, 200)}` : '';
+        try {
+          const parsed = JSON.parse(errorBody);
+          const first = Array.isArray(parsed) ? parsed[0] : null;
+          if (first && typeof first.error === 'string') parsedMsg = first.error;
+        } catch {}
       } catch {}
-      throw new Error(`Handshake failed: ${res.status} ${res.statusText}${errorDetail}`);
+      state.cometdState = 'disconnected';
+      updateCometdStatus(false, 'Handshake failed');
+      const msg = parsedMsg || `${res.status} ${res.statusText}${errorDetail}`;
+      appendPeLog(`Handshake failed: ${msg}`, null, 'error');
+      throw new Error(`Handshake failed: ${msg}`);
     }
     const arr = await res.json();
     const m = Array.isArray(arr) ? arr[0] : null;
@@ -354,6 +364,13 @@
       btn.setAttribute('title', subscribed ? 'Unsubscribe' : 'Subscribe');
       btn.innerHTML = subscribed ? Utils.svgMinus() : Utils.svgPlus();
     }
+    const triggerBtn = itemEl.querySelector('.pe-trigger-btn');
+    if (triggerBtn) {
+      triggerBtn.disabled = !subscribed;
+      triggerBtn.setAttribute('aria-disabled', subscribed ? 'false' : 'true');
+      triggerBtn.setAttribute('title', subscribed ? 'Publish Event' : 'Subscribe to enable publishing');
+      triggerBtn.setAttribute('aria-label', subscribed ? 'Publish Event' : 'Subscribe to enable publishing');
+    }
   }
 
   async function loadPlatformEventsList(force = false) {
@@ -469,11 +486,13 @@
       const btnClass = isSub ? 'btn btn-secondary btn-sm icon-btn pe-toggle' : 'btn btn-primary btn-sm icon-btn pe-toggle';
       const btnLabel = isSub ? 'Unsubscribe' : 'Subscribe';
       const icon = isSub ? Utils.svgMinus() : Utils.svgPlus();
+      const publishTitle = isSub ? 'Publish Event' : 'Subscribe to enable publishing';
+      const publishDisabledAttr = isSub ? '' : ' disabled aria-disabled="true"';
       return `
         <div class="list-item${isSub ? ' subscribed' : ''}" data-event-api-name="${Utils.escapeHtml(api)}">
           <div class="item-actions leading">
             <button class="${btnClass}" aria-label="${btnLabel}" title="${btnLabel}">${icon}</button>
-            <button class="pe-trigger-btn" aria-label="Publish Event" title="Publish Event">
+            <button class="pe-trigger-btn" aria-label="${publishTitle}" title="${publishTitle}"${publishDisabledAttr}>
               <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
             <span class="listening-indicator" aria-label="Listening" title="Listening" role="img">
@@ -855,6 +874,11 @@
 
         // Handle trigger/publish button click
         if (triggerBtn) {
+          if (!state.peSubscriptions.has(channel)) {
+            appendPeLog(`Subscribe to ${channel} before publishing`);
+            try { Utils.showToast && Utils.showToast('Subscribe to the event before publishing', 'warning'); } catch {}
+            return;
+          }
           openPublishModal(apiName);
           return;
         }
@@ -977,4 +1001,15 @@
         state.cometdBaseUrl = getCometdBase();
     } catch {}
   };
+  // test hooks
+  try {
+    window.__PlatformTestHooks = {
+      cometdHandshake,
+      setOpts: (o) => { opts = Object.assign(opts, o || {}); },
+      setState: (patch) => { Object.assign(state, patch || {}); },
+      setDomForTests: (d) => { dom = d || {}; },
+      getState: () => state,
+    };
+  } catch {}
+
 })();
