@@ -88,6 +88,114 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })();
         return true;
     }
+
+    // Handle GET_ORG_ID request from content script for favicon lookup
+    if (msg && msg.action === 'GET_ORG_ID') {
+        (async () => {
+            try {
+                // Get session info to make API call
+                const tabId = sender.tab?.id;
+                if (!tabId) {
+                    sendResponse({ success: false, error: 'No tab ID' });
+                    return;
+                }
+
+                // Try to get session from cookies
+                const url = sender.tab?.url || sender.url;
+                if (!url) {
+                    sendResponse({ success: false, error: 'No URL' });
+                    return;
+                }
+
+                const hostname = new URL(url).hostname;
+
+                // Try to get the oid cookie directly first (most reliable)
+                try {
+                    const oidCookies = await chrome.cookies.getAll({ name: 'oid' });
+                    // Find oid cookie that matches the domain
+                    for (const c of oidCookies) {
+                        if (hostname.includes(c.domain.replace(/^\./, '')) || c.domain.includes(hostname.split('.')[0])) {
+                            if (c.value && (c.value.length === 15 || c.value.length === 18)) {
+                                console.log('[TrackForcePro] Got org ID from oid cookie in background');
+                                sendResponse({ success: true, orgId: c.value });
+                                return;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not get oid cookie:', e);
+                }
+
+                // Fallback: Try to get session ID and make API call
+                // Get cookies from multiple possible domains
+                const possibleDomains = [
+                    hostname,
+                    hostname.replace('.lightning.force.com', '.my.salesforce.com'),
+                    hostname.replace('.force.com', '.salesforce.com')
+                ];
+
+                let sidCookie = null;
+                for (const domain of possibleDomains) {
+                    try {
+                        const cookies = await chrome.cookies.getAll({ domain });
+                        sidCookie = cookies.find(c => c.name === 'sid');
+                        if (sidCookie) break;
+                    } catch (e) {}
+                }
+
+                if (!sidCookie) {
+                    // Try getting sid from any salesforce domain
+                    try {
+                        const allSfCookies = await chrome.cookies.getAll({ name: 'sid' });
+                        sidCookie = allSfCookies.find(c =>
+                            c.domain.includes('salesforce.com') || c.domain.includes('force.com')
+                        );
+                    } catch (e) {}
+                }
+
+                if (!sidCookie) {
+                    sendResponse({ success: false, error: 'No session' });
+                    return;
+                }
+
+                // Build the correct API URL - need to use my.salesforce.com domain
+                let apiHostname = hostname;
+                if (hostname.includes('.lightning.force.com')) {
+                    apiHostname = hostname.replace('.lightning.force.com', '.my.salesforce.com');
+                } else if (hostname.includes('.visual.force.com')) {
+                    apiHostname = hostname.replace('.visual.force.com', '.my.salesforce.com');
+                } else if (hostname.includes('.vf.force.com')) {
+                    apiHostname = hostname.replace('.vf.force.com', '.my.salesforce.com');
+                }
+
+                const instanceUrl = `https://${apiHostname}`;
+                const v = await getApiVersion();
+                const soql = 'SELECT+Id+FROM+Organization+LIMIT+1';
+                const apiUrl = `${instanceUrl}/services/data/${v}/query?q=${soql}`;
+
+                const res = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${sidCookie.value}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!res.ok) {
+                    sendResponse({ success: false, error: `API ${res.status}` });
+                    return;
+                }
+
+                const data = await res.json();
+                const orgId = data?.records?.[0]?.Id || null;
+                sendResponse({ success: true, orgId });
+            } catch (err) {
+                console.error('background GET_ORG_ID error', err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

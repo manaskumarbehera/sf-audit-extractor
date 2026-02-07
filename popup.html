@@ -556,10 +556,161 @@ File: `popup.html` (replace body content with this)
             <div id="graphql-editor" class="hidden" aria-label="GraphQL editor"></div>
         </div>
         <div id="tab-data" class="tab-pane" data-tab="data" hidden>
-            <div class="logs-container">
-                <div class="placeholder">
-                    <p>Data Explorer</p>
-                    <p class="placeholder-note">Coming soon. Explore SObjects and fields.</p>
+            <!-- Sub-tabs navigation -->
+            <div class="data-explorer-header">
+                <nav class="sub-tabs" role="tablist" aria-label="Data Explorer sections">
+                    <button class="sub-tab-button active" role="tab" aria-selected="true" data-subtab="sandbox-manager">Sandbox & Favicon</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="user-manager">User Manager</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="current-record">Current Record</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="record-search">Record Search</button>
+                </nav>
+            </div>
+
+            <!-- Sub-tab: Sandbox & Favicon Manager -->
+            <div id="subtab-sandbox-manager" class="sub-tab-content active" aria-labelledby="sandbox-manager">
+                <div class="sandbox-manager-container side-by-side">
+                    <div class="section-card">
+                        <h3 class="section-card-title">🏢 Organization Info</h3>
+                        <div id="org-info-container" class="details-list">
+                            <div class="spinner">Loading organization info...</div>
+                        </div>
+                    </div>
+                    <div class="section-card">
+                        <h3 class="section-card-title">🎨 Favicon Customization</h3>
+                        <p class="section-description">Customize the browser tab favicon to easily identify this Salesforce org/sandbox.</p>
+                        <div class="favicon-controls">
+                            <div class="favicon-preview-row">
+                                <label class="filter-label">Preview:</label>
+                                <div id="favicon-preview" class="favicon-preview">
+                                    <!-- Rendered dynamically by JavaScript -->
+                                </div>
+                            </div>
+                            <div class="favicon-color-row">
+                                <label class="filter-label" for="favicon-color">Badge Color:</label>
+                                <input type="color" id="favicon-color" value="#ff6b6b" aria-label="Favicon badge color" />
+                                <select id="favicon-preset-colors" aria-label="Preset colors">
+                                    <option value="">Presets...</option>
+                                    <option value="#ff6b6b">🔴 Red (Production)</option>
+                                    <option value="#51cf66">🟢 Green (Dev)</option>
+                                    <option value="#339af0">🔵 Blue (UAT)</option>
+                                    <option value="#fcc419">🟡 Yellow (QA)</option>
+                                    <option value="#9775fa">🟣 Purple (Staging)</option>
+                                    <option value="#ff922b">🟠 Orange (Hotfix)</option>
+                                </select>
+                            </div>
+                            <div class="favicon-label-row">
+                                <label class="filter-label" for="favicon-label">Badge Label:</label>
+                                <input type="text" id="favicon-label" maxlength="3" placeholder="DEV" aria-label="Favicon badge label" />
+                            </div>
+                            <div class="favicon-actions">
+                                <button id="favicon-apply" class="btn btn-primary btn-sm">Save & Apply</button>
+                                <button id="favicon-reset" class="btn btn-secondary btn-sm">Reset to Default</button>
+                            </div>
+                            <div id="favicon-status" class="update-status" hidden></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Saved Favicons List -->
+                <div class="section-card" style="margin-top: 16px;">
+                    <h3 class="section-card-title">📋 Saved Org Favicons</h3>
+                    <p class="section-description">Favicons are automatically applied when you visit a saved org.</p>
+                    <div id="saved-favicons-list" class="saved-favicons-list">
+                        <div class="placeholder-note">No saved favicons yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-tab: User Manager -->
+            <div id="subtab-user-manager" class="sub-tab-content" hidden aria-labelledby="user-manager">
+                <div class="user-manager-layout">
+                    <!-- Left Panel: Current User + Search -->
+                    <div class="user-manager-left">
+                        <div class="section-card compact">
+                            <div class="section-header-row">
+                                <h3 class="section-card-title compact">👤 Current User</h3>
+                                <button id="refresh-user-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
+                            </div>
+                            <div id="user-details-container" class="details-list compact">
+                                <div class="spinner">Loading...</div>
+                            </div>
+                        </div>
+                        <div class="section-card compact user-search-section">
+                            <h3 class="section-card-title compact">🔍 Search & Select User</h3>
+                            <div class="user-search-row compact">
+                                <input type="text" id="user-search-input" placeholder="Type to search users..." aria-label="Search users" />
+                                <button id="user-search-btn" class="btn btn-primary btn-sm">🔍</button>
+                            </div>
+                            <div id="user-search-results" class="user-search-results compact">
+                                <div class="placeholder-note">Search by name, email, or username</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Right Panel: Update Settings -->
+                    <div class="user-manager-right">
+                        <div class="section-card compact user-update-section">
+                            <h3 class="section-card-title compact">⚙️ Update User Settings</h3>
+                            <div class="user-update-form compact">
+                                <div class="form-row compact inline">
+                                    <label class="filter-label" for="selected-user-display">User:</label>
+                                    <div class="input-with-action">
+                                        <input type="text" id="selected-user-display" readonly placeholder="Select a user from search" />
+                                        <input type="hidden" id="selected-user-id" />
+                                        <button id="user-clear-selection" class="icon-btn btn-sm" disabled title="Clear">✕</button>
+                                    </div>
+                                </div>
+                                <div class="form-row compact">
+                                    <label class="filter-label" for="user-profile-select">Profile:</label>
+                                    <select id="user-profile-select" disabled aria-label="Select profile">
+                                        <option value="">-- Select Profile --</option>
+                                    </select>
+                                </div>
+                                <div class="form-row compact">
+                                    <label class="filter-label" for="user-role-select">Role:</label>
+                                    <select id="user-role-select" disabled aria-label="Select role">
+                                        <option value="">-- No Role --</option>
+                                    </select>
+                                </div>
+                                <div class="form-row compact">
+                                    <label class="filter-label" for="user-language-select">Language:</label>
+                                    <select id="user-language-select" disabled aria-label="Select language">
+                                        <option value="">-- Select Language --</option>
+                                    </select>
+                                </div>
+                                <div class="user-update-actions compact">
+                                    <button id="user-update-btn" class="btn btn-primary" disabled>💾 Update User</button>
+                                </div>
+                                <div id="user-update-status" class="update-status" hidden></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-tab: Current Record -->
+            <div id="subtab-current-record" class="sub-tab-content" hidden aria-labelledby="current-record">
+                <div class="section-card">
+                    <h3 class="section-card-title">📄 Current Page Record</h3>
+                    <div class="record-actions-row">
+                        <button id="refresh-record-btn" class="icon-btn btn-sm" aria-label="Refresh record info" title="Refresh">⟲</button>
+                    </div>
+                    <div id="current-record-info" class="details-list">
+                        <div class="placeholder-note">Navigate to a record page and click refresh to detect the record.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-tab: Record Search -->
+            <div id="subtab-record-search" class="sub-tab-content" hidden aria-labelledby="record-search">
+                <div class="section-card">
+                    <h3 class="section-card-title">🔎 Search by Record ID</h3>
+                    <p class="section-description">Enter any Salesforce Record ID (15 or 18 characters) to identify its object type and basic details.</p>
+                    <div class="record-search-row">
+                        <input type="text" id="record-search-input" placeholder="Enter Record ID (e.g., 001xx000003DGbYAAW)" aria-label="Record ID" />
+                        <button id="record-search-btn" class="btn btn-primary btn-sm">Identify</button>
+                    </div>
+                    <div id="search-results-container" class="details-list">
+                        <div class="placeholder-note">Enter a Record ID to identify it</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -572,18 +723,169 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
         <div id="tab-help" class="tab-pane" data-tab="help" hidden>
-            <div class="logs-container">
-                <div class="placeholder">
-                    <p>Help</p>
-                    <p class="placeholder-note">Find docs, tips, and troubleshooting here.</p>
+            <div class="help-container">
+                <div class="section-card">
+                    <h3 class="section-card-title">📚 Documentation</h3>
+                    <p class="section-description">Access comprehensive guides and reference materials on GitHub.</p>
+                    <div class="help-links">
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/blob/main/DOCUMENTATION/guides/USER_GUIDE.md" target="_blank" rel="noopener noreferrer" class="help-link-card">
+                            <span class="help-link-icon">📘</span>
+                            <div class="help-link-content">
+                                <span class="help-link-title">User Guide</span>
+                                <span class="help-link-desc">Complete manual for end-users</span>
+                            </div>
+                            <span class="help-link-arrow">→</span>
+                        </a>
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/blob/main/DOCUMENTATION/guides/DEVELOPER_GUIDE.md" target="_blank" rel="noopener noreferrer" class="help-link-card">
+                            <span class="help-link-icon">🛠️</span>
+                            <div class="help-link-content">
+                                <span class="help-link-title">Developer Guide</span>
+                                <span class="help-link-desc">Setup, architecture, and contribution guidelines</span>
+                            </div>
+                            <span class="help-link-arrow">→</span>
+                        </a>
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/blob/main/DOCUMENTATION/reference/QUICK_REFERENCE.md" target="_blank" rel="noopener noreferrer" class="help-link-card">
+                            <span class="help-link-icon">⚡</span>
+                            <div class="help-link-content">
+                                <span class="help-link-title">Quick Reference</span>
+                                <span class="help-link-desc">Keyboard shortcuts, status messages, and tips</span>
+                            </div>
+                            <span class="help-link-arrow">→</span>
+                        </a>
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/tree/main/DOCUMENTATION/architecture" target="_blank" rel="noopener noreferrer" class="help-link-card">
+                            <span class="help-link-icon">🏗️</span>
+                            <div class="help-link-content">
+                                <span class="help-link-title">Architecture Docs</span>
+                                <span class="help-link-desc">Technical implementation details</span>
+                            </div>
+                            <span class="help-link-arrow">→</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-card-title">💡 Quick Tips</h3>
+                    <div class="tips-list">
+                        <div class="tip-item">
+                            <span class="tip-icon">🔄</span>
+                            <span class="tip-text"><strong>Drag tabs</strong> to reorder them based on your workflow preferences.</span>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-icon">📌</span>
+                            <span class="tip-text"><strong>Pop out</strong> the extension using the window icon for a standalone experience.</span>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-icon">🎨</span>
+                            <span class="tip-text">Use <strong>Favicon Customization</strong> to visually distinguish between orgs/sandboxes.</span>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-icon">⚡</span>
+                            <span class="tip-text">Enable <strong>Guided Builder</strong> in SOQL/GraphQL tabs for assisted query creation.</span>
+                        </div>
+                        <div class="tip-item">
+                            <span class="tip-icon">🔍</span>
+                            <span class="tip-text">Paste any <strong>Salesforce ID</strong> in Record Search to identify its object type.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-card-title">🐛 Troubleshooting</h3>
+                    <details class="troubleshoot-item">
+                        <summary>"Not connected" status</summary>
+                        <p>Ensure you are on a Salesforce page and logged in. The extension requires an active Salesforce session to function.</p>
+                    </details>
+                    <details class="troubleshoot-item">
+                        <summary>Queries returning errors</summary>
+                        <p>Check your SOQL/GraphQL syntax. Ensure you have API access to the objects and fields you're querying. Some objects require specific permissions.</p>
+                    </details>
+                    <details class="troubleshoot-item">
+                        <summary>Extension not loading</summary>
+                        <p>Try refreshing the Salesforce page. If the issue persists, reload the extension from chrome://extensions.</p>
+                    </details>
+                    <details class="troubleshoot-item">
+                        <summary>Missing objects or fields</summary>
+                        <p>Click the refresh button to reload the schema. Some custom objects may require specific permissions or API access.</p>
+                    </details>
                 </div>
             </div>
         </div>
         <div id="tab-about" class="tab-pane" data-tab="about" hidden>
-            <div class="logs-container">
-                <div class="placeholder">
-                    <p>About</p>
-                    <p class="placeholder-note">Salesforce Audit Trail Extractor — version information and credits.</p>
+            <div class="about-container">
+                <div class="about-header">
+                    <div class="about-logo">
+                        <img src="icons/icon128.png" alt="TrackForcePro Logo" />
+                    </div>
+                    <div class="about-title-section">
+                        <h2 class="about-title">TrackForcePro</h2>
+                        <span class="about-version">Version 1.0.0</span>
+                        <p class="about-tagline">Your Salesforce Development & Admin Companion</p>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-card-title">🚀 About This Extension</h3>
+                    <p class="about-description">
+                        TrackForcePro is a powerful Chrome extension designed for Salesforce Administrators and Developers.
+                        It streamlines the process of auditing fields, building GraphQL/SOQL queries, managing users,
+                        and inspecting object schemas directly from your browser.
+                    </p>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-card-title">🔗 Links</h3>
+                    <div class="about-links">
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor" target="_blank" rel="noopener noreferrer" class="about-link-card">
+                            <span class="about-link-icon">📦</span>
+                            <div class="about-link-content">
+                                <span class="about-link-title">GitHub Repository</span>
+                                <span class="about-link-url">github.com/manaskumarbehera/sf-audit-extractor</span>
+                            </div>
+                            <span class="about-link-arrow">→</span>
+                        </a>
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/tree/main/DOCUMENTATION" target="_blank" rel="noopener noreferrer" class="about-link-card">
+                            <span class="about-link-icon">📚</span>
+                            <div class="about-link-content">
+                                <span class="about-link-title">Documentation</span>
+                                <span class="about-link-url">View guides, architecture docs & more</span>
+                            </div>
+                            <span class="about-link-arrow">→</span>
+                        </a>
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/issues" target="_blank" rel="noopener noreferrer" class="about-link-card">
+                            <span class="about-link-icon">🐛</span>
+                            <div class="about-link-content">
+                                <span class="about-link-title">Report Issues</span>
+                                <span class="about-link-url">Found a bug? Let us know!</span>
+                            </div>
+                            <span class="about-link-arrow">→</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-card-title">👨‍💻 Developer</h3>
+                    <div class="about-developer">
+                        <div class="developer-info">
+                            <span class="developer-name">Manas Behera</span>
+                            <span class="developer-role">Salesforce Developer & Architect</span>
+                        </div>
+                        <a href="https://www.linkedin.com/in/manas-behera-68607547/" target="_blank" rel="noopener noreferrer" class="linkedin-link">
+                            <svg class="linkedin-icon" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                            </svg>
+                            <span>Connect on LinkedIn</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h3 class="section-card-title">📜 License & Credits</h3>
+                    <p class="about-license">
+                        This project is open source. Contributions, issues, and feature requests are welcome!
+                    </p>
+                    <p class="about-copyright">
+                        © 2024-2026 Manas Behera. All rights reserved.
+                    </p>
                 </div>
             </div>
         </div>
@@ -646,8 +948,11 @@ File: `popup.html` (replace body content with this)
 <script src="scripts/soql/soql_guidance_engine.js"></script>
 <script src="scripts/soql/soql_guidance.js"></script>
 <script src="graphql_helper.js"></script>
+<script src="data_explorer_helper.js"></script>
 <script src="settings_helper.js"></script>
 <script type="module" src="popup.js"></script>
 </body>
 </html>
+
+
 

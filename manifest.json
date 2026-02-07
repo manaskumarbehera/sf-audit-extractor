@@ -22,7 +22,8 @@
     "tabs",
     "cookies",
     "storage",
-    "declarativeContent"
+    "declarativeContent",
+    "scripting"
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
