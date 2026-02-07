@@ -21,14 +21,21 @@ sf-audit-extractor/
 ├── popup.html             # The main UI of the extension
 ├── popup.js               # Main UI logic/orchestration
 ├── background.js          # Service worker (handles network requests)
-├── content.js             # Content script (interactions with page DOM)
+├── content.js             # Content script (interactions with page DOM, favicon injection)
 ├── *_helper.js            # Modularized logic (features split into specific files)
-│   ├── graphql_helper.js  # GraphQL Builder logic
-│   ├── soql_helper.js     # SOQL Builder logic
-│   ├── audit_helper.js    # Field extraction logic
-│   └── url_helper.js      # URL parsing utilities
+│   ├── graphql_helper.js      # GraphQL Builder logic
+│   ├── soql_helper.js         # SOQL Builder logic
+│   ├── audit_helper.js        # Field extraction logic
+│   ├── data_explorer_helper.js # Data Explorer (Favicon, User, Record tools)
+│   ├── platform_helper.js     # Salesforce API abstraction
+│   ├── lms_helper.js          # Lightning Message Service
+│   └── url_helper.js          # URL parsing utilities
 ├── rules/                 # Configuration JSONs for suggestions/guidance
-├── tests/                 # Jest/Mocha test files
+├── tests/                 # Jest test files
+│   ├── data_explorer.test.js  # Tests for Favicon, User Manager, Record tools
+│   ├── graphql_builder.test.js
+│   ├── soql_builder.test.js
+│   └── ...
 └── DOCUMENTATION/         # This documentation
 ```
 
@@ -48,8 +55,16 @@ The UI state is generally ephemeral (lives as long as the popup is open), but so
 
 ### Modular Helpers
 To avoid a massive `popup.js`, logic is separated:
-- **`platform_helper.js`**: Abstractions for Salesforce API calls.
+- **`platform_helper.js`**: Abstractions for Salesforce API calls (session, SOQL queries, REST API).
 - **`graphql_helper.js`**: Handles the UI rendering and query generation for the GraphQL tab.
+- **`soql_helper.js`**: Handles the SOQL Builder UI and query execution.
+- **`data_explorer_helper.js`**: Manages Data Explorer sub-tabs:
+  - Sandbox & Favicon Manager (org info, custom favicons)
+  - User Manager (current user, search, profile/role/language updates)
+  - Current Record (auto-detection from URL)
+  - Record Search (ID lookup)
+- **`lms_helper.js`**: Lightning Message Service monitoring and publishing.
+- **`url_helper.js`**: URL parsing and Salesforce URL detection utilities.
 
 ---
 

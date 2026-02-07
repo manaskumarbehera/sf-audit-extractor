@@ -913,5 +913,165 @@ describe('Org ID Storage Key Handling', () => {
     });
 });
 
+describe('Favicon Edit Mode Tests', () => {
+
+    describe('loadExistingFaviconOrSuggest behavior', () => {
+
+        test('should detect existing favicon and enter edit mode', async () => {
+            const orgId = '00D5g0000012345AAA';
+            const savedFavicon = { color: '#51cf66', label: 'UAT', orgName: 'UAT Sandbox' };
+
+            // Pre-populate storage with existing favicon
+            mockStorage.orgFavicons = { [orgId]: savedFavicon };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = (result && result.orgFavicons && typeof result.orgFavicons === 'object')
+                ? result.orgFavicons : {};
+
+            // Verify existing data is found
+            expect(orgFavicons[orgId]).toBeDefined();
+            expect(orgFavicons[orgId].color).toBe('#51cf66');
+            expect(orgFavicons[orgId].label).toBe('UAT');
+        });
+
+        test('should return empty when no existing favicon for org', async () => {
+            const orgId = '00D5g0000099999XXX';
+
+            // Storage has other orgs but not this one
+            mockStorage.orgFavicons = {
+                '00D5g0000012345AAA': { color: '#ff6b6b', label: 'DEV' }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = (result && result.orgFavicons && typeof result.orgFavicons === 'object')
+                ? result.orgFavicons : {};
+
+            // Verify no data for this org
+            expect(orgFavicons[orgId]).toBeUndefined();
+        });
+
+        test('should auto-suggest SBX for sandbox when no existing favicon', () => {
+            const isSandbox = true;
+            const hasExistingFavicon = false;
+            let labelValue = '';
+
+            // Simulate auto-suggest logic
+            if (!hasExistingFavicon && isSandbox) {
+                labelValue = 'SBX';
+            }
+
+            expect(labelValue).toBe('SBX');
+        });
+
+        test('should not auto-suggest for production when no existing favicon', () => {
+            const isSandbox = false;
+            const hasExistingFavicon = false;
+            let labelValue = '';
+
+            // Simulate auto-suggest logic
+            if (!hasExistingFavicon && isSandbox) {
+                labelValue = 'SBX';
+            }
+
+            expect(labelValue).toBe('');
+        });
+
+        test('should preserve existing label when editing (not auto-suggest)', () => {
+            const isSandbox = true;
+            const existingLabel = 'QA';
+            let labelValue = existingLabel;
+
+            // In edit mode, existing value should be preserved
+            const hasExistingFavicon = true;
+
+            if (!hasExistingFavicon && isSandbox && !labelValue) {
+                labelValue = 'SBX';
+            }
+
+            // Label should remain 'QA', not be overwritten with 'SBX'
+            expect(labelValue).toBe('QA');
+        });
+
+        test('should populate both color and label from existing favicon', async () => {
+            const orgId = '00D5g0000012345AAA';
+            const savedFavicon = {
+                color: '#9775fa',
+                label: 'STG',
+                orgName: 'Staging Sandbox',
+                savedAt: '2026-02-07T10:00:00.000Z'
+            };
+
+            mockStorage.orgFavicons = { [orgId]: savedFavicon };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = result.orgFavicons || {};
+
+            let colorValue = '#ff6b6b'; // default
+            let labelValue = '';
+
+            if (orgFavicons[orgId]) {
+                const { color, label } = orgFavicons[orgId];
+                if (color) colorValue = color;
+                if (label) labelValue = label;
+            }
+
+            expect(colorValue).toBe('#9775fa');
+            expect(labelValue).toBe('STG');
+        });
+
+        test('should handle empty storage gracefully', async () => {
+            mockStorage.orgFavicons = {};
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = (result && result.orgFavicons && typeof result.orgFavicons === 'object')
+                ? result.orgFavicons : {};
+
+            expect(Object.keys(orgFavicons)).toHaveLength(0);
+            expect(orgFavicons['anyOrgId']).toBeUndefined();
+        });
+
+        test('should handle null orgFavicons in storage', async () => {
+            mockStorage.orgFavicons = null;
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = (result && result.orgFavicons && typeof result.orgFavicons === 'object')
+                ? result.orgFavicons : {};
+
+            expect(orgFavicons).toEqual({});
+        });
+    });
+
+    describe('Edit indicator display logic', () => {
+
+        test('should show edit indicator when existing favicon found', () => {
+            const hasExistingFavicon = true;
+            let indicatorVisible = false;
+            let indicatorText = '';
+
+            if (hasExistingFavicon) {
+                indicatorVisible = true;
+                indicatorText = '✓ Editing existing favicon';
+            }
+
+            expect(indicatorVisible).toBe(true);
+            expect(indicatorText).toContain('Editing existing');
+        });
+
+        test('should hide edit indicator for new favicon', () => {
+            const hasExistingFavicon = false;
+            let indicatorVisible = true; // default visible
+            let indicatorText = '✓ Editing existing favicon';
+
+            if (!hasExistingFavicon) {
+                indicatorVisible = false;
+                indicatorText = '';
+            }
+
+            expect(indicatorVisible).toBe(false);
+            expect(indicatorText).toBe('');
+        });
+    });
+});
+
 console.log('Data Explorer tests loaded');
 

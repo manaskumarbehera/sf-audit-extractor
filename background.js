@@ -528,10 +528,36 @@ function isSalesforceUrl(url) {
 
 const cookies = {
     get: (details) => new Promise((resolve) => {
-        try { chrome.cookies.get(details, (c) => resolve(c || null)); } catch { resolve(null); }
+        try {
+            chrome.cookies.get(details, (c) => {
+                // Check for runtime errors (common in Chrome)
+                if (chrome.runtime.lastError) {
+                    console.warn('cookies.get error:', chrome.runtime.lastError.message);
+                    resolve(null);
+                    return;
+                }
+                resolve(c || null);
+            });
+        } catch (e) {
+            console.warn('cookies.get exception:', e);
+            resolve(null);
+        }
     }),
     getAll: (details) => new Promise((resolve) => {
-        try { chrome.cookies.getAll(details, (arr) => resolve(arr || [])); } catch { resolve([]); }
+        try {
+            chrome.cookies.getAll(details, (arr) => {
+                // Check for runtime errors (common in Chrome)
+                if (chrome.runtime.lastError) {
+                    console.warn('cookies.getAll error:', chrome.runtime.lastError.message);
+                    resolve([]);
+                    return;
+                }
+                resolve(arr || []);
+            });
+        } catch (e) {
+            console.warn('cookies.getAll exception:', e);
+            resolve([]);
+        }
     })
 };
 
@@ -583,7 +609,21 @@ async function getSalesforceSession(url) {
         return { success: true, isSalesforce: false, isLoggedIn: false, instanceUrl: instanceUrl || null, sessionId: null };
     }
 
+    // Try multiple URL formats for cookie retrieval (Chrome can be stricter)
     let sid = await cookies.get({ url: instanceUrl + '/', name: 'sid' });
+
+    // If not found, try without trailing slash
+    if (!sid) {
+        sid = await cookies.get({ url: instanceUrl, name: 'sid' });
+    }
+
+    // Try with explicit domain extraction for Chrome compatibility
+    if (!sid) {
+        try {
+            const urlObj = new URL(instanceUrl);
+            sid = await cookies.get({ url: instanceUrl, name: 'sid', domain: urlObj.hostname });
+        } catch {}
+    }
 
     let inspectedCandidates = [];
 

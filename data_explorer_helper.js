@@ -187,7 +187,14 @@ const DataExplorerHelper = {
             }
         } catch (error) {
             console.error('Error loading org info:', error);
-            container.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+            const errorDetails = error.message || String(error);
+            const isNotConnected = errorDetails.includes('Not connected') || errorDetails.includes('Missing session');
+            container.innerHTML = `<div class="error-message">
+                ${isNotConnected 
+                    ? '<div style="font-size: 24px; margin-bottom: 8px;">🔌</div><div style="font-weight: 600; margin-bottom: 4px;">Session Error</div><div style="font-size: 12px; color: #6c757d;">Please ensure you are logged into Salesforce in an active tab.</div>'
+                    : `Error: ${errorDetails}`
+                }
+            </div>`;
             // Still try to load saved favicons
             this.loadSavedFavicons();
         }
@@ -225,39 +232,56 @@ const DataExplorerHelper = {
         html += '</div>';
         container.innerHTML = html;
 
-        // Auto-suggest favicon label based on org type
+        // Check if this org already has saved favicon data - if so, load it (edit mode)
+        // Otherwise, auto-suggest based on org type
+        this.loadExistingFaviconOrSuggest(org.Id, isSandbox);
+    },
+
+    loadExistingFaviconOrSuggest: async function(orgId, isSandbox) {
         const labelInput = document.getElementById('favicon-label');
-        if (labelInput && !labelInput.value) {
-            if (isSandbox) {
-                labelInput.value = 'SBX';
-                // Update preview with suggested label
+        const colorInput = document.getElementById('favicon-color');
+        const editIndicator = document.getElementById('favicon-edit-indicator');
+
+        try {
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = (result && result.orgFavicons && typeof result.orgFavicons === 'object')
+                ? result.orgFavicons : {};
+
+            if (orgId && orgFavicons[orgId]) {
+                // Existing data found - populate form in edit mode
+                const { color, label } = orgFavicons[orgId];
+                if (colorInput && color) colorInput.value = color;
+                if (labelInput) labelInput.value = label || '';
+
+                // Show edit mode indicator
+                if (editIndicator) {
+                    editIndicator.innerHTML = '<span style="color:#2b8a3e;font-size:11px;">✓ Editing existing favicon</span>';
+                    editIndicator.style.display = 'block';
+                }
+
+                // Update preview with saved settings
                 this.updateFaviconPreview();
+                return;
             }
+        } catch (e) {
+            console.warn('Could not check existing favicon:', e);
+        }
+
+        // No existing data - auto-suggest based on org type
+        if (editIndicator) {
+            editIndicator.innerHTML = '';
+            editIndicator.style.display = 'none';
+        }
+
+        if (labelInput && !labelInput.value && isSandbox) {
+            labelInput.value = 'SBX';
+            this.updateFaviconPreview();
         }
     },
 
     initFaviconPreview: async function() {
-        // Load saved settings for current org if available
-        try {
-            const result = await chrome.storage.local.get('orgFavicons');
-            let orgFavicons = {};
-
-            if (result && result.orgFavicons && typeof result.orgFavicons === 'object') {
-                orgFavicons = result.orgFavicons;
-            }
-
-            if (this._currentOrgId && orgFavicons[this._currentOrgId]) {
-                const { color, label } = orgFavicons[this._currentOrgId];
-                const colorInput = document.getElementById('favicon-color');
-                const labelInput = document.getElementById('favicon-label');
-                if (colorInput && color) colorInput.value = color;
-                if (labelInput && label) labelInput.value = label;
-            }
-        } catch (e) {
-            console.warn('Could not load favicon settings:', e);
-        }
-
-        // Render initial preview
+        // Render initial preview based on current form values
+        // Note: loadExistingFaviconOrSuggest (called from renderOrgInfo) handles loading saved data
         const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
         const label = document.getElementById('favicon-label')?.value || '';
         this.renderFaviconPreview(color, label);

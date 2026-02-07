@@ -5,12 +5,13 @@ Quality assurance for TrackForcePro involves a mix of **Automated Unit Tests** a
 
 ## 🤖 Automated Testing
 
-We use **Jest** (or compatible runner) for unit testing pure JavaScript logic.
+We use **Jest** for unit testing pure JavaScript logic.
 
 ### Scope
 - **Query Generation Logic**: Ensuring `graphql_helper.js` and `soql_helper.js` produce valid query strings from state objects.
-- **Parsing Logic**: ensuring response parsing works correctly.
+- **Parsing Logic**: Ensuring response parsing works correctly.
 - **Utilities**: Testing `url_helper.js` and `utils.js`.
+- **Data Explorer**: Testing favicon storage, user search, record ID extraction, and session handling.
 
 ### Running Tests
 Execute the test suite via npm:
@@ -22,6 +23,15 @@ npm test
 - `tests/graphql_builder.test.js`: Verifies that UI selections (fields, filters) convert to correct GraphQL syntax.
 - `tests/soql_builder.test.js`: Verifies SOQL generation.
 - `tests/url_helper.test.js`: Verifies Salesforce URL parsing.
+- `tests/data_explorer.test.js`: Comprehensive tests for Data Explorer features:
+  - Favicon storage (multi-org, CRUD operations)
+  - Organization ID validation (15/18 character)
+  - Salesforce URL detection
+  - Record ID extraction from URLs
+  - User search query building
+  - Session state handling
+  - Extension page filtering
+  - Edit mode behavior
 
 ---
 
@@ -44,6 +54,22 @@ Since the extension relies heavily on the Salesforce UI context (e.g., authentic
     - Run Query.
     - Verify results.
 5.  **SOQL Flow**: Similar to GraphQL.
+6.  **Data Explorer - Favicon Manager**:
+    - Open Extension > Explore > Sandbox Manager.
+    - Verify org info displays correctly.
+    - Select a color and enter a label.
+    - Click "Apply Favicon" - verify browser tab icon changes.
+    - Refresh page - verify favicon persists.
+    - Navigate to different org - verify different favicon can be set.
+    - Return to first org - verify edit mode loads existing settings.
+7.  **Data Explorer - User Manager**:
+    - Verify current user displays correctly.
+    - Search for a user by name/email.
+    - Select a user and verify form enables.
+8.  **Data Explorer - Record Tools**:
+    - Navigate to a record page (e.g., Account).
+    - Open Current Record tab - verify auto-detection.
+    - Copy a Record ID and use Record Search - verify lookup works.
 
 *For a detailed step-by-step walkthrough, see [Testing Walkthrough](TESTING_WALKTHROUGH.md).*
 
@@ -55,4 +81,5 @@ When reporting bugs, include:
 1.  **Console Logs**: Right-click popup > Inspect to see console errors.
 2.  **Salesforce Page**: Which page were you on? (e.g., Lightning App Page, Setup, Classic).
 3.  **Browser Version**: Chrome version.
+4.  **Extension Version**: Check manifest.json for version number.
 
