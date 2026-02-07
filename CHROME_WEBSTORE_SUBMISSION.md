@@ -193,24 +193,24 @@ You need to provide screenshots in these dimensions:
 
 ### Website (optional)
 ```
-https://github.com/manaskumarbehera/trackforcepro-docs
+https://github.com/manaskumarbehera/sf-audit-extractor
 ```
 
 ### Support URL (optional)
 ```
-https://github.com/manaskumarbehera/trackforcepro-docs/issues
+https://github.com/manaskumarbehera/sf-audit-extractor/issues
 ```
 
 ### Privacy Policy URL (Required for extensions with host permissions)
 
 **Use this URL after enabling GitHub Pages:**
 ```
-https://manaskumarbehera.github.io/trackforcepro-docs/privacy-policy.html
+https://manaskumarbehera.github.io/sf-audit-extractor/privacy-policy.html
 ```
 
 **Alternative (works immediately without setup):**
 ```
-https://htmlpreview.github.io/?https://github.com/manaskumarbehera/trackforcepro-docs/blob/main/privacy-policy.html
+https://htmlpreview.github.io/?https://github.com/manaskumarbehera/sf-audit-extractor/blob/main/privacy-policy.html
 ```
 
 > **To enable GitHub Pages:**

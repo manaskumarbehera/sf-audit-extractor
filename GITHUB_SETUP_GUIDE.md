@@ -1,112 +1,142 @@
-# GitHub Repository Setup Guide
+# GitHub Repository Protection Guide
 
-This guide explains how to set up two separate GitHub repositories:
-1. **Private Repository** (`sf-audit-extractor`) - Contains source code
-2. **Public Repository** (`trackforcepro-docs`) - Contains documentation only
+This guide explains how to keep your repository **PUBLIC** while protecting your code from unauthorized modifications using GitHub Rulesets and Branch Protection.
 
-## Step 1: Create the Public Documentation Repository
+## Repository Structure
 
-### On GitHub:
-1. Go to https://github.com/new
-2. Repository name: `trackforcepro-docs`
-3. Description: `Documentation and support for TrackForcePro Chrome Extension`
-4. **Select: Public** ✅
-5. Do NOT initialize with README (we already have one)
-6. Click "Create repository"
-
-### Push local docs to GitHub:
-```bash
-cd /Users/manas/IdeaProjects/trackforcepro-docs
-git remote add origin https://github.com/manaskumarbehera/trackforcepro-docs.git
-git push -u origin main
-```
-
-## Step 2: Enable GitHub Pages for Privacy Policy
-
-1. Go to: https://github.com/manaskumarbehera/trackforcepro-docs/settings/pages
-2. Under "Source", select:
-   - Branch: `main`
-   - Folder: `/ (root)`
-3. Click "Save"
-4. Wait 2-3 minutes for deployment
-5. Your privacy policy will be available at:
-   - https://manaskumarbehera.github.io/trackforcepro-docs/privacy-policy.html
-
-## Step 3: Make Source Code Repository Private
-
-### If repository already exists on GitHub:
-1. Go to: https://github.com/manaskumarbehera/sf-audit-extractor/settings
-2. Scroll down to "Danger Zone"
-3. Click "Change repository visibility"
-4. Select "Make private"
-5. Confirm by typing the repository name
-
-### If creating new private repo:
-1. Go to https://github.com/new
-2. Repository name: `sf-audit-extractor`
-3. **Select: Private** 🔒
-4. Create and push your code
-
-## Step 4: Verify Links Work
-
-After setup, verify these public URLs work:
-
-| URL | Should Be Accessible |
-|-----|---------------------|
-| https://github.com/manaskumarbehera/trackforcepro-docs | ✅ Yes |
-| https://github.com/manaskumarbehera/trackforcepro-docs/issues | ✅ Yes |
-| https://manaskumarbehera.github.io/trackforcepro-docs/privacy-policy.html | ✅ Yes |
-| https://github.com/manaskumarbehera/trackforcepro-docs/blob/main/USER_GUIDE.md | ✅ Yes |
-
-## Summary of Changes Made
-
-### Files Updated in Source Code (`sf-audit-extractor`):
-
-1. **popup.html** - All GitHub links now point to `trackforcepro-docs`:
-   - User Guide → `trackforcepro-docs/blob/main/USER_GUIDE.md`
-   - Developer Guide → `trackforcepro-docs/blob/main/DEVELOPER_GUIDE.md`
-   - Quick Reference → `trackforcepro-docs/blob/main/QUICK_REFERENCE.md`
-   - Architecture Docs → `trackforcepro-docs/tree/main/architecture`
-   - Documentation & Support → `trackforcepro-docs`
-   - Report Issues → `trackforcepro-docs/issues`
-
-2. **CHROME_WEBSTORE_SUBMISSION.md** - Updated:
-   - Website URL → `trackforcepro-docs`
-   - Support URL → `trackforcepro-docs/issues`
-   - Privacy Policy URL → `trackforcepro-docs/privacy-policy.html`
-
-### Public Docs Repository Structure (`trackforcepro-docs`):
-
-```
-trackforcepro-docs/
-├── README.md                    # Product overview with feature list
-├── privacy-policy.html          # Privacy policy for Chrome Web Store
-├── USER_GUIDE.md               # End-user documentation
-├── DEVELOPER_GUIDE.md          # Developer documentation
-├── QUICK_REFERENCE.md          # Quick reference guide
-├── TESTING_WALKTHROUGH.md      # Testing guide
-├── architecture/
-│   ├── BUILDER_TABS_IMPLEMENTATION.md
-│   ├── BUILDER_TOGGLE.md
-│   ├── ON_DEMAND_SCHEMA.md
-│   ├── OPTIMIZATION_GUIDE.md
-│   ├── PROGRESSIVE_DISCLOSURE.md
-│   └── TABBED_INTERFACE.md
-└── screenshots/
-    └── mockup-ui.png
-```
-
-## Chrome Web Store Submission URLs
-
-Use these URLs when submitting to Chrome Web Store:
-
-| Field | URL |
-|-------|-----|
-| **Website** | https://github.com/manaskumarbehera/trackforcepro-docs |
-| **Support URL** | https://github.com/manaskumarbehera/trackforcepro-docs/issues |
-| **Privacy Policy** | https://manaskumarbehera.github.io/trackforcepro-docs/privacy-policy.html |
+**Single Public Repository:** `sf-audit-extractor`
+- Source code is visible (open source)
+- Documentation accessible to users
+- Code changes protected by rulesets
+- Only you can merge changes
 
 ---
 
-*Generated: February 2026*
+## Step 1: Enable Branch Protection Rules
+
+Go to: **Settings → Branches → Add branch protection rule**
+
+### Main Branch Protection:
+1. **Branch name pattern:** `main`
+2. ✅ **Require a pull request before merging**
+   - ✅ Require approvals: `1`
+   - ✅ Dismiss stale pull request approvals when new commits are pushed
+   - ✅ Require review from Code Owners
+3. ✅ **Require status checks to pass before merging**
+4. ✅ **Require conversation resolution before merging**
+5. ✅ **Do not allow bypassing the above settings**
+6. ✅ **Restrict who can push to matching branches**
+   - Add yourself: `manaskumarbehera`
+7. Click **Create**
+
+---
+
+## Step 2: Set Up GitHub Rulesets (Recommended)
+
+Go to: **Settings → Rules → Rulesets → New ruleset → New branch ruleset**
+
+### Create Ruleset:
+```
+Name: Protect Main Branch
+Enforcement status: Active
+Target branches: Include default branch
+```
+
+### Rules to enable:
+- ✅ **Restrict deletions**
+- ✅ **Require linear history**
+- ✅ **Require a pull request before merging**
+  - Required approvals: 1
+  - ✅ Require review from Code Owners
+  - ✅ Require approval of the most recent reviewable push
+- ✅ **Block force pushes**
+
+### Bypass list:
+- Add only yourself with "Always" bypass permission
+
+---
+
+## Step 3: CODEOWNERS File (Already Created)
+
+File: `.github/CODEOWNERS`
+```
+# All files require approval from repository owner
+* @manaskumarbehera
+```
+
+This ensures:
+- Any PR touching any file requires YOUR approval
+- External contributors cannot merge without your review
+
+---
+
+## Step 4: Disable Forking (Optional - More Restrictive)
+
+Go to: **Settings → General → Features**
+- ❌ Uncheck "Allow forking"
+
+> ⚠️ Note: This prevents forks but also limits contribution. Consider keeping it enabled if you want community contributions.
+
+---
+
+## Step 5: Enable GitHub Pages for Privacy Policy
+
+1. Go to: **Settings → Pages**
+2. Source: **Deploy from a branch**
+3. Branch: `main` / `/ (root)`
+4. Click **Save**
+
+Your privacy policy will be at:
+```
+https://manaskumarbehera.github.io/sf-audit-extractor/privacy-policy.html
+```
+
+---
+
+## What This Protection Achieves
+
+| Protection | What it does |
+|------------|--------------|
+| **Branch Protection** | Prevents direct pushes to main |
+| **Required Reviews** | All changes need your approval |
+| **CODEOWNERS** | You're required reviewer for all files |
+| **Rulesets** | Prevents force pushes and deletions |
+| **Status Checks** | Tests must pass before merge |
+
+---
+
+## How External Contributions Work
+
+1. Contributor forks your repo (if allowed)
+2. Contributor creates a branch and makes changes
+3. Contributor opens a Pull Request
+4. **You review the code**
+5. **You approve or reject**
+6. Only after YOUR approval can it be merged
+
+---
+
+## Important: Code Visibility
+
+⚠️ **Note:** With a PUBLIC repository, your source code IS visible to everyone. The protection rules only prevent:
+- Unauthorized modifications
+- Direct pushes without review
+- Merging without your approval
+
+If you want code to be **completely hidden**, you must make the repository **PRIVATE**.
+
+---
+
+## Quick Links
+
+| Purpose | URL |
+|---------|-----|
+| Repository | https://github.com/manaskumarbehera/sf-audit-extractor |
+| Issues | https://github.com/manaskumarbehera/sf-audit-extractor/issues |
+| Privacy Policy | https://manaskumarbehera.github.io/sf-audit-extractor/privacy-policy.html |
+| Documentation | https://github.com/manaskumarbehera/sf-audit-extractor/tree/main/DOCUMENTATION |
+
+---
+
+*Updated: February 2026*
 

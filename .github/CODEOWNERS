@@ -1,0 +1,6 @@
+# CODEOWNERS - Require approval from owner for all changes
+# This ensures only the repository owner can approve changes to the codebase
+
+# Default: Owner must approve all changes
+* @manaskumarbehera
+
