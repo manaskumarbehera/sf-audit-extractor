@@ -8,7 +8,8 @@
     "lint": "eslint . --ext .js",
     "start": "echo 'This is a Chrome extension project — load via chrome://extensions'",
     "build": "esbuild popup.js --bundle --minify --sourcemap --outfile=dist/popup.bundle.js --platform=browser",
-    "package": "zip -r TrackForcePro-v$(node -p \"require('./manifest.json').version\").zip manifest.json background.js content.js popup.html popup.js popup.css audit_helper.js constants.js data_explorer_helper.js graphql_helper.js lms_helper.js oauth_helper.js platform_helper.js settings_helper.js soql_helper.js url_helper.js utils.js icons/ rules/ scripts/"
+    "package": "./build.sh",
+    "zip": "./build.sh"
   },
   "keywords": [
     "salesforce",
