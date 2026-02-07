@@ -193,40 +193,31 @@ You need to provide screenshots in these dimensions:
 
 ### Website (optional)
 ```
-https://github.com/manas-behera/trackforcepro
+https://github.com/manaskumarbehera/sf-audit-extractor
 ```
-(Or your preferred URL)
 
 ### Support URL (optional)
 ```
-https://github.com/manas-behera/trackforcepro/issues
+https://github.com/manaskumarbehera/sf-audit-extractor/issues
 ```
-(Or your preferred support channel)
 
 ### Privacy Policy URL (Required for extensions with host permissions)
-You'll need to create a privacy policy. Here's a simple one you can host:
 
+**Use this URL after enabling GitHub Pages:**
 ```
-Privacy Policy for TrackForcePro
-
-Last updated: February 2026
-
-TrackForcePro does not collect, store, or transmit any personal data to external servers.
-
-Data Handling:
-- All data processing occurs locally in your browser
-- Salesforce session data is used only to authenticate API calls
-- User preferences are stored locally using Chrome's storage API
-- No analytics or tracking scripts are included
-
-Permissions:
-- The extension only accesses Salesforce domains you explicitly visit
-- Cookie access is limited to Salesforce session authentication
-- No data is shared with third parties
-
-Contact:
-For questions about this privacy policy, contact the developer via LinkedIn.
+https://manaskumarbehera.github.io/sf-audit-extractor/privacy-policy.html
 ```
+
+**Alternative (works immediately without setup):**
+```
+https://htmlpreview.github.io/?https://github.com/manaskumarbehera/sf-audit-extractor/blob/main/privacy-policy.html
+```
+
+> **To enable GitHub Pages:**
+> 1. Go to your repository Settings → Pages
+> 2. Set Source to "Deploy from a branch"
+> 3. Select "main" branch and "/ (root)" folder
+> 4. Click Save and wait 2-3 minutes for deployment
 
 ---
 
