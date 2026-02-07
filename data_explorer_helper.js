@@ -569,6 +569,11 @@ const DataExplorerHelper = {
                 } else {
                     this.showFaviconStatus('Favicon saved! Will apply when you visit this org.', 'success');
                 }
+
+                // Apply theme to the popup UI immediately
+                if (window.ThemeManager && window.ThemeManager.applyThemeColor) {
+                    window.ThemeManager.applyThemeColor(color, label);
+                }
             } catch (tabError) {
                 console.warn('Tab query error:', tabError);
                 this.showFaviconStatus('Favicon saved! Will apply on next page load.', 'success');
@@ -734,6 +739,11 @@ const DataExplorerHelper = {
             }
 
             this.showFaviconStatus('Favicon removed for this org.', 'success');
+
+            // Reset theme to default
+            if (window.ThemeManager && window.ThemeManager.resetTheme) {
+                window.ThemeManager.resetTheme();
+            }
         } catch (error) {
             console.error('Error resetting favicon:', error);
         }

@@ -28,6 +28,10 @@ File: `popup.html` (replace body content with this)
 
         <div class="tabs-right">
             <h1 id="header-title">Audit Trails</h1>
+            <div id="theme-indicator" class="theme-indicator" title="Current org theme">
+                <span class="theme-dot"></span>
+                <span class="theme-label"></span>
+            </div>
             <div class="status" id="status">
                 <span class="status-dot"></span>
                 <span class="status-text">Not connected</span>
@@ -922,14 +926,16 @@ File: `popup.html` (replace body content with this)
         </div>
         <div id="tab-about" class="tab-pane" data-tab="about" hidden>
             <div class="about-container">
-                <div class="about-header">
-                    <div class="about-logo">
-                        <img src="icons/icon128.png" alt="TrackForcePro Logo" />
-                    </div>
-                    <div class="about-title-section">
-                        <h2 class="about-title">TrackForcePro</h2>
-                        <span class="about-version">Version 1.0.0</span>
-                        <p class="about-tagline">Your Salesforce Development & Admin Companion</p>
+                <div class="section-card about-header-card">
+                    <div class="about-header">
+                        <div class="about-logo">
+                            <img src="icons/icon128.png" alt="TrackForcePro Logo" />
+                        </div>
+                        <div class="about-title-section">
+                            <h2 class="about-title">TrackForcePro</h2>
+                            <span class="about-version">Version 1.0.4</span>
+                            <p class="about-tagline">Your Salesforce Development & Admin Companion</p>
+                        </div>
                     </div>
                 </div>
 
@@ -940,36 +946,6 @@ File: `popup.html` (replace body content with this)
                         It streamlines the process of auditing fields, building GraphQL/SOQL queries, managing users,
                         and inspecting object schemas directly from your browser.
                     </p>
-                </div>
-
-                <div class="section-card">
-                    <h3 class="section-card-title">🔗 Links</h3>
-                    <div class="about-links">
-                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor" target="_blank" rel="noopener noreferrer" class="about-link-card">
-                            <span class="about-link-icon">📦</span>
-                            <div class="about-link-content">
-                                <span class="about-link-title">GitHub Repository</span>
-                                <span class="about-link-url">github.com/manaskumarbehera/sf-audit-extractor</span>
-                            </div>
-                            <span class="about-link-arrow">→</span>
-                        </a>
-                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/tree/main/DOCUMENTATION" target="_blank" rel="noopener noreferrer" class="about-link-card">
-                            <span class="about-link-icon">📚</span>
-                            <div class="about-link-content">
-                                <span class="about-link-title">Documentation</span>
-                                <span class="about-link-url">View guides, architecture docs & more</span>
-                            </div>
-                            <span class="about-link-arrow">→</span>
-                        </a>
-                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/issues" target="_blank" rel="noopener noreferrer" class="about-link-card">
-                            <span class="about-link-icon">🐛</span>
-                            <div class="about-link-content">
-                                <span class="about-link-title">Report Issues</span>
-                                <span class="about-link-url">Found a bug? Let us know!</span>
-                            </div>
-                            <span class="about-link-arrow">→</span>
-                        </a>
-                    </div>
                 </div>
 
                 <div class="section-card">
@@ -984,6 +960,39 @@ File: `popup.html` (replace body content with this)
                                 <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
                             </svg>
                             <span>Connect on LinkedIn</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="section-card support-card">
+                    <h3 class="section-card-title">☕ Support This Project</h3>
+                    <p class="about-description">
+                        If you find TrackForcePro helpful, consider buying me a coffee! Your support helps keep this project alive and enables new features.
+                    </p>
+                    <div class="support-actions">
+                        <a href="https://buymeacoffee.com/manaskumarbehera" target="_blank" rel="noopener noreferrer" class="bmc-button">
+                            <svg class="bmc-icon" viewBox="0 0 884 1279" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+                                <path d="M791.109 297.518L790.231 297.002L788.201 296.383C789.018 297.072 790.04 297.472 791.109 297.518Z" fill="#0D0C22"/>
+                                <path d="M803.896 388.891L802.916 389.166L803.896 388.891Z" fill="#0D0C22"/>
+                                <path d="M791.484 297.377C791.359 297.361 791.237 297.332 791.118 297.29C791.111 297.371 791.111 297.453 791.118 297.534C791.252 297.516 791.379 297.466 791.484 297.377Z" fill="#0D0C22"/>
+                                <path d="M791.113 297.529H791.244V297.447L791.113 297.529Z" fill="#0D0C22"/>
+                                <path d="M803.111 388.726L804.591 387.883L805.142 387.573L805.641 387.04C804.702 387.444 803.846 388.025 803.111 388.726Z" fill="#0D0C22"/>
+                                <path d="M793.669 299.515L792.223 298.138L791.243 297.605C791.77 298.535 792.641 299.221 793.669 299.515Z" fill="#0D0C22"/>
+                                <path d="M430.019 1186.18C428.864 1186.68 427.852 1187.46 427.076 1188.45L427.988 1187.87C428.608 1187.3 429.485 1186.63 430.019 1186.18Z" fill="#0D0C22"/>
+                                <path d="M641.187 1144.63C641.187 1143.33 640.551 1143.57 640.705 1148.21C640.705 1147.84 640.86 1147.46 640.929 1147.1C641.015 1146.27 641.084 1145.46 641.187 1144.63Z" fill="#0D0C22"/>
+                                <path d="M619.284 1186.18C618.129 1186.68 617.118 1187.46 616.342 1188.45L617.254 1187.87C617.873 1187.3 618.751 1186.63 619.284 1186.18Z" fill="#0D0C22"/>
+                                <path d="M281.304 1196.06C280.427 1195.3 279.354 1194.8 278.207 1194.61C279.136 1195.06 280.065 1195.51 280.684 1195.85L281.304 1196.06Z" fill="#0D0C22"/>
+                                <path d="M247.841 1164.01C247.704 1162.66 247.288 1161.35 246.619 1160.16C247.093 1161.39 247.489 1162.66 247.841 1164.01Z" fill="#0D0C22"/>
+                                <path d="M472.623 590.836C426.682 610.503 374.546 632.802 306.976 632.802C278.71 632.746 250.58 628.868 223.353 621.274L270.086 1101.08C271.74 1121.13 280.876 1139.83 295.679 1153.46C310.482 1167.09 329.87 1174.65 349.992 1174.65C349.992 1174.65 416.254 1178.09 438.365 1178.09C462.161 1178.09 533.516 1174.65 533.516 1174.65C553.636 1174.65 573.019 1167.08 587.819 1153.45C602.619 1139.82 611.752 1121.13 613.406 1101.08L663.459 570.876C641.091 563.237 618.516 558.161 593.068 558.161C549.054 558.144 513.591 573.303 472.623 590.836Z" fill="#FFDD00"/>
+                                <path d="M78.6885 386.132L79.4799 386.872L79.9962 387.182C79.5987 386.762 79.1603 386.386 78.6885 386.132Z" fill="#0D0C22"/>
+                                <path d="M879.567 341.849L872.53 306.352C866.215 274.503 851.882 244.409 819.19 232.898C808.711 229.215 796.821 227.633 788.786 220.01C780.751 212.388 778.376 200.55 776.518 189.572C773.076 169.423 769.842 149.257 766.314 129.143C763.269 111.85 760.86 92.4243 752.928 76.56C742.604 55.2584 721.182 42.8009 699.88 34.559C688.965 30.4844 677.826 27.0375 666.517 24.2352C613.665 10.1947 557.78 5.03277 502.641 1.09106C436.505 -3.60746 370.56 -0.816939 304.861 9.02858C245.474 18.6091 183.138 28.7141 130.147 59.5887C112.585 69.8104 95.1673 83.3482 86.4878 101.974C75.5656 125.169 81.8263 150.447 87.7309 174.209C96.3764 208.449 105.022 242.753 113.668 277.122C117.755 293.089 121.927 309.086 125.323 325.235C126.636 331.496 127.097 338.209 128.932 344.242C129.715 346.927 130.737 349.071 132.554 351.378C135.549 355.213 139.041 358.636 142.945 361.56L142.617 361.44C147.036 364.94 151.553 368.267 156.341 371.245C162.098 374.784 168.94 378.097 175.456 380.747C193.291 388.14 212.012 393.568 231.107 396.921C237.229 397.901 243.595 398.965 249.857 399.756C255.241 400.45 260.659 400.831 266.098 401.003C276.705 401.373 287.393 401.473 298.044 400.612C304.125 400.128 310.271 399.421 316.354 398.491C325.366 397.124 334.347 395.435 343.184 393.26C363.387 388.317 383.146 381.634 402.24 373.085C412.149 368.642 421.574 363.355 430.833 357.786C440.615 351.853 450.217 345.691 459.914 339.648C478.517 328.09 497.12 316.532 515.724 304.975L790.433 134.381C805.584 125.373 824.361 115.5 841.9 124.14C850.652 128.451 856.808 136.968 860.629 145.8C866.399 159.063 868.169 173.638 870.374 187.782C874.41 213.996 878.257 240.265 882.484 266.448C884.336 277.962 886.513 289.529 887.897 301.119C889.206 312.158 889.614 322.889 886.373 333.633C884.017 341.534 879.567 341.849 879.567 341.849Z" fill="#FFDD00"/>
+                                <path d="M619.284 1186.18C619.846 1185.34 620.763 1184.78 621.791 1184.63C621.791 1184.63 620.842 1185.17 619.284 1186.18Z" fill="#0D0C22"/>
+                            </svg>
+                            <span>Buy Me a Coffee</span>
+                        </a>
+                        <a href="https://github.com/manaskumarbehera/sf-audit-extractor/issues" target="_blank" rel="noopener noreferrer" class="feedback-button">
+                            <span class="feedback-icon">🐛</span>
+                            <span>Report Issue / Feedback</span>
                         </a>
                     </div>
                 </div>

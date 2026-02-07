@@ -36,6 +36,16 @@
             return true; // async
         }
 
+        // Handle getOrgId request from popup for theming
+        if (req && req.action === 'getOrgId') {
+            getOrgIdFromPage().then((orgId) => {
+                sendResponse({ success: true, orgId: orgId || null });
+            }).catch(() => {
+                sendResponse({ success: false, orgId: null });
+            });
+            return true; // async
+        }
+
         // Handle favicon update
         if (req && req.action === 'updateFavicon') {
             updateFavicon(req.color, req.label, req.shape);

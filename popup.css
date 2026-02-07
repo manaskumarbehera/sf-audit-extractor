@@ -1,10 +1,71 @@
 :root {
     --primary: #0176d3;
+    --primary-dark: #015ba7;
+    --primary-light: #4da3e8;
+    --primary-rgb: 1, 118, 211;
     --border: #e9ecef;
     --border-color: #e9ecef;
     --bg-subtle: #f8f9fa;
     --bg-default: #ffffff;
     --text-secondary: #6c757d;
+
+    /* Theme colors - dynamically updated by org favicon */
+    --theme-color: #0176d3;
+    --theme-color-dark: #015ba7;
+    --theme-color-light: #4da3e8;
+    --theme-color-rgb: 1, 118, 211;
+    --theme-gradient-start: #0176d3;
+    --theme-gradient-end: #0d9ddb;
+}
+
+/* Themed elements - will respond to org color changes */
+.themed-header {
+    background: linear-gradient(135deg, var(--theme-gradient-start) 0%, var(--theme-gradient-end) 100%) !important;
+}
+
+.themed-button {
+    background: var(--theme-color) !important;
+}
+
+.themed-button:hover {
+    background: var(--theme-color-dark) !important;
+}
+
+.themed-border {
+    border-color: var(--theme-color) !important;
+}
+
+.themed-text {
+    color: var(--theme-color) !important;
+}
+
+.themed-badge {
+    background: rgba(var(--theme-color-rgb), 0.1) !important;
+    color: var(--theme-color) !important;
+}
+
+/* Theme indicator in header */
+.theme-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    font-size: 11px;
+    margin-left: 12px;
+}
+
+.theme-indicator.active {
+    display: inline-flex;
+}
+
+.theme-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--theme-color);
+    border: 2px solid rgba(255, 255, 255, 0.5);
 }
 
 /* Make the entire document opaque and fill the window */
@@ -3433,5 +3494,204 @@ textarea.valid:focus {
     width: 28px;
     height: 28px;
     font-size: 12px;
+}
+
+/* ===== About Tab Styles ===== */
+.about-container {
+    padding: 20px;
+    overflow-y: auto;
+    height: 100%;
+    background: #f8f9fa;
+}
+
+.about-header-card {
+    background: linear-gradient(135deg, #0176d3 0%, #0d9ddb 100%) !important;
+    color: white;
+}
+
+.about-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.about-logo {
+    flex-shrink: 0;
+}
+
+.about-logo img {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    background: white;
+    padding: 4px;
+}
+
+.about-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.about-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+    color: white;
+}
+
+.about-version {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.2);
+    padding: 3px 10px;
+    border-radius: 12px;
+    display: inline-block;
+    width: fit-content;
+}
+
+.about-tagline {
+    font-size: 14px;
+    margin: 4px 0 0 0;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.about-description {
+    font-size: 13px;
+    color: #495057;
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Developer Section */
+.about-developer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.developer-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.developer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #212529;
+}
+
+.developer-role {
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.linkedin-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #0077B5;
+    color: white;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.linkedin-link:hover {
+    background: #005885;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 119, 181, 0.3);
+}
+
+.linkedin-icon {
+    width: 18px;
+    height: 18px;
+}
+
+/* Support Section */
+.support-card {
+    background: linear-gradient(135deg, #fff9e6 0%, #fff5d6 100%) !important;
+    border-color: #ffc107 !important;
+}
+
+.support-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.bmc-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #FFDD00 0%, #FFC107 100%);
+    color: #0D0C22;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+.bmc-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 193, 7, 0.4);
+    background: linear-gradient(135deg, #FFE44D 0%, #FFD54F 100%);
+}
+
+.bmc-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.feedback-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: #fff;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.feedback-button:hover {
+    background: #f8f9fa;
+    border-color: #0176d3;
+    color: #0176d3;
+    transform: translateY(-1px);
+}
+
+.feedback-icon {
+    font-size: 18px;
+}
+
+/* License Section */
+.about-license {
+    font-size: 13px;
+    color: #495057;
+    line-height: 1.6;
+    margin: 0 0 8px 0;
+}
+
+.about-copyright {
+    font-size: 12px;
+    color: #6c757d;
+    margin: 0;
 }
 

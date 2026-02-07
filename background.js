@@ -89,25 +89,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return true;
     }
 
-    // Handle GET_ORG_ID request from content script for favicon lookup
+    // Handle GET_ORG_ID request from content script or popup for favicon/theme lookup
     if (msg && msg.action === 'GET_ORG_ID') {
         (async () => {
             try {
-                // Get session info to make API call
-                const tabId = sender.tab?.id;
-                if (!tabId) {
-                    sendResponse({ success: false, error: 'No tab ID' });
-                    return;
+                // Determine the URL - from sender tab (content script) or active tab (popup)
+                let url = sender.tab?.url || sender.url;
+                let hostname = null;
+
+                // If no URL from sender (popup request), query the active Salesforce tab
+                if (!url || url.startsWith('chrome-extension://')) {
+                    try {
+                        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                        const activeTab = tabs[0];
+                        if (activeTab && activeTab.url && !activeTab.url.startsWith('chrome-extension://')) {
+                            url = activeTab.url;
+                        }
+                    } catch (e) {
+                        console.log('[GET_ORG_ID] Could not get active tab:', e.message);
+                    }
                 }
 
-                // Try to get session from cookies
-                const url = sender.tab?.url || sender.url;
+                // Still no URL? Try to find any Salesforce tab
+                if (!url || url.startsWith('chrome-extension://')) {
+                    try {
+                        const sfTabs = await chrome.tabs.query({ url: ['*://*.salesforce.com/*', '*://*.force.com/*'] });
+                        if (sfTabs.length > 0) {
+                            url = sfTabs[0].url;
+                        }
+                    } catch (e) {
+                        console.log('[GET_ORG_ID] Could not find SF tab:', e.message);
+                    }
+                }
+
                 if (!url) {
-                    sendResponse({ success: false, error: 'No URL' });
+                    sendResponse({ success: false, error: 'No Salesforce URL found' });
                     return;
                 }
 
-                const hostname = new URL(url).hostname;
+                try {
+                    hostname = new URL(url).hostname;
+                } catch (e) {
+                    sendResponse({ success: false, error: 'Invalid URL' });
+                    return;
+                }
 
                 // Try to get the oid cookie directly first (most reliable)
                 try {
@@ -154,7 +179,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 }
 
                 if (!sidCookie) {
-                    sendResponse({ success: false, error: 'No session' });
+                    // No session - but we might still have oid from the fallback check
+                    // Try one more time with all oid cookies
+                    try {
+                        const allOidCookies = await chrome.cookies.getAll({ name: 'oid' });
+                        if (allOidCookies.length > 0) {
+                            const validOid = allOidCookies.find(c => c.value && (c.value.length === 15 || c.value.length === 18));
+                            if (validOid) {
+                                sendResponse({ success: true, orgId: validOid.value });
+                                return;
+                            }
+                        }
+                    } catch (e) {}
+
+                    sendResponse({ success: false, error: 'No session cookie' });
                     return;
                 }
 
@@ -173,22 +211,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const soql = 'SELECT+Id+FROM+Organization+LIMIT+1';
                 const apiUrl = `${instanceUrl}/services/data/${v}/query?q=${soql}`;
 
-                const res = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${sidCookie.value}`,
-                        'Accept': 'application/json'
+                try {
+                    const res = await fetch(apiUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${sidCookie.value}`,
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    if (!res.ok) {
+                        sendResponse({ success: false, error: `API ${res.status}` });
+                        return;
                     }
-                });
 
-                if (!res.ok) {
-                    sendResponse({ success: false, error: `API ${res.status}` });
-                    return;
+                    const data = await res.json();
+                    const orgId = data?.records?.[0]?.Id || null;
+                    sendResponse({ success: true, orgId });
+                } catch (fetchErr) {
+                    // Fetch failed - return oid cookie if we have any
+                    console.log('[GET_ORG_ID] Fetch failed, trying oid cookies');
+                    try {
+                        const allOidCookies = await chrome.cookies.getAll({ name: 'oid' });
+                        if (allOidCookies.length > 0) {
+                            const validOid = allOidCookies.find(c => c.value && (c.value.length === 15 || c.value.length === 18));
+                            if (validOid) {
+                                sendResponse({ success: true, orgId: validOid.value });
+                                return;
+                            }
+                        }
+                    } catch (e) {}
+                    sendResponse({ success: false, error: 'Fetch failed: ' + fetchErr.message });
                 }
-
-                const data = await res.json();
-                const orgId = data?.records?.[0]?.Id || null;
-                sendResponse({ success: true, orgId });
             } catch (err) {
                 console.error('background GET_ORG_ID error', err);
                 sendResponse({ success: false, error: String(err) });
