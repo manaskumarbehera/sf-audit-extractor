@@ -35,6 +35,15 @@ Go to: **Settings → Branches → Add branch protection rule**
 
 Go to: **Settings → Rules → Rulesets → New ruleset → New branch ruleset**
 
+### ⚠️ IMPORTANT: Add Bypass FIRST!
+
+Before enabling any rules, add yourself to the bypass list so YOU can still push directly:
+
+1. Under **"Bypass list"** section, click **"Add bypass"**
+2. Select **"Repository admin"** 
+3. Set to **"Always"** (allows you to bypass without PR)
+4. Click **Add**
+
 ### Create Ruleset:
 ```
 Name: Protect Main Branch
@@ -51,8 +60,24 @@ Target branches: Include default branch
   - ✅ Require approval of the most recent reviewable push
 - ✅ **Block force pushes**
 
-### Bypass list:
-- Add only yourself with "Always" bypass permission
+> ✅ The bypass list should already include you from the step above.
+
+---
+
+## Troubleshooting: "Push declined due to repository rule violations"
+
+If you see this error when pushing:
+```
+! [remote rejected] main -> main (push declined due to repository rule violations)
+```
+
+**Fix:**
+1. Go to: **Settings → Rules → Rulesets**
+2. Click on your ruleset
+3. Under **"Bypass list"**, add **"Repository admin"** with **"Always"** permission
+4. Save and try pushing again
+
+**Alternative:** Temporarily disable the ruleset, push, then re-enable.
 
 ---
 
