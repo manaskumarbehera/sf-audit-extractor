@@ -391,8 +391,14 @@ async function openAppWindow() {
     }
     const url = chrome.runtime.getURL('popup.html#standalone');
     try {
-        const win = await chrome.windows.create({ url, type: 'popup', width: 1000, height: 760, focused: true });
+        // Create with reasonable dimensions first to ensure it succeeds everywhere
+        const win = await chrome.windows.create({ url, type: 'popup', width: 1200, height: 800, focused: true });
         appWindowId = win?.id || null;
+
+        // Attempt to maximize content after creation
+        if (appWindowId) {
+            try { await chrome.windows.update(appWindowId, { state: 'fullscreen' }); } catch {}
+        }
         return appWindowId;
     } catch (e) {
         console.warn('Failed to open App window', e);

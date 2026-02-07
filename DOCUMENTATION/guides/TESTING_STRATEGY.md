@@ -1,7 +1,7 @@
 # Testing Strategy
 
 ## Overview
-Quality assurance for the SF Audit Extractor involves a mix of **Automated Unit Tests** and **Manual UI Testing**. Given the nature of Chrome Extensions (interacting with browser APIs and external DOM), a significant portion of testing is manual or integration-based.
+Quality assurance for TrackForcePro involves a mix of **Automated Unit Tests** and **Manual UI Testing**. Given the nature of Chrome Extensions (interacting with browser APIs and external DOM), a significant portion of testing is manual or integration-based.
 
 ## 🤖 Automated Testing
 

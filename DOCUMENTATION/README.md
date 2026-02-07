@@ -1,6 +1,6 @@
-# SF Audit Extractor - Documentation
+# TrackForcePro - Documentation
 
-Welcome to the documentation for the SF Audit Extractor Chrome Extension. This library contains comprehensive guides for users, developers, and testers.
+Welcome to the documentation for the TrackForcePro Chrome Extension. This library contains comprehensive guides for users, developers, and testers.
 
 ## 📂 Documentation Structure
 

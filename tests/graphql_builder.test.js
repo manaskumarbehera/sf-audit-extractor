@@ -273,7 +273,7 @@ test('auto-template fills UI API shape when builder disabled', async () => {
   await flush();
   const q = document.getElementById('graphql-query').value;
   expect(q).toContain('uiapi');
-  expect(q).toContain('edges { node');
+  expect(q.replace(/\s+/g, ' ')).toContain('edges { node');
   expect(q).toContain('pageInfo');
 });
 

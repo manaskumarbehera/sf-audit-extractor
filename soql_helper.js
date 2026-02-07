@@ -72,6 +72,45 @@
     } catch {}
   }
 
+  function getBuilderPref() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage?.local?.get?.({ soqlEnableBuilder: true }, (r) => {
+          if (chrome.runtime && chrome.runtime.lastError) { resolve(true); return; }
+          resolve(!!(r && r.soqlEnableBuilder));
+        });
+      } catch { resolve(true); }
+    });
+  }
+
+  function applyBuilderVisibility() {
+    try {
+      const toggle = document.querySelector('.soql-builder-toggle');
+      const sidePanel = document.getElementById('soql-builder');
+      if (!toggle) return;
+      getBuilderPref().then((show) => {
+        const shouldShow = !!show;
+        toggle.style.display = shouldShow ? 'inline-flex' : 'none';
+
+        // If disabled, also force the side panel hidden
+        if (!shouldShow && sidePanel) {
+          sidePanel.setAttribute('hidden', '');
+          sidePanel.style.display = 'none'; // Ensure inline override
+        } else if (sidePanel) {
+          // If enabled, let the checkbox state control visibility
+          // We don't force it visible here, just restore the possibility
+          sidePanel.style.display = ''; // Clear inline override
+          const cb = document.getElementById('soql-builder-enabled');
+          if (cb && !cb.checked) {
+             sidePanel.setAttribute('hidden', '');
+          } else {
+             sidePanel.removeAttribute('hidden');
+          }
+        }
+      });
+    } catch {}
+  }
+
 
   // Shared helper: normalize and extract object names. When Tooling is OFF, always filter to business/data SObjects.
   function describeObjectsToNames(objs, opts) {
@@ -439,7 +478,17 @@
       if (!builderFieldList) return;
       builderFieldList.innerHTML = '';
       const frag = document.createDocumentFragment();
-      (fields || []).forEach((f) => { const opt = document.createElement('option'); opt.value = f; frag.appendChild(opt); });
+      (fields || []).forEach((f) => {
+        const opt = document.createElement('option');
+        if (f && typeof f === 'object') {
+          opt.value = f.name;
+          opt.label = `${f.label} (${f.name})`;
+          opt.textContent = `${f.label} (${f.name})`;
+        } else {
+          opt.value = f;
+        }
+        frag.appendChild(opt);
+      });
       builderFieldList.appendChild(frag);
     }
 
@@ -449,7 +498,7 @@
       setBuilderStatus(`Loading fields for ${obj}…`);
       const describe = await getSobjectDescribeCached(obj, !!toolingCb?.checked);
       const fields = Array.isArray(describe?.fields) ? describe.fields : [];
-      builderFieldOptions = fields.map((f) => f?.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
+      builderFieldOptions = fields.map((f) => ({ name: f?.name, label: f?.label })).filter(f => f.name).sort((a, b) => a.name.localeCompare(b.name));
       populateFieldDatalist(builderFieldOptions);
       setBuilderStatus(builderFieldOptions.length ? `Loaded ${builderFieldOptions.length} fields` : 'No fields found.');
     }
@@ -1135,6 +1184,7 @@
         clearUi();
         setSoqlState('inprogress');
         applyObjectSelectorVisibility();
+        applyBuilderVisibility(); // Apply builder visibility preference
         updateActiveTabFromInputs({ andRender: false });
         reloadObjects(!!toolingCb.checked);
       });
@@ -1169,35 +1219,35 @@
       on(objSel, 'change', () => {
         const v = (objSel.value || '').trim();
         if (!v) { clearUi(); setSoqlState('inprogress'); updateActiveTabFromInputs({ andRender: true }); return; }
-        if (builderState.enabled) {
-          builderState.object = v;
-          builderState.fields = ['Id'];
-          builderState.filters = [];
-          builderState.orderBy = null;
-          builderState.limit = getLimitValue();
-          handleBuilderChange({ writeQuery: true, loadFields: true });
-          return;
-        }
+
         const qName = quoteIdentifier(v);
         const lim = getLimitValue();
         const templateQuery = `SELECT Id FROM ${qName} LIMIT ${lim}`;
         try { setSoqlState('inprogress'); } catch {}
-        // Decide whether to create a new tab or reuse the current one
+
         let usedNewTab = false;
         try {
           const t = tabs.find(x => x.id === activeTabId);
           const hasContent = !!(t && ((t.query && t.query.trim() !== '') || t.lastResp));
           if (hasContent) {
-            addTab(templateQuery);
+            addTab('');
             usedNewTab = true;
           }
         } catch {}
-        if (!usedNewTab) {
+
+        if (builderState.enabled) {
+          builderState.object = v;
+          builderState.fields = ['Id'];
+          builderState.filters = [];
+          builderState.orderBy = null;
+          builderState.limit = lim;
+          handleBuilderChange({ writeQuery: true, loadFields: true });
+        } else {
           queryEl.value = templateQuery;
           renderPlaceholder();
           updateActiveTabFromInputs({ andRender: false });
         }
-        // Move focus to the query editor and blur the object selector to dismiss any native suggestions/dropdowns
+
         try { objSel.blur(); } catch {}
         try { setTimeout(() => { if (queryEl && queryEl.isConnected) { queryEl.focus(); } }, 0); } catch {}
       });
@@ -1388,6 +1438,14 @@
       on(builderFieldInput, 'keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); builderAddFieldBtn?.click(); }
       });
+      on(builderFieldInput, 'input', (e) => {
+        // Auto-add if the user selected from the datalist (browser indicates this via insertReplacementText or equivalent)
+        // or if the value matches an option exactly and we can infer intent (though exact string matching is risky for prefixes).
+        // Safest bet for "remove extra click" is handling the explicit list selection event.
+        if (e.inputType === 'insertReplacementText') {
+          builderAddFieldBtn?.click();
+        }
+      });
     }
     if (builderFieldsWrap) {
       on(builderFieldsWrap, 'click', (e) => {
@@ -1453,6 +1511,7 @@
     if (attached) return;
     attached = true;
     applyObjectSelectorVisibility();
+    applyBuilderVisibility(); // Apply builder visibility preference
     wireUiOnly();
 
     // Flush caches on first attach to avoid stale lists from previous sessions
@@ -1469,7 +1528,7 @@
     const tooling = !!document.getElementById('soql-tooling')?.checked;
     reloadObjects(tooling);
 
-    const onSettingsChanged = () => { applyObjectSelectorVisibility(); };
+    const onSettingsChanged = () => { applyObjectSelectorVisibility(); applyBuilderVisibility(); };
     on(document, 'soql-settings-changed', onSettingsChanged);
   }
 

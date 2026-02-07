@@ -986,6 +986,82 @@
     if (norm) state.apiVersion = String(norm);
   }
 
+  // --- Generic API Helpers (used by Data Explorer / other tabs) ---
+
+  async function genericExecuteQuery(soql) {
+    return await withAuthRetry(async () => {
+      if (!ensureSession()) throw new Error('Not connected');
+      const apiVersion = state.apiVersion || '66.0';
+      const s = opts.getSession();
+      const baseUrl = s.instanceUrl;
+      const accessToken = Utils.getAccessToken(s);
+
+      if (!baseUrl || !accessToken) throw new Error('Missing session details');
+
+      const url = `${baseUrl}/services/data/v${apiVersion}/query?q=${encodeURIComponent(soql)}`;
+      // Use generic fetch with auth
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
+
+      // If unauthorized, throw specific error status so withAuthRetry catches it
+      if (res.status === 401 || res.status === 403) {
+           const err = new Error('Unauthorized');
+           err.status = res.status;
+           throw err; // withAuthRetry catches this
+      }
+
+      if (!res.ok) {
+          const txt = await res.text();
+          let msg = res.statusText;
+          try { const json = JSON.parse(txt); if (Array.isArray(json) && json[0].message) msg = json[0].message; } catch {}
+          throw new Error(msg);
+      }
+      return await res.json();
+    }, 'SOQL Query');
+  }
+
+  async function genericFetch(endpoint, options = {}) {
+     return await withAuthRetry(async () => {
+         if (!ensureSession()) throw new Error('Not connected');
+         const s = opts.getSession();
+         const baseUrl = s.instanceUrl;
+         const accessToken = Utils.getAccessToken(s);
+
+         if (!baseUrl || !accessToken) throw new Error('Missing session details');
+
+         let url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+         const fetchOpts = {
+             ...options,
+             headers: {
+                 'Authorization': `Bearer ${accessToken}`,
+                 'Content-Type': 'application/json',
+                 ...(options.headers || {})
+             }
+         };
+
+         const res = await fetch(url, fetchOpts);
+         // Handle 204 No Content
+         if (res.status === 204) return null;
+
+         // If unauthorized, throw specific error status so withAuthRetry catches it
+         if (res.status === 401 || res.status === 403) {
+             const err = new Error('Unauthorized');
+             err.status = res.status;
+             throw err; // withAuthRetry catches this
+         }
+
+         if (!res.ok) {
+             const txt = await res.text();
+             let msg = res.statusText;
+             try { const json = JSON.parse(txt); if (Array.isArray(json) && json[0].message) msg = json[0].message; } catch {}
+             throw new Error(msg);
+         }
+
+         const ctype = res.headers.get('content-type');
+         if (ctype && ctype.includes('application/json')) return await res.json();
+         return await res.text();
+     }, 'API Request');
+  }
+
   window.PlatformHelper = window.PlatformHelper || {};
   window.PlatformHelper.init = function(options) {
       try {
@@ -1001,6 +1077,13 @@
         state.cometdBaseUrl = getCometdBase();
     } catch {}
   };
+
+  // Expose Generic Helpers
+  window.PlatformHelper.getSession = function() { return opts.getSession(); };
+  window.PlatformHelper.refreshSessionFromTab = function() { return opts.refreshSessionFromTab(); };
+  window.PlatformHelper.executeQuery = genericExecuteQuery;
+  window.PlatformHelper.fetchFromSalesforce = genericFetch;
+
   // test hooks
   try {
     window.__PlatformTestHooks = {

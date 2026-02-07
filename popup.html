@@ -221,18 +221,34 @@ File: `popup.html` (replace body content with this)
                 <button id="soql-tab-add" class="icon-btn btn-sm" title="New query tab" aria-label="New query tab">＋</button>
             </div>
 
-            <!-- Guided query builder toggle and panel -->
-            <div class="soql-builder-toggle">
-                <label class="builder-toggle-label">
-                    <input type="checkbox" id="soql-builder-enabled" aria-label="Enable guided query builder" />
-                    <span>Guided builder</span>
-                </label>
-                <span class="soql-builder-hint">Compose a query with fields and filters, or turn it off to hand-write SOQL.</span>
+            <!-- Query Editor (Top) -->
+            <div class="search-box" style="margin-bottom: 0; border-bottom: 1px solid var(--border-color);">
+                <textarea id="soql-query" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10" aria-label="SOQL query" style="resize: vertical; min-height: 80px; font-family: monospace;"></textarea>
+                <div id="soql-guidance" class="soql-guidance" aria-live="polite">
+                    <div class="soql-guidance-card">
+                        <div class="soql-guidance-card-title">Write a focused SOQL query</div>
+                        <div class="soql-guidance-card-message">Start by selecting a small field list and limit the records you pull back.</div>
+                    </div>
+                    <div class="soql-guidance-flags" role="list"></div>
+                </div>
             </div>
-            <div id="soql-builder" class="soql-builder" hidden>
-                <div class="builder-row">
-                    <div class="builder-col">
-                        <div class="builder-section" aria-label="Select fields">
+
+            <!-- Split View Container -->
+            <div class="soql-split-container" style="display: flex; flex: 1; overflow: hidden; min-height: 0;">
+
+                <!-- Left Pane: Builder Controls -->
+                <div class="soql-split-left" style="width: 320px; min-width: 250px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: var(--bg-subtle);">
+
+                    <!-- Guided query builder toggle -->
+                    <div class="soql-builder-toggle" style="padding: 8px; border-bottom: 1px solid var(--border-color);">
+                        <label class="builder-toggle-label">
+                            <input type="checkbox" id="soql-builder-enabled" aria-label="Enable guided query builder" />
+                            <span>Guided builder</span>
+                        </label>
+                    </div>
+
+                    <div id="soql-builder" class="soql-builder" hidden style="margin-top: 0; padding: 8px; overflow-y: auto; flex: 1;">
+                        <div class="builder-section" aria-label="Select fields" style="margin-bottom: 12px;">
                             <div class="builder-section-header">
                                 <span class="builder-title">Fields</span>
                                 <button id="soql-builder-add-field" class="btn-chip" type="button" title="Add field">+ Add</button>
@@ -243,20 +259,16 @@ File: `popup.html` (replace body content with this)
                             </div>
                             <div id="soql-builder-fields" class="chip-wrap builder-chip-wrap" aria-live="polite"></div>
                         </div>
-                    </div>
-                    <div class="builder-col">
-                        <div class="builder-section" aria-label="Add filters">
+
+                        <div class="builder-section" aria-label="Add filters" style="margin-bottom: 12px;">
                             <div class="builder-section-header">
                                 <span class="builder-title">Filters</span>
                                 <button id="soql-builder-add-filter" class="btn-chip" type="button" title="Add filter">+ Filter</button>
                             </div>
                             <div id="soql-builder-filters" class="builder-filters" aria-live="polite"></div>
                         </div>
-                    </div>
-                </div>
-                <div class="builder-row">
-                    <div class="builder-col">
-                        <div class="builder-section" aria-label="Order by">
+
+                        <div class="builder-section" aria-label="Order by" style="margin-bottom: 12px;">
                             <div class="builder-section-header">
                                 <span class="builder-title">Order by</span>
                                 <button id="soql-builder-clear-order" class="icon-btn btn-sm" type="button" title="Clear ordering">✕</button>
@@ -269,42 +281,33 @@ File: `popup.html` (replace body content with this)
                                 </select>
                             </div>
                         </div>
-                    </div>
-                    <div class="builder-col">
+
                         <div class="builder-section builder-note-section" aria-label="Builder status">
-                            <div class="builder-title">Builder status</div>
-                            <div class="builder-note">Limit uses the control above. Tooling toggle also applies here.</div>
-                            <div id="soql-builder-status" class="builder-status" aria-live="polite"></div>
+                            <div class="builder-title">Status</div>
+                            <div id="soql-builder-status" class="builder-status" aria-live="polite">Ready</div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="search-box">
-                <textarea id="soql-query" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 10" aria-label="SOQL query"></textarea>
-                <div id="soql-guidance" class="soql-guidance" aria-live="polite">
-                    <div class="soql-guidance-card">
-                        <div class="soql-guidance-card-title">Write a focused SOQL query</div>
-                        <div class="soql-guidance-card-message">Start by selecting a small field list and limit the records you pull back.</div>
+                <!-- Right Pane: Results -->
+                <div class="soql-split-right" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+                    <!-- Unified action bar -->
+                    <div class="soql-actionbar" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-start; padding:8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-default);">
+                        <label class="filter-label" for="soql-view-advanced" title="Toggle Advanced Results" style="margin-right:4px;">Advanced:</label>
+                        <input type="checkbox" id="soql-view-advanced" role="switch" aria-label="Advanced results view (on/off)" style="margin-right:16px;" />
+                        <span id="soql-status" style="margin-right:auto; font-size:12px; color:#555; padding:2px 4px;">Raw view</span>
+                        <div id="soql-export-buttons" style="display:none; gap:8px; align-items:center;">
+                          <button class="btn-chip" id="soql-exp-json" title="Copy JSON to clipboard"><span class="ico">📋</span><span class="lbl">JSON</span></button>
+                          <button class="btn-chip" id="soql-exp-csv" title="Copy CSV to clipboard"><span class="ico">📋</span><span class="lbl">CSV</span></button>
+                          <button class="btn-chip" id="soql-exp-tsv" title="Copy TSV (Excel) to clipboard"><span class="ico">📋</span><span class="lbl">Excel</span></button>
+                          <button class="btn-chip" id="soql-exp-download" title="Download CSV file"><span class="ico">⬇️</span><span class="lbl">Download CSV</span></button>
+                        </div>
                     </div>
-                    <div class="soql-guidance-flags" role="list"></div>
-                </div>
-            </div>
 
-            <!-- Unified action bar: Advanced toggle + export buttons -->
-            <div class="soql-actionbar" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:flex-end; padding:6px 0;">
-                <label class="filter-label" for="soql-view-advanced" title="Toggle Advanced Results" style="margin-right:4px;">Advanced:</label>
-                <input type="checkbox" id="soql-view-advanced" role="switch" aria-label="Advanced results view (on/off)" style="margin-right:16px;" />
-                <span id="soql-status" style="margin-right:auto; font-size:12px; color:#555; padding:2px 4px;">Raw view</span>
-                <div id="soql-export-buttons" style="display:none; gap:8px; align-items:center;">
-                  <button class="btn-chip" id="soql-exp-json" title="Copy JSON to clipboard"><span class="ico">📋</span><span class="lbl">JSON</span></button>
-                  <button class="btn-chip" id="soql-exp-csv" title="Copy CSV to clipboard"><span class="ico">📋</span><span class="lbl">CSV</span></button>
-                  <button class="btn-chip" id="soql-exp-tsv" title="Copy TSV (Excel) to clipboard"><span class="ico">📋</span><span class="lbl">Excel</span></button>
-                  <button class="btn-chip" id="soql-exp-download" title="Download CSV file"><span class="ico">⬇️</span><span class="lbl">Download CSV</span></button>
+                    <div id="soql-results" class="logs-container" style="flex: 1; overflow: auto; padding: 0;">
+                        <!-- Results will appear here -->
+                    </div>
                 </div>
-            </div>
-            <div id="soql-results" class="logs-container">
-
             </div>
         </div>
         <div id="tab-graphql" class="tab-pane" data-tab="graphql" hidden>

@@ -174,22 +174,40 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
 
             const { soqlShowObjectSelector = true, graphqlShowObjectSelector = true, graphqlAutoFormat = true } = await chrome.storage?.local?.get?.({ soqlShowObjectSelector: true, graphqlShowObjectSelector: true, graphqlAutoFormat: true }) || {};
 
-            // SOQL editor group: only "Show Object selector" checkbox
+            // SOQL editor group: "Show Object selector" and "Enable Builder"
             const soqlGroup = ensureEditorGroup('soql-editor-settings', 'SOQL Query Editor');
             const soqlListEl = soqlGroup.querySelector('.settings-list');
             if (soqlListEl) {
-                const cbLabel = document.createElement('label');
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.id = 'setting-soql-object-selector';
-                cb.checked = !!soqlShowObjectSelector;
-                const span = document.createElement('span');
-                span.textContent = 'Show Object selector';
-                cbLabel.appendChild(cb);
-                cbLabel.appendChild(span);
-                soqlListEl.appendChild(cbLabel);
-                cb.addEventListener('change', async () => {
-                    try { await chrome.storage?.local?.set?.({ soqlShowObjectSelector: !!cb.checked }); } catch {}
+                // 1. Show Object Selector
+                const selLabel = document.createElement('label');
+                const selCb = document.createElement('input');
+                selCb.type = 'checkbox';
+                selCb.id = 'setting-soql-object-selector';
+                selCb.checked = !!soqlShowObjectSelector;
+                const selSpan = document.createElement('span');
+                selSpan.textContent = 'Show Object selector';
+                selLabel.appendChild(selCb);
+                selLabel.appendChild(selSpan);
+                soqlListEl.appendChild(selLabel);
+                selCb.addEventListener('change', async () => {
+                    try { await chrome.storage?.local?.set?.({ soqlShowObjectSelector: !!selCb.checked }); } catch {}
+                    try { document.dispatchEvent(new CustomEvent('soql-settings-changed')); } catch {}
+                });
+
+                // 2. Enable Query Builder
+                const { soqlEnableBuilder = true } = await chrome.storage?.local?.get?.({ soqlEnableBuilder: true }) || {};
+                const bldLabel = document.createElement('label');
+                const bldCb = document.createElement('input');
+                bldCb.type = 'checkbox';
+                bldCb.id = 'setting-soql-enable-builder';
+                bldCb.checked = !!soqlEnableBuilder;
+                const bldSpan = document.createElement('span');
+                bldSpan.textContent = 'Enable Query Builder';
+                bldLabel.appendChild(bldCb);
+                bldLabel.appendChild(bldSpan);
+                soqlListEl.appendChild(bldLabel);
+                bldCb.addEventListener('change', async () => {
+                    try { await chrome.storage?.local?.set?.({ soqlEnableBuilder: !!bldCb.checked }); } catch {}
                     try { document.dispatchEvent(new CustomEvent('soql-settings-changed')); } catch {}
                 });
             }

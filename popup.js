@@ -78,7 +78,24 @@
                 sessionInfo = stored.appSession;
                 try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(sessionInfo.instanceUrl || null); } catch {}
                 // reflect connected status in UI if possible
-                if (sessionInfo && sessionInfo.isLoggedIn) updateStatus(true, 'Connected to Salesforce (transferred session)');
+                if (sessionInfo && sessionInfo.isLoggedIn) {
+                    updateStatus(true, 'Connected to Salesforce (transferred session)');
+                    // Fetch org name for title update in standalone mode
+                    if (window.location.hash.includes('standalone')) {
+                        const accessToken = getAccessToken();
+                        const instanceUrl = sessionInfo.instanceUrl;
+                        if (accessToken && instanceUrl) {
+                            fetchOrgName(instanceUrl, accessToken, apiVersion)
+                                .then(name => {
+                                    if (name) {
+                                        updateStatus(true, `Connected to ${name}`);
+                                        document.title = `${name} - TrackForcePro`;
+                                    }
+                                })
+                                .catch(() => {});
+                        }
+                    }
+                }
                 // clear consumed session so it doesn't linger across future launches
                 try { chrome.storage.local.remove('appSession'); } catch {}
             }
@@ -96,6 +113,9 @@
                     try {
                         const orgName = await fetchOrgName(instanceUrl, accessToken, apiVersion);
                         updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
+                        if (orgName && window.location.hash.includes('standalone')) {
+                            document.title = `${orgName} : TrackForcePro`;
+                        }
                     } catch {
                         updateStatus(true, 'Connected to Salesforce');
                     }
@@ -442,6 +462,9 @@
                         if (tabName === 'lms') {
                             try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
                         }
+                        if (tabName === 'data') {
+                            try { window.DataExplorerHelper?.init?.(); } catch {}
+                        }
                     }
                 });
                 try { history.replaceState(null, '', `#${activated}`); } catch {}
@@ -516,6 +539,9 @@
             }
             if (name === 'lms') {
                 try { document.dispatchEvent(new CustomEvent('lms-load')); } catch {}
+            }
+            if (name === 'data') {
+                try { window.DataExplorerHelper && window.DataExplorerHelper.init && window.DataExplorerHelper.init(); } catch {}
             }
         }
 

@@ -31,3 +31,5 @@ NO USER-FACING CHANGES:
 HOW TO FORCE FULL SCHEMA (if needed):
 loadSchema({ force: true, skipFullSchema: false })
 See OPTIMIZATION_GUIDE.md for detailed documentation.
+Implemented platform_helper.js query execution logic for Data Explorer
+Verified user detail query and robustified authentication handling

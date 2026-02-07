@@ -1942,106 +1942,126 @@ textarea.valid:focus {
   word-wrap: break-word;
 }
 
-/* ===== SCREEN 3: Results ===== */
-.graphql-results-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid #e9ecef;
-  background: #f8f9fa;
-}
-
-.results-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.results-title h2 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #212529;
-  margin: 0;
-}
-
-.results-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.graphql-results-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 20px;
-}
-
-
-.graphql-result-item {
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  padding: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: #ffffff;
-}
-
-.graphql-result-item:hover {
-  background: #f8f9fa;
-  border-color: #0176d3;
-  box-shadow: 0 2px 8px rgba(1, 118, 211, 0.1);
-}
-
-.graphql-result-item.expanded {
-  background: #f0f4f9;
-  border-color: #0176d3;
-}
-
-/* Utility Classes */
-.hidden {
-  display: none !important;
-}
-
-.placeholder-note {
-  text-align: center;
-  padding: 20px;
-  color: #6c757d;
-  font-size: 13px;
-}
-
-@media (max-width: 900px) {
-  .graphql-builder-container {
-    grid-template-columns: 1fr;
-  }
-
-  .graphql-builder-left {
-    border-right: none;
-    border-bottom: 1px solid #e9ecef;
-  }
-
-  .graphql-objects-grid {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  }
-}
-
-@media (max-width: 600px) {
-  .graphql-objects-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .graphql-objects-picker {
-    padding: 20px 12px;
-  }
-
-  .graphql-picker-footer {
+/* ===================== SOQL Split View Layout ===================== */
+.soql-workspace-container {
+    display: flex;
     flex-direction: column;
-    width: 100%;
-  }
-
-  .graphql-picker-footer .btn {
-    width: 100%;
-  }
+    height: 100%;
 }
 
+.soql-query-banner {
+    flex-shrink: 0;
+    max-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
 
+.soql-split-view {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+#soql-builder.soql-builder-side {
+    background: #fff;
+    padding: 0;
+    gap: 0;
+    border-bottom: none; /* override default soql-builder style */
+}
+
+/* Ensure hidden attribute works for the side builder panel */
+#soql-builder[hidden] {
+    display: none !important;
+}
+
+.soql-builder-side .builder-header {
+    flex-shrink: 0;
+}
+
+.builder-scroll-content {
+    overflow-y: auto;
+}
+
+.soql-results-side {
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ensure chips wrap nicely in side panel */
+.builder-chip-wrap {
+    flex-wrap: wrap;
+}
+
+/* Adjust inputs for narrower side panel */
+.builder-field-add input,
+.builder-filters .filter-row input,
+.builder-filters .filter-row select {
+    width: 100%;
+    min-width: 0;
+}
+
+/* Split View Styles for SOQL Builder */
+#tab-soql {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+#tab-soql .search-box {
+    flex-shrink: 0; /* Keep editor fixed height */
+}
+
+/* Ensure results container scrolls independently */
+#soql-results {
+    overflow: auto;
+    flex: 1;
+}
+
+.soql-split-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    border-top: 1px solid var(--border-color);
+}
+
+.soql-split-left {
+    width: 300px;
+    min-width: 250px;
+    border-right: 1px solid var(--border-color);
+    background: #f8f9fa; /* Light background for builder pane */
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.soql-split-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0; /* Enable flex shrinking */
+}
+
+/* Adjust Builder Panel within Split View */
+#soql-builder {
+    padding: 12px;
+}
+
+#soql-builder .builder-row {
+    flex-direction: column; /* Stack columns vertically in side panel */
+    gap: 12px;
+}
+
+#soql-builder .builder-col {
+    width: 100%;
+}
+
+/* Helper to ensure content doesn't overflow horizontally in narrow side pane */
+#soql-builder-fields .chip {
+    max-width: 100%;
+    white-space: normal;
+    height: auto;
+    padding: 4px 8px;
+}
