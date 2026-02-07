@@ -933,10 +933,23 @@ async function describeSObject(instanceUrl, sessionId, name, useTooling = false)
                     type: f.type,
                     nillable: f.nillable,
                     referenceTo: f.referenceTo || [],
-                    relationshipName: f.relationshipName || null
+                    relationshipName: f.relationshipName || null,
+                    filterable: f.filterable !== false,
+                    sortable: f.sortable !== false
                 }))
                 : [];
-            return { name: json.name || name, label: json.label || name, fields };
+            // Include child relationships for subquery suggestions
+            const childRelationships = Array.isArray(json.childRelationships)
+                ? json.childRelationships
+                    .filter(cr => cr.relationshipName && cr.childSObject)
+                    .map(cr => ({
+                        relationshipName: cr.relationshipName,
+                        childSObject: cr.childSObject,
+                        field: cr.field || null,
+                        cascadeDelete: cr.cascadeDelete || false
+                    }))
+                : [];
+            return { name: json.name || name, label: json.label || name, fields, childRelationships };
         } catch (err) {
             lastError = err;
             const errStr = String(err);

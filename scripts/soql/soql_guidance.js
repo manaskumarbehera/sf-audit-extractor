@@ -492,32 +492,68 @@
                 // helper to set focus/caret safely
                 function setCaret(pos) { try { el.focus(); el.setSelectionRange(pos, pos); } catch {} }
 
+                // Check if this is a relationship field (contains a dot)
+                const isRelationshipField = fieldName.includes('.');
+
+                // Parse existing fields
+                const existingParts = fieldsPart.split(',').map(s => s.trim()).filter(Boolean);
+
                 // Short-circuit when field already exists: keep caret
-                const existing = fieldsPart.split(',').map(s => s.trim()).filter(Boolean);
-                if (existing.includes(fieldName)) {
+                if (existingParts.includes(fieldName)) {
                   setCaret(selStart);
                   return q;
                 }
 
+                // If inserting a relationship field like "Pricebook2.Name", check for and remove
+                // any partial tokens that the user typed:
+                // - "Pricebook2." (just the prefix with dot)
+                // - "Pricebook2.Na" (partial field name)
+                // - "Pricebook2.Nam" (partial field name)
+                let cleanedParts = existingParts;
+                if (isRelationshipField) {
+                  const relationshipPrefix = fieldName.split('.').slice(0, -1).join('.'); // "Pricebook2"
+                  const fieldNameLower = fieldName.toLowerCase();
+
+                  cleanedParts = existingParts.filter(p => {
+                    const pLower = p.toLowerCase();
+
+                    // Remove if it's exactly the prefix with dot (e.g., "Pricebook2.")
+                    if (pLower === relationshipPrefix.toLowerCase() + '.') return false;
+
+                    // Remove if it's a partial of the field being inserted
+                    // e.g., when inserting "Pricebook2.Name", remove "Pricebook2.Na", "Pricebook2.Nam"
+                    if (pLower.startsWith(relationshipPrefix.toLowerCase() + '.') &&
+                        fieldNameLower.startsWith(pLower) &&
+                        pLower !== fieldNameLower) {
+                      return false;
+                    }
+
+                    // Remove if it ends with a dot and the fieldName starts with it
+                    if (p.endsWith('.') && fieldNameLower.startsWith(pLower)) return false;
+
+                    return true;
+                  });
+                }
+
                 // Always append field at the end of the field list, regardless of cursor position
-                if (!fieldsPart.trim() || /^count\s*\(/i.test(fieldsPart)) {
+                if (!cleanedParts.length || /^count\s*\(/i.test(fieldsPart)) {
                   const before = q.slice(0, fieldsStart);
                   const after = q.slice(fieldsEnd);
                   try { el.value = before + fieldName + after; setCaret((before + fieldName).length); } catch {}
                   return before + fieldName + after;
                 }
 
-                const trimmed = fieldsPart.trim();
-                const needsComma = trimmed.length > 0 && !/,\s*$/.test(trimmed);
-                const joiner = needsComma ? ', ' : (trimmed ? ' ' : '');
-                const before = q.slice(0, fieldsStart);
-                const after = q.slice(fieldsEnd);
-                const newFieldsProposed = trimmed + joiner + fieldName;
-                const parts = newFieldsProposed.split(',').map(s => s.trim()).filter(Boolean);
+                // Add the new field
+                cleanedParts.push(fieldName);
+
+                // Deduplicate
                 const seen = new Set();
                 const dedupParts = [];
-                for (const p of parts) { if (!seen.has(p)) { seen.add(p); dedupParts.push(p); } }
+                for (const p of cleanedParts) { if (!seen.has(p)) { seen.add(p); dedupParts.push(p); } }
+
                 const nextFields = dedupParts.join(', ');
+                const before = q.slice(0, fieldsStart);
+                const after = q.slice(fieldsEnd);
                 const nextQuery = before + nextFields + after;
                 try { el.value = nextQuery; setCaret((before + nextFields).length); } catch {}
                 return nextQuery;
@@ -602,6 +638,14 @@
              queryEl.value = replaceFromObjectInQuery(queryEl.value, objectName);
              try { queryEl.focus(); } catch {}
              queryEl.dispatchEvent(new Event('input', { bubbles: true }));
+         } else if (type === 'lookup-hint') {
+             // Insert the relationship prefix with a dot to trigger related field suggestions
+             const relationship = t.getAttribute('data-relationship');
+             if (relationship) {
+               insertFieldIntoSelect(queryEl, relationship + '.');
+               STATE.pendingShowFields = true;
+               queryEl.dispatchEvent(new Event('input', { bubbles: true }));
+             }
          } else if (type === 'field' && fieldName) {
              // Insert the field and mark that we should show the field suggestions on the next input
              insertFieldIntoSelect(queryEl, fieldName);
@@ -619,8 +663,16 @@
         if (!obj) return;
         const { token, inFields, bounds } = getCurrentFieldToken(el);
         if (!inFields) return;
+
+        // Check if user is typing a relationship path (contains a dot)
+        if (token.includes('.')) {
+          appendRelatedFieldSuggestions(root, el, obj, token, bounds);
+          return;
+        }
+
         fetchFieldsForObject(root, obj).then((fields) => {
-             const names = (Array.isArray(fields) ? fields : []).map(f => f?.name).filter(Boolean);
+             const allFields = Array.isArray(fields) ? fields : [];
+             const names = allFields.map(f => f?.name).filter(Boolean);
              if (!names.length) { STATE.pendingShowFields = false; return; }
 
              // existing selected fields in the SELECT area
@@ -632,19 +684,38 @@
 
              const p = (token || '').toLowerCase();
              let matches = [];
+             let lookupFields = [];
+
+             // Get lookup/reference fields for separate display
+             const refFields = allFields.filter(f => f.type === 'reference' && f.relationshipName);
 
              if (p) {
                  // If token exactly matches an already-selected field, suppress suggestions
                  const hasExact = existing.some(n => n === p);
                  if (hasExact) { STATE.pendingShowFields = false; return; }
-                 matches = names.filter(n => n.toLowerCase().startsWith(p) && !existing.includes(n.toLowerCase())).slice(0, 10);
+                 matches = names.filter(n => n.toLowerCase().startsWith(p) && !existing.includes(n.toLowerCase())).slice(0, 8);
+                 // Also suggest lookup relationships that match - be more generous with matching
+                 // Don't filter out lookups that already have fields - user might want to add more
+                 lookupFields = refFields.filter(f =>
+                   (f.relationshipName.toLowerCase().startsWith(p) || f.name.toLowerCase().startsWith(p))
+                 ).slice(0, 6);
              } else {
-                 // empty token: only show when user explicitly requested (e.g., typed comma or after insertion)
-                 if (!STATE.pendingShowFields) return;
-                 matches = names.filter(n => !existing.includes(n.toLowerCase())).slice(0, 10);
+                 // empty token: show when user is in fields area or explicitly requested
+                 // Always show lookup hints when in field area to help discovery
+                 if (!STATE.pendingShowFields && !inFields) return;
+                 matches = names.filter(n => !existing.includes(n.toLowerCase())).slice(0, 6);
+                 // Show common lookup fields prominently (Owner, Account, etc)
+                 // Don't filter out lookups that already have fields selected - user might want more
+                 const commonLookups = ['Owner', 'Account', 'Contact', 'CreatedBy', 'LastModifiedBy', 'Parent'];
+                 const sortedRefFields = refFields.sort((a, b) => {
+                   const aCommon = commonLookups.includes(a.relationshipName) ? 0 : 1;
+                   const bCommon = commonLookups.includes(b.relationshipName) ? 0 : 1;
+                   return aCommon - bCommon;
+                 });
+                 lookupFields = sortedRefFields.slice(0, 6);
              }
 
-             if (!matches.length) { STATE.pendingShowFields = false; return; }
+             if (!matches.length && !lookupFields.length) { STATE.pendingShowFields = false; return; }
 
              const li = document.createElement('div');
              li.className = 'soql-guidance-item';
@@ -659,7 +730,27 @@
              title.textContent = 'Matching fields';
              const wrap = document.createElement('div');
              wrap.className = 'chip-wrap';
+
+             // Add lookup fields FIRST with special styling - make them more visible
+             if (lookupFields.length > 0) {
+               lookupFields.forEach(f => {
+                 const chip = makeBadge(`↗ ${f.relationshipName}.`, {
+                   'data-badge-type': 'lookup-hint',
+                   'data-object': obj,
+                   'data-relationship': f.relationshipName,
+                   'data-reference-to': JSON.stringify(f.referenceTo || [])
+                 });
+                 chip.title = `Lookup: ${f.relationshipName} → ${(f.referenceTo || []).join(', ')} (click to see related fields)`;
+                 chip.style.background = '#e8f5e9';
+                 chip.style.borderColor = 'rgba(46, 125, 50, 0.4)';
+                 chip.style.fontWeight = '500';
+                 wrap.appendChild(chip);
+               });
+             }
+
+             // Add regular fields after lookups
              matches.forEach(name => wrap.appendChild(makeBadge(name, { 'data-badge-type': 'field', 'data-object': obj, 'data-field': name })));
+
              div.appendChild(badge);
              // Add a small "Show all" action chip to render the full field list using appendFieldsFlag
              const showAll = makeBadge('Show all', { 'data-action': 'show-all-fields', 'data-object': obj });
@@ -672,6 +763,85 @@
              // reset pending flag
              STATE.pendingShowFields = false;
          }).catch(() => { STATE.pendingShowFields = false; });
+     }
+
+     // Suggest fields from a related object when user types "Relationship."
+     function appendRelatedFieldSuggestions(root, el, parentObj, token, bounds) {
+       const list = STATE.elements.statusList;
+       if (!list) return;
+
+       const parts = token.split('.');
+       const relationshipName = parts.slice(0, -1).join('.');
+       const fieldPrefix = (parts[parts.length - 1] || '').toLowerCase();
+
+       // First, get the parent object's fields to find the relationship
+       fetchFieldsForObject(root, parentObj).then((parentFields) => {
+         const allFields = Array.isArray(parentFields) ? parentFields : [];
+         const refField = allFields.find(f =>
+           f.relationshipName && f.relationshipName.toLowerCase() === relationshipName.toLowerCase()
+         );
+
+         if (!refField || !refField.referenceTo || !refField.referenceTo.length) {
+           STATE.pendingShowFields = false;
+           return;
+         }
+
+         // Get the target object (use first one for polymorphic lookups)
+         const targetObj = refField.referenceTo[0];
+
+         fetchFieldsForObject(root, targetObj).then((relatedFields) => {
+           const arr = Array.isArray(relatedFields) ? relatedFields : [];
+           if (!arr.length) { STATE.pendingShowFields = false; return; }
+
+           const names = arr.map(f => f?.name).filter(Boolean);
+           let matches = [];
+
+           if (fieldPrefix) {
+             matches = names.filter(n => n.toLowerCase().startsWith(fieldPrefix)).slice(0, 10);
+           } else {
+             // Show common fields first when no prefix
+             const commonFields = ['Name', 'Id', 'Email', 'Phone', 'Title', 'FirstName', 'LastName'];
+             const common = names.filter(n => commonFields.includes(n));
+             const others = names.filter(n => !commonFields.includes(n)).slice(0, 10 - common.length);
+             matches = [...common, ...others].slice(0, 10);
+           }
+
+           if (!matches.length) { STATE.pendingShowFields = false; return; }
+
+           const li = document.createElement('div');
+           li.className = 'soql-guidance-item';
+           li.setAttribute('role', 'listitem');
+           const div = document.createElement('div');
+           div.className = 'soql-guidance-flag info';
+           const badge = document.createElement('span');
+           badge.className = 'soql-guidance-flag-badge';
+           badge.textContent = 'LOOKUP';
+           badge.style.background = '#2e7d32';
+           const title = document.createElement('span');
+           title.className = 'soql-guidance-flag-text';
+           title.textContent = `Fields from ${targetObj} (via ${relationshipName})`;
+           const wrap = document.createElement('div');
+           wrap.className = 'chip-wrap';
+
+           matches.forEach(name => {
+             const fullPath = `${relationshipName}.${name}`;
+             const chip = makeBadge(name, {
+               'data-badge-type': 'field',
+               'data-object': parentObj,
+               'data-field': fullPath
+             });
+             chip.title = `Insert: ${fullPath}`;
+             wrap.appendChild(chip);
+           });
+
+           div.appendChild(badge);
+           div.appendChild(title);
+           div.appendChild(wrap);
+           li.appendChild(div);
+           list.appendChild(li);
+           STATE.pendingShowFields = false;
+         }).catch(() => { STATE.pendingShowFields = false; });
+       }).catch(() => { STATE.pendingShowFields = false; });
      }
     function getCurrentFieldToken(el) {
         try {

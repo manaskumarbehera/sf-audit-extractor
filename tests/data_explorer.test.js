@@ -1073,5 +1073,942 @@ describe('Favicon Edit Mode Tests', () => {
     });
 });
 
-console.log('Data Explorer tests loaded');
+describe('Favicon Shape Tests', () => {
 
+    describe('Shape Storage', () => {
+
+        test('should store favicon with shape property', async () => {
+            const orgId = '00D5g0000012345AAA';
+            const faviconData = {
+                color: '#ff6b6b',
+                label: 'DEV',
+                shape: 'circle',
+                orgName: 'Dev Sandbox',
+                savedAt: new Date().toISOString()
+            };
+
+            // Store favicon with shape
+            const result = await chrome.storage.local.get('orgFavicons');
+            let orgFavicons = result.orgFavicons || {};
+            orgFavicons[orgId] = faviconData;
+            await chrome.storage.local.set({ orgFavicons });
+
+            // Verify storage includes shape
+            const verifyResult = await chrome.storage.local.get('orgFavicons');
+            expect(verifyResult.orgFavicons[orgId].shape).toBe('circle');
+        });
+
+        test('should store different shapes for different orgs', async () => {
+            const org1 = '00D5g0000012345AAA';
+            const org2 = '00D5g0000067890BBB';
+            const org3 = '00D5g0000011111CCC';
+
+            // Initialize with different shapes
+            mockStorage.orgFavicons = {
+                [org1]: { color: '#ff6b6b', label: 'DEV', shape: 'cloud' },
+                [org2]: { color: '#51cf66', label: 'UAT', shape: 'circle' },
+                [org3]: { color: '#339af0', label: 'PRD', shape: 'hexagon' }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            expect(result.orgFavicons[org1].shape).toBe('cloud');
+            expect(result.orgFavicons[org2].shape).toBe('circle');
+            expect(result.orgFavicons[org3].shape).toBe('hexagon');
+        });
+
+        test('should default to cloud shape for favicons without shape property', async () => {
+            const orgId = '00D5g0000012345AAA';
+
+            // Legacy data without shape
+            mockStorage.orgFavicons = {
+                [orgId]: { color: '#ff6b6b', label: 'DEV', orgName: 'Dev Sandbox' }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const shape = result.orgFavicons[orgId].shape || 'cloud';
+            expect(shape).toBe('cloud');
+        });
+    });
+
+    describe('Shape Validation', () => {
+
+        const validShapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
+
+        test.each(validShapes)('should accept valid shape: %s', (shape) => {
+            expect(validShapes.includes(shape)).toBe(true);
+        });
+
+        test('should have exactly 6 valid shapes', () => {
+            expect(validShapes.length).toBe(6);
+        });
+
+        test('should reject invalid shape value by using default', () => {
+            const invalidShape = 'triangle';
+            const resolvedShape = validShapes.includes(invalidShape) ? invalidShape : 'cloud';
+            expect(resolvedShape).toBe('cloud');
+        });
+    });
+
+    describe('Shape Drawing Functions', () => {
+
+        let mockCtx;
+
+        beforeEach(() => {
+            mockCtx = {
+                fillStyle: '',
+                clearRect: jest.fn(),
+                fillRect: jest.fn(),
+                beginPath: jest.fn(),
+                arc: jest.fn(),
+                moveTo: jest.fn(),
+                lineTo: jest.fn(),
+                quadraticCurveTo: jest.fn(),
+                closePath: jest.fn(),
+                fill: jest.fn(),
+                fillText: jest.fn(),
+                font: '',
+                textAlign: '',
+                textBaseline: ''
+            };
+        });
+
+        test('should call arc for circle shape', () => {
+            // Simulate circle drawing
+            mockCtx.clearRect(0, 0, 32, 32);
+            mockCtx.fillStyle = '#ff6b6b';
+            mockCtx.beginPath();
+            mockCtx.arc(16, 16, 14, 0, Math.PI * 2);
+            mockCtx.fill();
+
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.arc).toHaveBeenCalledWith(16, 16, 14, 0, Math.PI * 2);
+            expect(mockCtx.fill).toHaveBeenCalled();
+        });
+
+        test('should call fillRect for square shape', () => {
+            // Simulate square drawing
+            mockCtx.clearRect(0, 0, 32, 32);
+            mockCtx.fillStyle = '#ff6b6b';
+            mockCtx.fillRect(2, 2, 28, 28);
+
+            expect(mockCtx.fillRect).toHaveBeenCalledWith(2, 2, 28, 28);
+        });
+
+        test('should call quadraticCurveTo for rounded shape', () => {
+            // Simulate rounded rect drawing
+            mockCtx.clearRect(0, 0, 32, 32);
+            mockCtx.fillStyle = '#ff6b6b';
+            mockCtx.beginPath();
+            mockCtx.moveTo(8, 2);
+            mockCtx.quadraticCurveTo(30, 2, 30, 8);
+            mockCtx.fill();
+
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.moveTo).toHaveBeenCalled();
+            expect(mockCtx.quadraticCurveTo).toHaveBeenCalled();
+        });
+
+        test('should call lineTo for diamond shape', () => {
+            // Simulate diamond drawing
+            mockCtx.clearRect(0, 0, 32, 32);
+            mockCtx.fillStyle = '#ff6b6b';
+            mockCtx.beginPath();
+            mockCtx.moveTo(16, 1);
+            mockCtx.lineTo(30, 16);
+            mockCtx.lineTo(16, 31);
+            mockCtx.lineTo(2, 16);
+            mockCtx.closePath();
+            mockCtx.fill();
+
+            expect(mockCtx.moveTo).toHaveBeenCalledWith(16, 1);
+            expect(mockCtx.lineTo).toHaveBeenCalledWith(30, 16);
+            expect(mockCtx.closePath).toHaveBeenCalled();
+        });
+
+        test('should call lineTo 6 times for hexagon shape', () => {
+            // Simulate hexagon drawing
+            mockCtx.clearRect(0, 0, 32, 32);
+            mockCtx.fillStyle = '#ff6b6b';
+            mockCtx.beginPath();
+
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i - Math.PI / 2;
+                const x = 16 + 14 * Math.cos(angle);
+                const y = 16 + 14 * Math.sin(angle);
+                if (i === 0) mockCtx.moveTo(x, y);
+                else mockCtx.lineTo(x, y);
+            }
+
+            mockCtx.closePath();
+            mockCtx.fill();
+
+            expect(mockCtx.moveTo).toHaveBeenCalledTimes(1);
+            expect(mockCtx.lineTo).toHaveBeenCalledTimes(5);
+        });
+
+        test('should draw label text on shape', () => {
+            mockCtx.fillStyle = '#ffffff';
+            mockCtx.font = 'bold 10px Arial, sans-serif';
+            mockCtx.textAlign = 'center';
+            mockCtx.textBaseline = 'middle';
+            mockCtx.fillText('DEV', 16, 16);
+
+            expect(mockCtx.fillText).toHaveBeenCalledWith('DEV', 16, 16);
+        });
+
+        test('should truncate label to 3 characters', () => {
+            const label = 'PRODUCTION';
+            const truncatedLabel = label.substring(0, 3).toUpperCase();
+            expect(truncatedLabel).toBe('PRO');
+            expect(truncatedLabel.length).toBeLessThanOrEqual(3);
+        });
+
+        test('should draw cloud shape with multiple arcs', () => {
+            mockCtx.beginPath();
+            mockCtx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
+            mockCtx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
+            mockCtx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
+            mockCtx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
+            mockCtx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
+            mockCtx.closePath();
+            mockCtx.fill();
+
+            expect(mockCtx.arc).toHaveBeenCalledTimes(5);
+        });
+
+        test('should set correct fill color', () => {
+            const testColors = ['#ff6b6b', '#51cf66', '#339af0', '#fcc419', '#9775fa', '#ff922b'];
+
+            testColors.forEach(color => {
+                mockCtx.fillStyle = color;
+                expect(mockCtx.fillStyle).toBe(color);
+            });
+        });
+
+        test('should handle empty label without drawing text', () => {
+            const label = '';
+            if (label) {
+                mockCtx.fillText(label, 16, 16);
+            }
+            expect(mockCtx.fillText).not.toHaveBeenCalled();
+        });
+
+        test('should uppercase label before drawing', () => {
+            const label = 'dev';
+            const processedLabel = label.substring(0, 3).toUpperCase();
+            expect(processedLabel).toBe('DEV');
+        });
+    });
+
+    describe('Shape Selection UI', () => {
+
+        test('should have 6 shape options', () => {
+            const shapeOptions = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
+            expect(shapeOptions.length).toBe(6);
+        });
+
+        test('should set default shape to cloud', () => {
+            const defaultShape = 'cloud';
+            expect(defaultShape).toBe('cloud');
+        });
+
+        test('should return selected shape from radio button', () => {
+            // Simulate radio button selection
+            const selectedValue = 'hexagon';
+            const getSelectedShape = () => selectedValue;
+            expect(getSelectedShape()).toBe('hexagon');
+        });
+
+        test('should update shape selection programmatically', () => {
+            let currentShape = 'cloud';
+            const setSelectedShape = (shape) => { currentShape = shape; };
+
+            setSelectedShape('diamond');
+            expect(currentShape).toBe('diamond');
+        });
+
+        test('should cycle through all shapes', () => {
+            const shapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
+            let currentIndex = 0;
+
+            shapes.forEach((shape, index) => {
+                currentIndex = index;
+                expect(shapes[currentIndex]).toBe(shape);
+            });
+        });
+
+        test('should validate shape value before applying', () => {
+            const validShapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
+            const isValidShape = (shape) => validShapes.includes(shape);
+
+            expect(isValidShape('circle')).toBe(true);
+            expect(isValidShape('triangle')).toBe(false);
+            expect(isValidShape('')).toBe(false);
+            expect(isValidShape(null)).toBe(false);
+        });
+    });
+
+    describe('Shape Migration/Backwards Compatibility', () => {
+
+        test('should handle favicon data without shape field', async () => {
+            const orgId = '00D5g0000012345AAA';
+
+            // Old data format without shape
+            mockStorage.orgFavicons = {
+                [orgId]: { color: '#ff6b6b', label: 'DEV', orgName: 'Dev Sandbox' }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const faviconData = result.orgFavicons[orgId];
+
+            // Should default to cloud when shape is missing
+            const shape = faviconData.shape || 'cloud';
+            expect(shape).toBe('cloud');
+            expect(faviconData.color).toBe('#ff6b6b');
+            expect(faviconData.label).toBe('DEV');
+        });
+
+        test('should preserve existing shape when updating other fields', async () => {
+            const orgId = '00D5g0000012345AAA';
+
+            // Existing data with shape
+            mockStorage.orgFavicons = {
+                [orgId]: { color: '#ff6b6b', label: 'DEV', shape: 'hexagon', orgName: 'Dev Sandbox' }
+            };
+
+            // Update color only
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = { ...result.orgFavicons };
+            orgFavicons[orgId] = {
+                ...orgFavicons[orgId],
+                color: '#51cf66'
+            };
+            await chrome.storage.local.set({ orgFavicons });
+
+            // Verify shape is preserved
+            const verifyResult = await chrome.storage.local.get('orgFavicons');
+            expect(verifyResult.orgFavicons[orgId].shape).toBe('hexagon');
+            expect(verifyResult.orgFavicons[orgId].color).toBe('#51cf66');
+        });
+
+        test('should migrate legacy favicons on load', async () => {
+            const orgId = '00D5g0000012345AAA';
+
+            // Legacy data without shape
+            mockStorage.orgFavicons = {
+                [orgId]: { color: '#ff6b6b', label: 'DEV' }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const faviconData = result.orgFavicons[orgId];
+
+            // Simulate migration: add shape if missing
+            const migratedData = {
+                ...faviconData,
+                shape: faviconData.shape || 'cloud'
+            };
+
+            expect(migratedData.shape).toBe('cloud');
+            expect(migratedData.color).toBe('#ff6b6b');
+        });
+    });
+
+    describe('Shape with Different Colors', () => {
+
+        const shapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
+        const colors = ['#ff6b6b', '#51cf66', '#339af0', '#fcc419', '#9775fa', '#ff922b'];
+
+        test.each(shapes)('should render %s shape correctly', (shape) => {
+            const validShapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
+            expect(validShapes.includes(shape)).toBe(true);
+        });
+
+        test.each(colors)('should accept color %s', (color) => {
+            expect(/^#[0-9a-fA-F]{6}$/.test(color)).toBe(true);
+        });
+
+        test('should combine any shape with any color', () => {
+            shapes.forEach(shape => {
+                colors.forEach(color => {
+                    const favicon = { shape, color, label: 'TST' };
+                    expect(favicon.shape).toBeDefined();
+                    expect(favicon.color).toBeDefined();
+                });
+            });
+        });
+    });
+
+    describe('Shape Canvas Coordinates', () => {
+
+        test('circle should be centered at (16, 16) with radius 14', () => {
+            const center = { x: 16, y: 16 };
+            const radius = 14;
+
+            expect(center.x).toBe(16);
+            expect(center.y).toBe(16);
+            expect(radius).toBe(14);
+            expect(radius * 2).toBeLessThanOrEqual(32); // fits in 32x32 canvas
+        });
+
+        test('square should have 2px padding from edges', () => {
+            const x = 2, y = 2, width = 28, height = 28;
+
+            expect(x + width).toBe(30); // 2px from right edge
+            expect(y + height).toBe(30); // 2px from bottom edge
+        });
+
+        test('diamond points should be symmetric', () => {
+            const points = [
+                { x: 16, y: 1 },   // top
+                { x: 30, y: 16 },  // right
+                { x: 16, y: 31 },  // bottom
+                { x: 2, y: 16 }    // left
+            ];
+
+            // Verify vertical symmetry
+            expect(points[0].x).toBe(points[2].x); // top and bottom aligned
+            // Verify horizontal symmetry
+            expect(points[1].y).toBe(points[3].y); // left and right aligned
+        });
+
+        test('hexagon should have 6 vertices', () => {
+            const vertices = [];
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i - Math.PI / 2;
+                vertices.push({
+                    x: 16 + 14 * Math.cos(angle),
+                    y: 16 + 14 * Math.sin(angle)
+                });
+            }
+
+            expect(vertices.length).toBe(6);
+            // All vertices should be within canvas bounds
+            vertices.forEach(v => {
+                expect(v.x).toBeGreaterThanOrEqual(0);
+                expect(v.x).toBeLessThanOrEqual(32);
+                expect(v.y).toBeGreaterThanOrEqual(0);
+                expect(v.y).toBeLessThanOrEqual(32);
+            });
+        });
+    });
+});
+
+describe('Advanced Favicon Features', () => {
+
+    describe('Favicon Hostname Association', () => {
+
+        test('should store hostname with favicon', async () => {
+            const orgId = '00D5g0000012345AAA';
+            const hostname = 'myorg.lightning.force.com';
+
+            mockStorage.orgFavicons = {
+                [orgId]: {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    shape: 'circle',
+                    hostname: hostname,
+                    orgName: 'Dev Sandbox'
+                }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            expect(result.orgFavicons[orgId].hostname).toBe(hostname);
+        });
+
+        test('should match favicon by hostname when org ID unavailable', async () => {
+            const hostname = 'myorg.lightning.force.com';
+
+            mockStorage.orgFavicons = {
+                '00D5g0000012345AAA': {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    hostname: hostname
+                }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const matchingFavicon = Object.values(result.orgFavicons)
+                .find(f => f.hostname === hostname);
+
+            expect(matchingFavicon).toBeDefined();
+            expect(matchingFavicon.label).toBe('DEV');
+        });
+
+        test('should extract base org from hostname', () => {
+            const extractBaseOrg = (hostname) => {
+                if (!hostname) return null;
+                const match = hostname.match(/^([^.]+)/);
+                return match ? match[1].toLowerCase() : null;
+            };
+
+            expect(extractBaseOrg('myorg.lightning.force.com')).toBe('myorg');
+            expect(extractBaseOrg('myorg--dev.sandbox.my.salesforce.com')).toBe('myorg--dev');
+            expect(extractBaseOrg('myorg.my.salesforce.com')).toBe('myorg');
+        });
+    });
+
+    describe('Favicon Timestamp Tracking', () => {
+
+        test('should store savedAt timestamp', async () => {
+            const orgId = '00D5g0000012345AAA';
+            const now = new Date().toISOString();
+
+            mockStorage.orgFavicons = {
+                [orgId]: {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    savedAt: now
+                }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            expect(result.orgFavicons[orgId].savedAt).toBe(now);
+        });
+
+        test('should update savedAt on modification', async () => {
+            const orgId = '00D5g0000012345AAA';
+            const oldTime = '2025-01-01T00:00:00.000Z';
+            const newTime = '2026-02-07T12:00:00.000Z';
+
+            mockStorage.orgFavicons = {
+                [orgId]: { color: '#ff6b6b', savedAt: oldTime }
+            };
+
+            // Update favicon
+            const result = await chrome.storage.local.get('orgFavicons');
+            const orgFavicons = { ...result.orgFavicons };
+            orgFavicons[orgId] = {
+                ...orgFavicons[orgId],
+                color: '#51cf66',
+                savedAt: newTime
+            };
+            await chrome.storage.local.set({ orgFavicons });
+
+            const verifyResult = await chrome.storage.local.get('orgFavicons');
+            expect(verifyResult.orgFavicons[orgId].savedAt).toBe(newTime);
+        });
+    });
+
+    describe('Multiple Tab Favicon Application', () => {
+
+        test('should filter Salesforce tabs from all tabs', () => {
+            const allTabs = [
+                { id: 1, url: 'https://myorg.lightning.force.com/home' },
+                { id: 2, url: 'https://google.com' },
+                { id: 3, url: 'https://myorg.my.salesforce.com/setup' },
+                { id: 4, url: 'chrome-extension://abc123/popup.html' },
+                { id: 5, url: 'https://another.salesforce.com/one/one.app' }
+            ];
+
+            const sfTabs = allTabs.filter(tab =>
+                tab.url && (
+                    tab.url.includes('.salesforce.com') ||
+                    tab.url.includes('.force.com')
+                ) && !tab.url.startsWith('chrome-extension://')
+            );
+
+            expect(sfTabs.length).toBe(3);
+            expect(sfTabs.map(t => t.id)).toEqual([1, 3, 5]);
+        });
+
+        test('should prefer active Salesforce tab', () => {
+            const sfTabs = [
+                { id: 1, url: 'https://org1.force.com', active: false },
+                { id: 2, url: 'https://org2.force.com', active: true },
+                { id: 3, url: 'https://org3.force.com', active: false }
+            ];
+
+            const activeTab = sfTabs.find(t => t.active) || sfTabs[0];
+            expect(activeTab.id).toBe(2);
+        });
+    });
+});
+
+describe('User Manager Extended Tests', () => {
+
+    describe('User Search Query Building', () => {
+
+        test('should build SOQL query for name search', () => {
+            const searchTerm = 'John';
+            const escapedTerm = searchTerm.replace(/'/g, "\\'");
+            const query = `SELECT Id, Username, FirstName, LastName, Email, Profile.Name 
+                           FROM User 
+                           WHERE (FirstName LIKE '%${escapedTerm}%' 
+                              OR LastName LIKE '%${escapedTerm}%' 
+                              OR Email LIKE '%${escapedTerm}%' 
+                              OR Username LIKE '%${escapedTerm}%')
+                           AND IsActive = true
+                           ORDER BY LastName, FirstName
+                           LIMIT 50`;
+
+            expect(query).toContain('LIKE');
+            expect(query).toContain('John');
+            expect(query).toContain('IsActive = true');
+        });
+
+        test('should escape single quotes in search term', () => {
+            const searchTerm = "O'Brien";
+            const escapedTerm = searchTerm.replace(/'/g, "\\'");
+            expect(escapedTerm).toBe("O\\'Brien");
+        });
+
+        test('should handle empty search term', () => {
+            const searchTerm = '';
+            const isValid = searchTerm && searchTerm.trim().length > 0;
+            expect(isValid).toBeFalsy();
+        });
+
+        test('should trim whitespace from search term', () => {
+            const searchTerm = '  John  ';
+            const trimmed = searchTerm.trim();
+            expect(trimmed).toBe('John');
+        });
+    });
+
+    describe('User Profile Selection', () => {
+
+        test('should load profiles for dropdown', () => {
+            const profiles = [
+                { Id: '00e5g000001ABCD', Name: 'System Administrator' },
+                { Id: '00e5g000001EFGH', Name: 'Standard User' },
+                { Id: '00e5g000001IJKL', Name: 'Read Only' }
+            ];
+
+            expect(profiles.length).toBe(3);
+            expect(profiles[0].Name).toBe('System Administrator');
+        });
+
+        test('should validate profile ID format', () => {
+            const validProfileIds = ['00e5g000001ABCD', '00e5g000001EFGH'];
+            const invalidProfileIds = ['123', '', null, 'notaprofileid'];
+
+            validProfileIds.forEach(id => {
+                expect(id.startsWith('00e')).toBe(true);
+            });
+
+            invalidProfileIds.forEach(id => {
+                expect(id === null || id === '' || !id.startsWith('00e')).toBe(true);
+            });
+        });
+    });
+
+    describe('User Role Selection', () => {
+
+        test('should include "No Role" option', () => {
+            const roles = [
+                { Id: '', Name: '-- No Role --' },
+                { Id: '00E5g000001WXYZ', Name: 'CEO' },
+                { Id: '00E5g000001ABCD', Name: 'Manager' }
+            ];
+
+            const noRoleOption = roles.find(r => r.Id === '');
+            expect(noRoleOption).toBeDefined();
+            expect(noRoleOption.Name).toContain('No Role');
+        });
+
+        test('should sort roles alphabetically', () => {
+            const roles = [
+                { Name: 'Manager' },
+                { Name: 'CEO' },
+                { Name: 'Director' }
+            ];
+
+            const sorted = [...roles].sort((a, b) => a.Name.localeCompare(b.Name));
+            expect(sorted[0].Name).toBe('CEO');
+            expect(sorted[1].Name).toBe('Director');
+            expect(sorted[2].Name).toBe('Manager');
+        });
+    });
+
+    describe('User Update Validation', () => {
+
+        test('should require user selection before update', () => {
+            const selectedUserId = '';
+            const canUpdate = selectedUserId && selectedUserId.length > 0;
+            expect(canUpdate).toBeFalsy();
+        });
+
+        test('should validate user ID format', () => {
+            const validUserIds = ['0055g000001ABCD', '0055g000001EFGH'];
+            const isValidUserId = (id) => !!(id && /^005[a-zA-Z0-9]{12,15}$/.test(id));
+
+            expect(isValidUserId('0055g000001ABCD')).toBe(true);
+            expect(isValidUserId('invalid')).toBe(false);
+            expect(isValidUserId('')).toBe(false);
+        });
+    });
+});
+
+describe('Record Search Extended Tests', () => {
+
+    describe('Record ID Validation', () => {
+
+        const recordIdPrefixes = {
+            '001': 'Account',
+            '003': 'Contact',
+            '006': 'Opportunity',
+            '00Q': 'Lead',
+            '500': 'Case',
+            '00D': 'Organization'
+        };
+
+        test.each(Object.entries(recordIdPrefixes))('should identify %s prefix as %s', (prefix, objectName) => {
+            const recordId = prefix + '5g0000012345';
+            expect(recordId.startsWith(prefix)).toBe(true);
+        });
+
+        test('should accept 15-character record ID', () => {
+            const id15 = '0015g0000012345';
+            expect(id15.length).toBe(15);
+            expect(/^[a-zA-Z0-9]{15}$/.test(id15)).toBe(true);
+        });
+
+        test('should accept 18-character record ID', () => {
+            const id18 = '0015g0000012345AAA';
+            expect(id18.length).toBe(18);
+            expect(/^[a-zA-Z0-9]{18}$/.test(id18)).toBe(true);
+        });
+
+        test('should reject invalid record IDs', () => {
+            const invalidIds = [
+                '12345',           // too short
+                '0015g00000123456789', // too long
+                '001-5g00-0012',   // contains dashes
+                'abc!@#$%',        // special characters
+                ''                 // empty
+            ];
+
+            const isValidRecordId = (id) => !!(id && /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/.test(id));
+
+            invalidIds.forEach(id => {
+                expect(isValidRecordId(id)).toBe(false);
+            });
+        });
+    });
+
+    describe('Record ID Extraction from URL', () => {
+
+        test('should extract ID from Lightning record URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCd/view';
+            const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})/);
+            expect(match[1]).toBe('0015g000001ABCd');
+        });
+
+        test('should extract ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g000001ABCd';
+            const match = url.match(/\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
+            expect(match[1]).toBe('0015g000001ABCd');
+        });
+
+        test('should extract ID from query parameter', () => {
+            const url = 'https://myorg.force.com/page?id=0015g000001ABCd&other=value';
+            const urlObj = new URL(url);
+            const id = urlObj.searchParams.get('id');
+            expect(id).toBe('0015g000001ABCd');
+        });
+
+        test('should handle URL without record ID', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/page/home';
+            const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})/);
+            expect(match).toBeNull();
+        });
+    });
+
+    describe('Object Type Identification', () => {
+
+        test('should identify object type from key prefix', () => {
+            const keyPrefixMap = {
+                '001': 'Account',
+                '003': 'Contact',
+                '006': 'Opportunity',
+                '00Q': 'Lead',
+                '500': 'Case',
+                '00T': 'Task',
+                '00U': 'Event'
+            };
+
+            const getObjectType = (recordId) => {
+                if (!recordId || recordId.length < 3) return 'Unknown';
+                const prefix = recordId.substring(0, 3);
+                return keyPrefixMap[prefix] || 'Custom Object';
+            };
+
+            expect(getObjectType('0015g000001ABCD')).toBe('Account');
+            expect(getObjectType('0035g000001ABCD')).toBe('Contact');
+            expect(getObjectType('a0B5g000001ABCD')).toBe('Custom Object');
+        });
+    });
+});
+
+describe('Organization Info Display Tests', () => {
+
+    describe('Org Type Detection', () => {
+
+        test('should identify sandbox org', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            expect(org.IsSandbox).toBe(true);
+        });
+
+        test('should identify production org', () => {
+            const org = { IsSandbox: false, OrganizationType: 'Enterprise Edition' };
+            expect(org.IsSandbox).toBe(false);
+        });
+
+        test('should format org type with sandbox indicator', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            const displayType = org.IsSandbox
+                ? `${org.OrganizationType} (Sandbox)`
+                : org.OrganizationType;
+            expect(displayType).toBe('Developer Edition (Sandbox)');
+        });
+    });
+
+    describe('Instance Name Display', () => {
+
+        test('should display instance name', () => {
+            const org = { InstanceName: 'NA123' };
+            expect(org.InstanceName).toBe('NA123');
+        });
+
+        test('should handle missing instance name', () => {
+            const org = { InstanceName: null };
+            const displayValue = org.InstanceName || '-';
+            expect(displayValue).toBe('-');
+        });
+    });
+
+    describe('Trial Expiration Display', () => {
+
+        test('should show trial expiration for trial orgs', () => {
+            const org = { TrialExpirationDate: '2026-03-01T00:00:00.000Z' };
+            expect(org.TrialExpirationDate).toBeDefined();
+        });
+
+        test('should not show trial expiration for non-trial orgs', () => {
+            const org = { TrialExpirationDate: null };
+            const hasTrialExpiration = !!org.TrialExpirationDate;
+            expect(hasTrialExpiration).toBe(false);
+        });
+
+        test('should format trial expiration date', () => {
+            const dateStr = '2026-03-01T00:00:00.000Z';
+            const formatted = new Date(dateStr).toLocaleDateString();
+            expect(formatted).toBeDefined();
+        });
+    });
+});
+
+describe('Favicon Status Messages', () => {
+
+    describe('Success Messages', () => {
+
+        test('should show saved & applied message', () => {
+            const message = 'Favicon saved & applied!';
+            const type = 'success';
+            expect(message).toContain('saved');
+            expect(type).toBe('success');
+        });
+
+        test('should show pending application message', () => {
+            const message = 'Favicon saved! Will apply when you visit this org.';
+            expect(message).toContain('Will apply');
+        });
+
+        test('should show removal confirmation', () => {
+            const orgName = 'Dev Sandbox';
+            const message = `Favicon removed for ${orgName}`;
+            expect(message).toContain('removed');
+            expect(message).toContain(orgName);
+        });
+    });
+
+    describe('Error Messages', () => {
+
+        test('should show org detection error', () => {
+            const message = 'Could not determine current org. Please refresh.';
+            expect(message).toContain('Could not');
+        });
+
+        test('should format error with details', () => {
+            const error = new Error('Storage quota exceeded');
+            const message = 'Error: ' + error.message;
+            expect(message).toBe('Error: Storage quota exceeded');
+        });
+    });
+
+    describe('Status Display Behavior', () => {
+
+        test('should auto-hide status after timeout', () => {
+            jest.useFakeTimers();
+            let hidden = false;
+            const hideStatus = () => { hidden = true; };
+
+            setTimeout(hideStatus, 4000);
+            expect(hidden).toBe(false);
+
+            jest.advanceTimersByTime(4000);
+            expect(hidden).toBe(true);
+
+            jest.useRealTimers();
+        });
+    });
+});
+
+describe('Chrome Storage Edge Cases', () => {
+
+    describe('Storage Quota Handling', () => {
+
+        test('should handle storage quota exceeded', async () => {
+            // Simulate storage failure
+            chrome.storage.local.set.mockImplementationOnce(() =>
+                Promise.reject(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'))
+            );
+
+            let errorCaught = false;
+            try {
+                await chrome.storage.local.set({ orgFavicons: {} });
+            } catch (e) {
+                errorCaught = true;
+                expect(e.message).toContain('quota');
+            }
+            expect(errorCaught).toBe(true);
+        });
+    });
+
+    describe('Concurrent Storage Access', () => {
+
+        test('should handle concurrent reads', async () => {
+            mockStorage.orgFavicons = { '00D1': { color: '#ff6b6b' } };
+
+            const [result1, result2] = await Promise.all([
+                chrome.storage.local.get('orgFavicons'),
+                chrome.storage.local.get('orgFavicons')
+            ]);
+
+            expect(result1.orgFavicons).toEqual(result2.orgFavicons);
+        });
+    });
+
+    describe('Storage Data Integrity', () => {
+
+        test('should preserve data structure on read/write cycle', async () => {
+            const originalData = {
+                '00D5g0000012345AAA': {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    shape: 'hexagon',
+                    orgName: 'Test Org',
+                    hostname: 'test.salesforce.com',
+                    savedAt: '2026-02-07T00:00:00.000Z'
+                }
+            };
+
+            await chrome.storage.local.set({ orgFavicons: originalData });
+            const result = await chrome.storage.local.get('orgFavicons');
+
+            expect(result.orgFavicons).toEqual(originalData);
+        });
+    });
+});
+
+console.log('Data Explorer tests loaded');

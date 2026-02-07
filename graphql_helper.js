@@ -192,6 +192,568 @@
 
   // ==================== End Formatting Functions ====================
 
+  // ==================== Intelligent Autocomplete System ====================
+
+  // Cache for autocomplete suggestions
+  const autocompleteCache = {
+    currentObject: null,
+    fields: [],
+    childRelationships: [],
+    parentRelationships: [],
+    allObjects: []
+  };
+
+  // Autocomplete UI state
+  let autocompleteEl = null;
+  let autocompleteVisible = false;
+  let autocompleteItems = [];
+  let autocompleteSelectedIndex = 0;
+  let autocompleteContext = null; // { type: 'field'|'object'|'keyword', startPos, endPos, prefix }
+
+  // GraphQL keywords and structures
+  const GRAPHQL_KEYWORDS = ['query', 'mutation', 'subscription', 'fragment', 'on'];
+  const UIAPI_STRUCTURE = ['uiapi', 'query', 'edges', 'node', 'pageInfo', 'endCursor', 'hasNextPage', 'value'];
+  const FILTER_OPERATORS = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'in'];
+  const COMMON_ARGS = ['first', 'after', 'offset', 'where', 'orderBy'];
+
+  /**
+   * Initialize autocomplete UI
+   */
+  function initAutocomplete() {
+    if (autocompleteEl) return;
+
+    autocompleteEl = document.createElement('div');
+    autocompleteEl.id = 'graphql-autocomplete';
+    autocompleteEl.className = 'graphql-autocomplete';
+    autocompleteEl.setAttribute('role', 'listbox');
+    autocompleteEl.style.display = 'none';
+    document.body.appendChild(autocompleteEl);
+
+    // Close autocomplete when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!autocompleteEl.contains(e.target) && e.target !== queryEl) {
+        hideAutocomplete();
+      }
+    });
+  }
+
+  /**
+   * Show autocomplete dropdown
+   */
+  function showAutocomplete(items, position) {
+    if (!autocompleteEl || !items.length) {
+      hideAutocomplete();
+      return;
+    }
+
+    autocompleteItems = items;
+    autocompleteSelectedIndex = 0;
+    autocompleteVisible = true;
+
+    // Render items
+    autocompleteEl.innerHTML = items.map((item, idx) => `
+      <div class="autocomplete-item ${idx === 0 ? 'selected' : ''}" 
+           data-index="${idx}" 
+           data-value="${Utils.escapeHtml(item.value)}"
+           data-type="${item.type}">
+        <span class="autocomplete-icon">${getItemIcon(item.type)}</span>
+        <span class="autocomplete-label">${Utils.escapeHtml(item.label)}</span>
+        <span class="autocomplete-type">${Utils.escapeHtml(item.typeLabel || item.type)}</span>
+        ${item.description ? `<span class="autocomplete-desc">${Utils.escapeHtml(item.description)}</span>` : ''}
+      </div>
+    `).join('');
+
+    // Position dropdown
+    if (position && queryEl) {
+      const rect = queryEl.getBoundingClientRect();
+      const lineHeight = 18; // Approximate line height
+      const lines = queryEl.value.substring(0, position.start).split('\n');
+      const currentLine = lines.length - 1;
+      const charOffset = lines[lines.length - 1].length;
+
+      autocompleteEl.style.position = 'fixed';
+      autocompleteEl.style.left = `${rect.left + Math.min(charOffset * 7.2, rect.width - 300)}px`;
+      autocompleteEl.style.top = `${rect.top + (currentLine + 1) * lineHeight + 5}px`;
+      autocompleteEl.style.maxWidth = '350px';
+      autocompleteEl.style.maxHeight = '250px';
+    }
+
+    autocompleteEl.style.display = 'block';
+
+    // Wire up click handlers
+    autocompleteEl.querySelectorAll('.autocomplete-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const value = el.dataset.value;
+        const type = el.dataset.type;
+        applyAutocomplete(value, type);
+      });
+      el.addEventListener('mouseenter', () => {
+        autocompleteSelectedIndex = parseInt(el.dataset.index, 10);
+        updateAutocompleteSelection();
+      });
+    });
+  }
+
+  /**
+   * Hide autocomplete dropdown
+   */
+  function hideAutocomplete() {
+    if (autocompleteEl) {
+      autocompleteEl.style.display = 'none';
+    }
+    autocompleteVisible = false;
+    autocompleteItems = [];
+    autocompleteContext = null;
+  }
+
+  /**
+   * Get icon for item type
+   */
+  function getItemIcon(type) {
+    switch (type) {
+      case 'field': return '📝';
+      case 'relationship': return '🔗';
+      case 'childRelationship': return '👶';
+      case 'parentRelationship': return '👆';
+      case 'object': return '📦';
+      case 'keyword': return '🔑';
+      case 'structure': return '🏗️';
+      case 'operator': return '⚡';
+      case 'argument': return '⚙️';
+      default: return '•';
+    }
+  }
+
+  /**
+   * Update autocomplete selection highlight
+   */
+  function updateAutocompleteSelection() {
+    if (!autocompleteEl) return;
+    autocompleteEl.querySelectorAll('.autocomplete-item').forEach((el, idx) => {
+      el.classList.toggle('selected', idx === autocompleteSelectedIndex);
+    });
+    // Scroll into view
+    const selectedEl = autocompleteEl.querySelector('.autocomplete-item.selected');
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  /**
+   * Apply selected autocomplete item
+   */
+  function applyAutocomplete(value, type) {
+    if (!queryEl || !autocompleteContext) return;
+
+    const { startPos, endPos } = autocompleteContext;
+    const before = queryEl.value.substring(0, startPos);
+    const after = queryEl.value.substring(endPos);
+
+    let insertText = value;
+
+    // Add appropriate structure based on type
+    switch (type) {
+      case 'object':
+        // For objects, add full structure
+        insertText = `${value} {\n    edges {\n      node {\n        Id\n      }\n    }\n    pageInfo {\n      endCursor\n      hasNextPage\n    }\n  }`;
+        break;
+      case 'childRelationship':
+        // For child relationships, add nested structure
+        insertText = `${value} {\n      edges {\n        node {\n          Id\n        }\n      }\n    }`;
+        break;
+      case 'parentRelationship':
+        // For parent lookups, add value wrapper
+        insertText = `${value} {\n      Id\n      Name { value }\n    }`;
+        break;
+      case 'field':
+        // For regular fields (non-Id), add { value }
+        if (value.toLowerCase() !== 'id') {
+          insertText = `${value} { value }`;
+        }
+        break;
+      case 'structure':
+        // For structure keywords like edges, node, pageInfo
+        if (value === 'edges') {
+          insertText = `edges {\n      node {\n        \n      }\n    }`;
+        } else if (value === 'node') {
+          insertText = `node {\n        \n      }`;
+        } else if (value === 'pageInfo') {
+          insertText = `pageInfo {\n      endCursor\n      hasNextPage\n    }`;
+        } else if (value === 'value') {
+          insertText = `{ value }`;
+        }
+        break;
+    }
+
+    queryEl.value = before + insertText + after;
+
+    // Position cursor appropriately
+    const newPos = startPos + insertText.length;
+    queryEl.setSelectionRange(newPos, newPos);
+    queryEl.focus();
+
+    hideAutocomplete();
+
+    // Trigger input event for any listeners
+    queryEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  /**
+   * Parse the current context in the GraphQL query
+   */
+  function parseQueryContext(text, cursorPos) {
+    const beforeCursor = text.substring(0, cursorPos);
+
+    // Find the current word being typed
+    const wordMatch = beforeCursor.match(/[\w_]+$/);
+    const currentWord = wordMatch ? wordMatch[0] : '';
+    const wordStart = cursorPos - currentWord.length;
+
+    // Analyze context by looking at surrounding braces and keywords
+    const context = {
+      prefix: currentWord,
+      startPos: wordStart,
+      endPos: cursorPos,
+      type: 'unknown',
+      parentObject: null,
+      depth: 0,
+      inArgs: false,
+      inWhere: false,
+      path: []
+    };
+
+    // Count braces to determine depth
+    let braceDepth = 0;
+    let parenDepth = 0;
+    const objectStack = [];
+
+    for (let i = 0; i < beforeCursor.length; i++) {
+      const char = beforeCursor[i];
+      if (char === '{') {
+        braceDepth++;
+        // Look back for object name
+        const beforeBrace = beforeCursor.substring(0, i).trim();
+        const objMatch = beforeBrace.match(/(\w+)\s*(?:\([^)]*\))?\s*$/);
+        if (objMatch) {
+          objectStack.push(objMatch[1]);
+        }
+      } else if (char === '}') {
+        braceDepth--;
+        objectStack.pop();
+      } else if (char === '(') {
+        parenDepth++;
+      } else if (char === ')') {
+        parenDepth--;
+      }
+    }
+
+    context.depth = braceDepth;
+    context.inArgs = parenDepth > 0;
+    context.path = [...objectStack];
+
+    // Check if we're in a where clause
+    const lastWhereIndex = beforeCursor.lastIndexOf('where');
+    const lastBraceAfterWhere = beforeCursor.substring(lastWhereIndex).indexOf('}');
+    context.inWhere = lastWhereIndex > -1 && (lastBraceAfterWhere === -1 || lastWhereIndex > beforeCursor.lastIndexOf('}'));
+
+    // Determine suggestion type based on context
+    if (braceDepth === 0 && !currentWord) {
+      context.type = 'keyword';
+    } else if (braceDepth === 1 && objectStack[0]?.toLowerCase() === 'query') {
+      context.type = 'keyword'; // uiapi level
+    } else if (braceDepth === 2 && objectStack[1]?.toLowerCase() === 'uiapi') {
+      context.type = 'keyword'; // query level
+    } else if (braceDepth === 3 && objectStack[2]?.toLowerCase() === 'query') {
+      context.type = 'object'; // Object selection level
+    } else if (context.inArgs) {
+      context.type = context.inWhere ? 'operator' : 'argument';
+    } else if (objectStack.includes('node') || objectStack.includes('edges')) {
+      context.type = 'field';
+      // Find the main object
+      const nodeIndex = objectStack.indexOf('node');
+      if (nodeIndex > 0) {
+        const edgesIndex = objectStack.indexOf('edges');
+        if (edgesIndex > 0 && edgesIndex < nodeIndex) {
+          context.parentObject = objectStack[edgesIndex - 1];
+        }
+      }
+    } else if (braceDepth > 3) {
+      context.type = 'field';
+      // Try to find parent object
+      for (let i = objectStack.length - 1; i >= 0; i--) {
+        const item = objectStack[i];
+        if (!['edges', 'node', 'pageInfo', 'uiapi', 'query'].includes(item.toLowerCase())) {
+          context.parentObject = item;
+          break;
+        }
+      }
+    }
+
+    return context;
+  }
+
+  /**
+   * Get suggestions based on context
+   */
+  async function getSuggestions(context) {
+    const { type, prefix, parentObject, inWhere, inArgs } = context;
+    let suggestions = [];
+    const prefixLower = (prefix || '').toLowerCase();
+
+    switch (type) {
+      case 'keyword':
+        suggestions = [
+          { value: 'query', label: 'query', type: 'keyword', typeLabel: 'GraphQL' },
+          { value: 'mutation', label: 'mutation', type: 'keyword', typeLabel: 'GraphQL' },
+          { value: 'uiapi', label: 'uiapi', type: 'structure', typeLabel: 'Salesforce', description: 'UI API root' },
+          { value: 'query', label: 'query', type: 'structure', typeLabel: 'UI API', description: 'Query container' },
+        ];
+        break;
+
+      case 'object':
+        // Get all objects from cache
+        const { names } = await getDescribeCached();
+        suggestions = names
+          .filter(n => n.toLowerCase().startsWith(prefixLower))
+          .slice(0, 20)
+          .map(name => ({
+            value: name,
+            label: name,
+            type: 'object',
+            typeLabel: 'SObject',
+            description: 'Salesforce object'
+          }));
+        break;
+
+      case 'field':
+        // Get fields for the parent object
+        if (parentObject) {
+          const desc = await getSobjectDescribeCached(parentObject);
+          if (desc) {
+            // Regular fields
+            const fields = (desc.fields || [])
+              .filter(f => f.name.toLowerCase().startsWith(prefixLower))
+              .slice(0, 15)
+              .map(f => ({
+                value: f.name,
+                label: f.name,
+                type: 'field',
+                typeLabel: f.type || 'Field',
+                description: f.label || ''
+              }));
+
+            // Child relationships
+            const childRels = (desc.childRelationships || [])
+              .filter(r => r.relationshipName && r.relationshipName.toLowerCase().startsWith(prefixLower))
+              .slice(0, 10)
+              .map(r => ({
+                value: r.relationshipName,
+                label: r.relationshipName,
+                type: 'childRelationship',
+                typeLabel: `→ ${r.childSObject}`,
+                description: 'Child relationship'
+              }));
+
+            // Parent/Lookup relationships
+            const parentRels = (desc.fields || [])
+              .filter(f => f.type === 'reference' && f.relationshipName &&
+                      f.relationshipName.toLowerCase().startsWith(prefixLower))
+              .slice(0, 10)
+              .map(f => ({
+                value: f.relationshipName,
+                label: f.relationshipName,
+                type: 'parentRelationship',
+                typeLabel: `← ${f.referenceTo?.[0] || 'Lookup'}`,
+                description: 'Parent lookup'
+              }));
+
+            suggestions = [...fields, ...childRels, ...parentRels];
+          }
+        }
+
+        // Always add structure suggestions if relevant
+        if (!prefixLower || 'edges'.startsWith(prefixLower)) {
+          suggestions.push({ value: 'edges', label: 'edges', type: 'structure', typeLabel: 'Structure', description: 'Record container' });
+        }
+        if (!prefixLower || 'node'.startsWith(prefixLower)) {
+          suggestions.push({ value: 'node', label: 'node', type: 'structure', typeLabel: 'Structure', description: 'Record data' });
+        }
+        if (!prefixLower || 'pageinfo'.startsWith(prefixLower)) {
+          suggestions.push({ value: 'pageInfo', label: 'pageInfo', type: 'structure', typeLabel: 'Structure', description: 'Pagination info' });
+        }
+        if (!prefixLower || 'value'.startsWith(prefixLower)) {
+          suggestions.push({ value: 'value', label: '{ value }', type: 'structure', typeLabel: 'Wrapper', description: 'Field value wrapper' });
+        }
+        break;
+
+      case 'operator':
+        suggestions = FILTER_OPERATORS
+          .filter(op => op.toLowerCase().startsWith(prefixLower))
+          .map(op => ({
+            value: op,
+            label: op,
+            type: 'operator',
+            typeLabel: 'Filter Op',
+            description: getOperatorDescription(op)
+          }));
+        break;
+
+      case 'argument':
+        suggestions = COMMON_ARGS
+          .filter(arg => arg.toLowerCase().startsWith(prefixLower))
+          .map(arg => ({
+            value: arg,
+            label: arg,
+            type: 'argument',
+            typeLabel: 'Argument',
+            description: getArgumentDescription(arg)
+          }));
+        break;
+    }
+
+    return suggestions;
+  }
+
+  function getOperatorDescription(op) {
+    const descriptions = {
+      'eq': 'Equals (=)',
+      'neq': 'Not equals (!=)',
+      'gt': 'Greater than (>)',
+      'gte': 'Greater or equal (>=)',
+      'lt': 'Less than (<)',
+      'lte': 'Less or equal (<=)',
+      'like': 'Pattern match (LIKE)',
+      'in': 'In list (IN)'
+    };
+    return descriptions[op] || '';
+  }
+
+  function getArgumentDescription(arg) {
+    const descriptions = {
+      'first': 'Limit number of results',
+      'after': 'Cursor for pagination',
+      'offset': 'Skip number of results',
+      'where': 'Filter conditions',
+      'orderBy': 'Sort results'
+    };
+    return descriptions[arg] || '';
+  }
+
+  /**
+   * Handle keydown events for autocomplete navigation
+   */
+  function handleAutocompleteKeydown(e) {
+    if (!autocompleteVisible) return false;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        autocompleteSelectedIndex = (autocompleteSelectedIndex + 1) % autocompleteItems.length;
+        updateAutocompleteSelection();
+        return true;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        autocompleteSelectedIndex = (autocompleteSelectedIndex - 1 + autocompleteItems.length) % autocompleteItems.length;
+        updateAutocompleteSelection();
+        return true;
+
+      case 'Enter':
+      case 'Tab':
+        if (autocompleteItems.length > 0) {
+          e.preventDefault();
+          const selected = autocompleteItems[autocompleteSelectedIndex];
+          if (selected) {
+            applyAutocomplete(selected.value, selected.type);
+          }
+          return true;
+        }
+        break;
+
+      case 'Escape':
+        hideAutocomplete();
+        return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Trigger autocomplete on input
+   */
+  async function triggerAutocomplete() {
+    if (!queryEl) return;
+
+    const cursorPos = queryEl.selectionStart;
+    const text = queryEl.value;
+
+    // Parse context
+    const context = parseQueryContext(text, cursorPos);
+    autocompleteContext = context;
+
+    // Don't show autocomplete for empty prefix in some contexts
+    if (!context.prefix && context.type === 'unknown') {
+      hideAutocomplete();
+      return;
+    }
+
+    // Get suggestions
+    const suggestions = await getSuggestions(context);
+
+    if (suggestions.length > 0) {
+      showAutocomplete(suggestions, { start: context.startPos, end: context.endPos });
+    } else {
+      hideAutocomplete();
+    }
+  }
+
+  /**
+   * Wire up autocomplete events
+   */
+  function wireAutocomplete() {
+    if (!queryEl) return;
+
+    initAutocomplete();
+
+    // Trigger on input with debounce
+    let autocompleteTimeout;
+    on(queryEl, 'input', () => {
+      clearTimeout(autocompleteTimeout);
+      autocompleteTimeout = setTimeout(triggerAutocomplete, 150);
+    });
+
+    // Handle keyboard navigation
+    on(queryEl, 'keydown', (e) => {
+      if (handleAutocompleteKeydown(e)) {
+        return;
+      }
+
+      // Trigger autocomplete on Ctrl+Space
+      if (e.ctrlKey && e.key === ' ') {
+        e.preventDefault();
+        triggerAutocomplete();
+      }
+    });
+
+    // Hide on blur (with delay to allow click on dropdown)
+    on(queryEl, 'blur', () => {
+      setTimeout(() => {
+        if (!autocompleteEl?.matches(':hover')) {
+          hideAutocomplete();
+        }
+      }, 150);
+    });
+
+    // Reposition on scroll
+    on(queryEl, 'scroll', () => {
+      if (autocompleteVisible) {
+        hideAutocomplete();
+      }
+    });
+  }
+
+  // ==================== End Autocomplete System ====================
+
   const defaultBuilderState = () => ({
      enabled: false,
      object: '',
@@ -202,6 +764,8 @@
      offset: 0,
      after: '',
      includePageInfo: true,
+     // Composite query support - related objects
+     relatedObjects: [], // Array of { relationship: string, fields: string[], filters: [] }
    });
    let builderState = defaultBuilderState();
 
@@ -790,13 +1354,49 @@
       .join(' ');
   }
 
+  // Compose related object query part for composite queries
+  function composeRelatedObjectSelection(relatedObj) {
+    if (!relatedObj || !relatedObj.relationship) return '';
+    const fields = Array.isArray(relatedObj.fields) && relatedObj.fields.length
+      ? relatedObj.fields
+      : ['Id'];
+    const selection = fields
+      .map((f) => f.trim())
+      .filter(Boolean)
+      .map((name) => {
+        if (!name || name.toLowerCase() === 'id') return 'Id';
+        return `${name} { value }`;
+      })
+      .join(' ');
+    return `${relatedObj.relationship} { edges { node { ${selection} } } }`;
+  }
+
   function composeQueryFromBuilder(state) {
     const obj = String(state?.object || '').trim();
     if (!obj) return '';
     const args = composeArgs(state || {});
-    const selection = composeSelection(state?.fields);
+
+    // Get related object relationship names to exclude from regular fields
+    const relatedRelationships = new Set(
+      (state?.relatedObjects || []).map(r => r.relationship).filter(Boolean)
+    );
+
+    // Filter out fields that are also related objects to prevent duplicates
+    const filteredFields = (state?.fields || []).filter(f => !relatedRelationships.has(f));
+    const selection = composeSelection(filteredFields.length ? filteredFields : ['Id']);
+
+    // Add related objects for composite query
+    const relatedSelections = (state?.relatedObjects || [])
+      .map(composeRelatedObjectSelection)
+      .filter(Boolean)
+      .join(' ');
+
+    const fullSelection = relatedSelections
+      ? `${selection} ${relatedSelections}`
+      : selection;
+
     const pageInfo = state?.includePageInfo === false ? '' : ' pageInfo { endCursor hasNextPage }';
-    return `query { uiapi { query { ${obj}${args} { edges { node { ${selection} } }${pageInfo} } } } }`;
+    return `query { uiapi { query { ${obj}${args} { edges { node { ${fullSelection} } }${pageInfo} } } } }`;
   }
 
   function parseWhereClause(raw) {
@@ -1105,6 +1705,91 @@
     const desc = await getSobjectDescribeCached(obj);
     const fields = Array.isArray(desc?.fields) ? desc.fields.map((f) => f.name).filter(Boolean).sort((a, b) => a.localeCompare(b)) : [];
     renderFieldListOptions(fields);
+
+    // Also populate related object relationships
+    await populateRelatedObjectOptions(desc);
+  }
+
+  // Populate related object dropdown with child relationships
+  async function populateRelatedObjectOptions(describe) {
+    const relatedSelect = document.getElementById('graphql-builder-related-select');
+    if (!relatedSelect) return;
+
+    relatedSelect.innerHTML = '<option value="">-- Select relationship --</option>';
+
+    if (!describe) return;
+
+    // Get child relationships
+    const childRelationships = describe.childRelationships || [];
+    const validRelationships = childRelationships
+      .filter(r => r.relationshipName && r.childSObject)
+      .sort((a, b) => (a.relationshipName || '').localeCompare(b.relationshipName || ''));
+
+    validRelationships.forEach(rel => {
+      const opt = document.createElement('option');
+      opt.value = rel.relationshipName;
+      opt.textContent = `${rel.relationshipName} (${rel.childSObject})`;
+      opt.dataset.childObject = rel.childSObject;
+      relatedSelect.appendChild(opt);
+    });
+
+    // Also add lookup relationships (parent objects)
+    const lookupFields = (describe.fields || [])
+      .filter(f => f.type === 'reference' && f.relationshipName && f.referenceTo?.length)
+      .sort((a, b) => (a.relationshipName || '').localeCompare(b.relationshipName || ''));
+
+    if (lookupFields.length > 0) {
+      const optGroup = document.createElement('optgroup');
+      optGroup.label = 'Lookup (Parent) Objects';
+      lookupFields.forEach(field => {
+        const opt = document.createElement('option');
+        opt.value = field.relationshipName;
+        opt.textContent = `${field.relationshipName} (${field.referenceTo[0]})`;
+        opt.dataset.childObject = field.referenceTo[0];
+        opt.dataset.isLookup = 'true';
+        optGroup.appendChild(opt);
+      });
+      relatedSelect.appendChild(optGroup);
+    }
+  }
+
+  // Render related objects chips
+  function renderRelatedObjects() {
+    const container = document.getElementById('graphql-builder-related-objects');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const relatedObjects = builderState.relatedObjects || [];
+
+    if (relatedObjects.length === 0) {
+      // Show empty state
+      container.innerHTML = `
+        <div class="related-empty-state">
+          <span class="empty-icon">📭</span>
+          <span class="empty-text">No related objects. Add child records or parent lookups.</span>
+        </div>
+      `;
+      return;
+    }
+
+    relatedObjects.forEach((rel, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'related-object-chip';
+      chip.innerHTML = `
+        <div class="related-header">
+          <span class="related-name">🔗 ${Utils.escapeHtml(rel.relationship)}</span>
+          <span class="related-fields">(${Utils.escapeHtml((rel.fields || []).join(', '))})</span>
+        </div>
+        <button class="remove" type="button" title="Remove">×</button>
+      `;
+      chip.querySelector('.remove').addEventListener('click', () => {
+        builderState.relatedObjects = (builderState.relatedObjects || []).filter((_, i) => i !== idx);
+        handleBuilderChange({ writeQuery: true });
+        setBuilderStatus(`Removed ${rel.relationship} from query`);
+      });
+      container.appendChild(chip);
+    });
   }
 
   function syncBuilderUi(opts = {}) {
@@ -1113,6 +1798,7 @@
     renderFieldChips();
     renderFilters();
     renderOrder();
+    renderRelatedObjects();
     if (loadFields) refreshBuilderFields(builderState.object);
   }
 
@@ -1236,6 +1922,90 @@
       handleBuilderChange({ writeQuery: true });
     });
     on(clearOrderBtn, 'click', () => { builderState.orderBy = null; handleBuilderChange({ writeQuery: true }); });
+
+    // Related objects event wiring
+    const addRelatedBtn = document.getElementById('graphql-builder-add-related');
+    const relatedPicker = document.getElementById('graphql-builder-related-picker');
+    const relatedSelect = document.getElementById('graphql-builder-related-select');
+    const relatedFieldsWrap = document.getElementById('graphql-builder-related-fields-wrap');
+    const relatedFieldsInput = document.getElementById('graphql-builder-related-fields-input');
+    const relatedAddBtn = document.getElementById('graphql-builder-related-add-btn');
+
+    if (addRelatedBtn && relatedPicker) {
+      on(addRelatedBtn, 'click', () => {
+        const isVisible = relatedPicker.style.display !== 'none';
+        relatedPicker.style.display = isVisible ? 'none' : 'flex';
+        if (!isVisible && relatedSelect) {
+          relatedSelect.value = '';
+          if (relatedFieldsWrap) relatedFieldsWrap.style.display = 'none';
+          if (relatedFieldsInput) relatedFieldsInput.value = 'Id, Name';
+        }
+      });
+    }
+
+    if (relatedSelect && relatedFieldsWrap) {
+      on(relatedSelect, 'change', async () => {
+        const selectedOpt = relatedSelect.options[relatedSelect.selectedIndex];
+        if (relatedSelect.value && selectedOpt) {
+          relatedFieldsWrap.style.display = 'flex';
+          // Pre-populate common fields
+          if (relatedFieldsInput) relatedFieldsInput.value = 'Id, Name';
+          // Focus the input
+          if (relatedFieldsInput) relatedFieldsInput.focus();
+        } else {
+          relatedFieldsWrap.style.display = 'none';
+        }
+      });
+    }
+
+    if (relatedAddBtn) {
+      on(relatedAddBtn, 'click', () => {
+        const relationship = relatedSelect?.value;
+        const fieldsStr = relatedFieldsInput?.value || 'Id';
+        if (!relationship) {
+          setBuilderStatus('Please select a relationship first');
+          return;
+        }
+
+        const fields = fieldsStr.split(',').map(f => f.trim()).filter(Boolean);
+        if (!fields.length) fields.push('Id');
+
+        builderState.relatedObjects = builderState.relatedObjects || [];
+        // Check if already added
+        const existing = builderState.relatedObjects.find(r => r.relationship === relationship);
+        if (existing) {
+          existing.fields = fields;
+          setBuilderStatus(`Updated ${relationship} fields`);
+        } else {
+          builderState.relatedObjects.push({
+            id: uid(),
+            relationship,
+            fields
+          });
+          setBuilderStatus(`Added ${relationship} to query`);
+        }
+
+        // Auto-remove the relationship from fields array if present (prevents duplicates)
+        builderState.fields = (builderState.fields || []).filter(f => f !== relationship);
+
+        // Hide picker and reset
+        if (relatedPicker) relatedPicker.style.display = 'none';
+        if (relatedSelect) relatedSelect.value = '';
+        if (relatedFieldsWrap) relatedFieldsWrap.style.display = 'none';
+
+        handleBuilderChange({ writeQuery: true });
+      });
+    }
+
+    // Cancel button for related picker
+    const relatedCancelBtn = document.getElementById('graphql-builder-related-cancel-btn');
+    if (relatedCancelBtn && relatedPicker) {
+      on(relatedCancelBtn, 'click', () => {
+        relatedPicker.style.display = 'none';
+        if (relatedSelect) relatedSelect.value = '';
+        if (relatedFieldsWrap) relatedFieldsWrap.style.display = 'none';
+      });
+    }
 
     // Auto-format with debounce for manual input/paste
     let formatTimeout;
@@ -1631,6 +2401,15 @@
      orderDirSel = document.getElementById('graphql-builder-order-dir');
      clearOrderBtn = document.getElementById('graphql-builder-clear-order');
 
+     // Related objects DOM refs
+     const addRelatedBtn = document.getElementById('graphql-builder-add-related');
+     const relatedPicker = document.getElementById('graphql-builder-related-picker');
+     const relatedSelect = document.getElementById('graphql-builder-related-select');
+     const relatedFieldsWrap = document.getElementById('graphql-builder-related-fields-wrap');
+     const relatedFieldsInput = document.getElementById('graphql-builder-related-fields-input');
+     const relatedAddBtn = document.getElementById('graphql-builder-related-add-btn');
+     const relatedObjectsContainer = document.getElementById('graphql-builder-related-objects');
+
      // New Screen DOM refs
      graphqlScreenObjects = document.getElementById('graphql-screen-objects');
      graphqlScreenBuilder = document.getElementById('graphql-screen-builder');
@@ -1681,14 +2460,12 @@
     if (builderState.enabled) writeQueryFromBuilder();
     else if (builderState.object && !(queryEl?.value || '').trim()) await writeAutoTemplateForObject(builderState.object);
     wireRunControls();
+
+    // Initialize intelligent autocomplete for the query editor
+    wireAutocomplete();
   }
 
-  try {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init(), { once: true });
-    else init();
-  } catch { init(); }
-
-function renderResult(ok, payload) {
+  function renderResult(ok, payload) {
     if (!resultsEl) return;
     if (!ok) {
       lastGraphQLResult = null;
@@ -1790,7 +2567,15 @@ function renderResult(ok, payload) {
 
   function wireRunControls() {
     if (clearBtn && resultsEl) {
-      on(clearBtn, 'click', () => { resultsEl.innerHTML = '<div class="placeholder-note">Cleared.</div>'; updatePageInfoUI(null); });
+      on(clearBtn, 'click', () => {
+        // Only clear query text, variables, and results - preserve builder state
+        if (queryEl) queryEl.value = '';
+        if (variablesEl) variablesEl.value = '';
+        resultsEl.innerHTML = '<div class="placeholder-note">Cleared.</div>';
+        updatePageInfoUI(null);
+        // Update button state after clearing
+        updateRunButtonState();
+      });
     }
     if (schemaRefreshBtn) {
       on(schemaRefreshBtn, 'click', () => {
@@ -1883,6 +2668,13 @@ function renderResult(ok, payload) {
       updateRunButtonState,
      };
    } catch {}
+
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
  })();
 

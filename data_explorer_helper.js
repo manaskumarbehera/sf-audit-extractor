@@ -44,6 +44,7 @@ const DataExplorerHelper = {
         const faviconLabel = document.getElementById('favicon-label');
         const faviconApply = document.getElementById('favicon-apply');
         const faviconReset = document.getElementById('favicon-reset');
+        const faviconShapeOptions = document.querySelectorAll('input[name="favicon-shape"]');
 
         if (faviconPreset) {
             faviconPreset.addEventListener('change', () => {
@@ -59,6 +60,10 @@ const DataExplorerHelper = {
         if (faviconLabel) {
             faviconLabel.addEventListener('input', () => this.updateFaviconPreview());
         }
+        // Shape selection event listeners
+        faviconShapeOptions.forEach(radio => {
+            radio.addEventListener('change', () => this.updateFaviconPreview());
+        });
         if (faviconApply) {
             faviconApply.addEventListener('click', () => this.applyFavicon());
         }
@@ -249,9 +254,13 @@ const DataExplorerHelper = {
 
             if (orgId && orgFavicons[orgId]) {
                 // Existing data found - populate form in edit mode
-                const { color, label } = orgFavicons[orgId];
+                const { color, label, shape } = orgFavicons[orgId];
                 if (colorInput && color) colorInput.value = color;
                 if (labelInput) labelInput.value = label || '';
+                // Set the shape selection
+                if (shape) {
+                    this.setSelectedShape(shape);
+                }
 
                 // Show edit mode indicator
                 if (editIndicator) {
@@ -291,6 +300,8 @@ const DataExplorerHelper = {
         const preview = document.getElementById('favicon-preview');
         const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
         const label = document.getElementById('favicon-label')?.value || '';
+        const shapeRadio = document.querySelector('input[name="favicon-shape"]:checked');
+        const shape = shapeRadio ? shapeRadio.value : 'cloud';
 
         if (!preview) return;
 
@@ -298,11 +309,11 @@ const DataExplorerHelper = {
         const existingBadge = preview.querySelector('.favicon-badge');
         if (existingBadge) existingBadge.remove();
 
-        // Update preview with colored cloud icon
-        this.renderFaviconPreview(color, label);
+        // Update preview with colored shape
+        this.renderFaviconPreview(color, label, shape);
     },
 
-    renderFaviconPreview: function(color, label) {
+    renderFaviconPreview: function(color, label, shape = 'cloud') {
         const preview = document.getElementById('favicon-preview');
         if (!preview) return;
 
@@ -317,25 +328,74 @@ const DataExplorerHelper = {
         canvas.style.height = '32px';
         const ctx = canvas.getContext('2d');
 
-        // Draw Salesforce cloud icon with color
-        this.drawSalesforceCloud(ctx, color || '#ff6b6b', label);
+        // Draw the selected shape with color
+        this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape);
 
         preview.appendChild(canvas);
     },
 
-    drawSalesforceCloud: function(ctx, color, label) {
-        // Draw a simple cloud shape (Salesforce-style)
-        ctx.fillStyle = color;
-        ctx.beginPath();
+    // Helper to get selected shape from the form
+    getSelectedShape: function() {
+        const shapeRadio = document.querySelector('input[name="favicon-shape"]:checked');
+        return shapeRadio ? shapeRadio.value : 'cloud';
+    },
 
-        // Cloud shape using arcs
-        ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5); // Left arc
-        ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5); // Top-left bump
-        ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8); // Top middle bump
-        ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3); // Top-right bump
-        ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5); // Right arc
-        ctx.closePath();
-        ctx.fill();
+    // Set shape selection in the form
+    setSelectedShape: function(shape) {
+        const shapeRadio = document.querySelector(`input[name="favicon-shape"][value="${shape}"]`);
+        if (shapeRadio) {
+            shapeRadio.checked = true;
+        }
+    },
+
+    drawFaviconShape: function(ctx, color, label, shape = 'cloud') {
+        ctx.clearRect(0, 0, 32, 32);
+        ctx.fillStyle = color;
+
+        switch (shape) {
+            case 'circle':
+                ctx.beginPath();
+                ctx.arc(16, 16, 14, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'square':
+                ctx.fillRect(2, 2, 28, 28);
+                break;
+
+            case 'rounded':
+                this.drawRoundedRect(ctx, 2, 2, 28, 28, 6);
+                ctx.fill();
+                break;
+
+            case 'diamond':
+                ctx.beginPath();
+                ctx.moveTo(16, 1);
+                ctx.lineTo(30, 16);
+                ctx.lineTo(16, 31);
+                ctx.lineTo(2, 16);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'hexagon':
+                this.drawHexagon(ctx, 16, 16, 14);
+                ctx.fill();
+                break;
+
+            case 'cloud':
+            default:
+                // Draw Salesforce-style cloud shape
+                ctx.beginPath();
+                ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
+                ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
+                ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
+                ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
+                ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
+                ctx.closePath();
+                ctx.fill();
+                break;
+        }
 
         // Draw label text if provided
         if (label) {
@@ -347,9 +407,46 @@ const DataExplorerHelper = {
         }
     },
 
+    // Helper function to draw a rounded rectangle
+    drawRoundedRect: function(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+    },
+
+    // Helper function to draw a hexagon
+    drawHexagon: function(ctx, cx, cy, radius) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i - Math.PI / 2;
+            const x = cx + radius * Math.cos(angle);
+            const y = cy + radius * Math.sin(angle);
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+    },
+
+    // Legacy method - keep for backwards compatibility
+    drawSalesforceCloud: function(ctx, color, label) {
+        this.drawFaviconShape(ctx, color, label, 'cloud');
+    },
+
     applyFavicon: async function() {
         const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
         const label = document.getElementById('favicon-label')?.value || '';
+        const shape = this.getSelectedShape();
 
         if (!this._currentOrgId) {
             this.showFaviconStatus('Could not determine current org. Please refresh.', 'error');
@@ -406,10 +503,11 @@ const DataExplorerHelper = {
                 console.warn('[TrackForcePro] Could not determine hostname for favicon save');
             }
 
-            // Save/update favicon for current org ID
+            // Save/update favicon for current org ID (including shape)
             orgFavicons[this._currentOrgId] = {
                 color,
                 label,
+                shape,
                 orgName: this._currentOrgName || 'Unknown Org',
                 hostname: currentHostname, // Store hostname for fallback lookup
                 savedAt: new Date().toISOString()
@@ -449,6 +547,7 @@ const DataExplorerHelper = {
                             action: 'updateFavicon',
                             color: color,
                             label: label,
+                            shape: shape,
                             orgId: this._currentOrgId
                         });
                         this.showFaviconStatus('Favicon saved & applied!', 'success');
@@ -459,7 +558,7 @@ const DataExplorerHelper = {
                             await chrome.scripting.executeScript({
                                 target: { tabId: activeTab.id },
                                 func: this.injectFaviconUpdate,
-                                args: [color, label]
+                                args: [color, label, shape]
                             });
                             this.showFaviconStatus('Favicon saved & applied!', 'success');
                         } catch (scriptError) {
@@ -489,23 +588,79 @@ const DataExplorerHelper = {
         setTimeout(() => { status.hidden = true; }, 4000);
     },
 
-    // Function to be injected into the page
-    injectFaviconUpdate: function(color, label) {
+    // Function to be injected into the page - supports all shapes
+    injectFaviconUpdate: function(color, label, shape) {
         const canvas = document.createElement('canvas');
         canvas.width = 32;
         canvas.height = 32;
         const ctx = canvas.getContext('2d');
 
-        // Draw Salesforce cloud with color
+        ctx.clearRect(0, 0, 32, 32);
         ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
-        ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
-        ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
-        ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
-        ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
-        ctx.closePath();
-        ctx.fill();
+
+        // Draw the shape based on the shape parameter
+        switch (shape) {
+            case 'circle':
+                ctx.beginPath();
+                ctx.arc(16, 16, 14, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'square':
+                ctx.fillRect(2, 2, 28, 28);
+                break;
+
+            case 'rounded':
+                ctx.beginPath();
+                ctx.moveTo(8, 2);
+                ctx.lineTo(24, 2);
+                ctx.quadraticCurveTo(30, 2, 30, 8);
+                ctx.lineTo(30, 24);
+                ctx.quadraticCurveTo(30, 30, 24, 30);
+                ctx.lineTo(8, 30);
+                ctx.quadraticCurveTo(2, 30, 2, 24);
+                ctx.lineTo(2, 8);
+                ctx.quadraticCurveTo(2, 2, 8, 2);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'diamond':
+                ctx.beginPath();
+                ctx.moveTo(16, 1);
+                ctx.lineTo(30, 16);
+                ctx.lineTo(16, 31);
+                ctx.lineTo(2, 16);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'hexagon':
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i - Math.PI / 2;
+                    const x = 16 + 14 * Math.cos(angle);
+                    const y = 16 + 14 * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'cloud':
+            default:
+                // Draw Salesforce cloud with color
+                ctx.beginPath();
+                ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
+                ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
+                ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
+                ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
+                ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
+                ctx.closePath();
+                ctx.fill();
+                break;
+        }
 
         if (label) {
             ctx.fillStyle = '#ffffff';
@@ -607,20 +762,20 @@ const DataExplorerHelper = {
             let html = '';
             entries.forEach(([orgId, data]) => {
                 const isCurrentOrg = orgId === this._currentOrgId;
-                const currentBadge = isCurrentOrg ? '<span style="background:#0176d3;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:8px;">CURRENT</span>' : '';
 
                 html += `
                     <div class="favicon-list-item ${isCurrentOrg ? 'current-org' : ''}" data-org-id="${orgId}">
                         <div class="favicon-list-preview" id="preview-${orgId}"></div>
                         <div class="favicon-list-info">
-                            <div class="favicon-list-org-name">${data.orgName || 'Unknown Org'}${currentBadge}</div>
+                            <div class="favicon-list-org-name">${data.orgName || 'Unknown Org'}</div>
                             <div class="favicon-list-org-id">${orgId}</div>
                         </div>
+                        <span class="favicon-current-badge">Current</span>
                         <div class="favicon-list-meta">
                             <span class="favicon-list-label" style="background:${data.color};color:#fff;">${data.label || '—'}</span>
                         </div>
                         <div class="favicon-list-actions">
-                            <button class="btn-delete" data-org-id="${orgId}" title="Delete">🗑️</button>
+                            <button class="btn-delete" data-org-id="${orgId}" title="Delete">×</button>
                         </div>
                     </div>
                 `;
@@ -628,7 +783,7 @@ const DataExplorerHelper = {
 
             container.innerHTML = html;
 
-            // Render previews for each item
+            // Render previews for each item (using saved shape)
             entries.forEach(([orgId, data]) => {
                 const previewEl = document.getElementById(`preview-${orgId}`);
                 if (previewEl) {
@@ -636,7 +791,8 @@ const DataExplorerHelper = {
                     canvas.width = 32;
                     canvas.height = 32;
                     const ctx = canvas.getContext('2d');
-                    this.drawSalesforceCloud(ctx, data.color || '#ff6b6b', data.label);
+                    // Use the saved shape, defaulting to 'cloud' for backwards compatibility
+                    this.drawFaviconShape(ctx, data.color || '#ff6b6b', data.label, data.shape || 'cloud');
                     previewEl.appendChild(canvas);
                 }
             });

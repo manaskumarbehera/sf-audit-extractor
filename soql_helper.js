@@ -150,7 +150,15 @@
   function quoteIdentifier(name) {
     const n = String(name || '');
     if (!n) return n;
+    // Standard identifier (letters, numbers, underscores)
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return n;
+    // Relationship path (e.g., Account.Name, Owner.Manager.Name) - each part must be valid
+    if (n.includes('.')) {
+      const parts = n.split('.');
+      const allValid = parts.every(p => /^[A-Za-z_][A-Za-z0-9_]*$/.test(p));
+      if (allValid) return n;
+    }
+    // Already quoted
     if ((n.startsWith('`') && n.endsWith('`')) || (n.startsWith('"') && n.endsWith('"'))) return n;
     return '`' + n.replace(/`/g, '\\`') + '`';
   }
@@ -434,11 +442,32 @@
     const builderClearOrder = document.getElementById('soql-builder-clear-order');
     const builderStatus = document.getElementById('soql-builder-status');
 
+    // Lookup elements
+    const builderAddLookupBtn = document.getElementById('soql-builder-add-lookup');
+    const builderLookupsPicker = document.getElementById('soql-builder-lookups-picker');
+    const builderLookupSelect = document.getElementById('soql-builder-lookup-select');
+    const builderLookupField = document.getElementById('soql-builder-lookup-field');
+    const builderLookupAddBtn = document.getElementById('soql-builder-lookup-add-btn');
+    const builderLookupsWrap = document.getElementById('soql-builder-lookups');
+
+    // Subquery elements
+    const builderAddSubqueryBtn = document.getElementById('soql-builder-add-subquery');
+    const builderSubqueryPicker = document.getElementById('soql-builder-subquery-picker');
+    const builderSubquerySelect = document.getElementById('soql-builder-subquery-select');
+    const builderSubqueryFieldsWrap = document.getElementById('soql-builder-subquery-fields-wrap');
+    const builderSubqueryFieldsInput = document.getElementById('soql-builder-subquery-fields-input');
+    const builderSubqueryAddBtn = document.getElementById('soql-builder-subquery-add-btn');
+    const builderSubqueriesWrap = document.getElementById('soql-builder-subqueries');
+
+    // Cache for related object describes and child relationships
+    let currentObjectDescribe = null;
+    let relatedObjectDescribes = new Map();
+
     const builderOps = ['=','!=','>','>=','<','<=','LIKE','IN'];
 
     function defaultBuilderState(limitVal) {
       const lim = Number.isFinite(limitVal) ? limitVal : getLimitValue();
-      return { enabled: false, object: '', fields: ['Id'], filters: [], orderBy: null, limit: lim };
+      return { enabled: false, object: '', fields: ['Id'], lookups: [], subqueries: [], filters: [], orderBy: null, limit: lim };
     }
 
     function cloneBuilderState(src) {
@@ -447,6 +476,8 @@
         enabled: !!base.enabled,
         object: String(base.object || '').trim(),
         fields: Array.isArray(base.fields) && base.fields.length ? base.fields.slice() : ['Id'],
+        lookups: Array.isArray(base.lookups) ? base.lookups.slice() : [],
+        subqueries: Array.isArray(base.subqueries) ? base.subqueries.map((sq) => ({ id: sq.id || uid(), relationship: sq.relationship || '', childObject: sq.childObject || '', fields: sq.fields || 'Id' })) : [],
         filters: Array.isArray(base.filters) ? base.filters.map((f) => ({ id: f.id || uid(), field: f.field || '', op: f.op || '=', value: f.value || '' })) : [],
         orderBy: base.orderBy && base.orderBy.field ? { field: base.orderBy.field, dir: base.orderBy.dir === 'desc' ? 'desc' : 'asc' } : null,
         limit: Number.isFinite(base.limit) ? base.limit : getLimitValue(),
@@ -494,13 +525,129 @@
 
     async function refreshBuilderFields(objectName) {
       const obj = String(objectName || builderState.object || '').trim();
-      if (!obj) { builderFieldOptions = []; populateFieldDatalist([]); setBuilderStatus('Select an object to load fields.'); return; }
+      if (!obj) {
+        builderFieldOptions = [];
+        currentObjectDescribe = null;
+        populateFieldDatalist([]);
+        populateLookupSelect([]);
+        populateSubquerySelect([]);
+        setBuilderStatus('Select an object to load fields.');
+        return;
+      }
       setBuilderStatus(`Loading fields for ${obj}…`);
       const describe = await getSobjectDescribeCached(obj, !!toolingCb?.checked);
+      currentObjectDescribe = describe;
       const fields = Array.isArray(describe?.fields) ? describe.fields : [];
-      builderFieldOptions = fields.map((f) => ({ name: f?.name, label: f?.label })).filter(f => f.name).sort((a, b) => a.name.localeCompare(b.name));
+      builderFieldOptions = fields.map((f) => ({
+        name: f?.name,
+        label: f?.label,
+        type: f?.type,
+        referenceTo: f?.referenceTo || [],
+        relationshipName: f?.relationshipName || null
+      })).filter(f => f.name).sort((a, b) => a.name.localeCompare(b.name));
       populateFieldDatalist(builderFieldOptions);
-      setBuilderStatus(builderFieldOptions.length ? `Loaded ${builderFieldOptions.length} fields` : 'No fields found.');
+
+      // Populate lookup relationships (parent references)
+      const lookupFields = builderFieldOptions.filter(f => f.type === 'reference' && f.relationshipName);
+      populateLookupSelect(lookupFields);
+
+      // Populate child relationships for subqueries
+      const childRels = Array.isArray(describe?.childRelationships) ? describe.childRelationships : [];
+      populateSubquerySelect(childRels);
+
+      const lookupCount = lookupFields.length;
+      const subqueryCount = childRels.length;
+      setBuilderStatus(builderFieldOptions.length ? `Loaded ${builderFieldOptions.length} fields, ${lookupCount} lookups, ${subqueryCount} child relations` : 'No fields found.');
+    }
+
+    // Populate the lookup relationship dropdown
+    function populateLookupSelect(lookupFields) {
+      if (!builderLookupSelect) return;
+      builderLookupSelect.innerHTML = '<option value="">-- Select lookup --</option>';
+      (lookupFields || []).forEach((f) => {
+        const opt = document.createElement('option');
+        opt.value = f.relationshipName;
+        opt.dataset.referenceTo = JSON.stringify(f.referenceTo || []);
+        opt.textContent = `${f.relationshipName} → ${(f.referenceTo || []).join(', ') || '?'}`;
+        builderLookupSelect.appendChild(opt);
+      });
+    }
+
+    // Populate the child relationship dropdown for subqueries
+    function populateSubquerySelect(childRels) {
+      if (!builderSubquerySelect) return;
+      builderSubquerySelect.innerHTML = '<option value="">-- Select child relationship --</option>';
+      (childRels || []).forEach((cr) => {
+        const opt = document.createElement('option');
+        opt.value = cr.relationshipName;
+        opt.dataset.childSObject = cr.childSObject;
+        opt.textContent = `${cr.relationshipName} (${cr.childSObject})`;
+        builderSubquerySelect.appendChild(opt);
+      });
+    }
+
+    // Fetch fields for a related object (for lookup field selection)
+    async function fetchRelatedObjectFields(objectName) {
+      if (!objectName) return [];
+      if (relatedObjectDescribes.has(objectName)) {
+        return relatedObjectDescribes.get(objectName);
+      }
+      try {
+        const describe = await getSobjectDescribeCached(objectName, !!toolingCb?.checked);
+        const fields = Array.isArray(describe?.fields) ? describe.fields : [];
+        const fieldList = fields.map(f => ({ name: f?.name, label: f?.label })).filter(f => f.name).sort((a, b) => a.name.localeCompare(b.name));
+        relatedObjectDescribes.set(objectName, fieldList);
+        return fieldList;
+      } catch {
+        return [];
+      }
+    }
+
+    // Populate the lookup field dropdown after selecting a relationship
+    async function populateLookupFieldSelect(referenceTo) {
+      if (!builderLookupField) return;
+      builderLookupField.innerHTML = '<option value="">Loading...</option>';
+      builderLookupField.style.display = '';
+
+      // If multiple objects (polymorphic), use the first one or show Name as default
+      const targetObj = Array.isArray(referenceTo) && referenceTo.length > 0 ? referenceTo[0] : null;
+      if (!targetObj) {
+        builderLookupField.innerHTML = '<option value="">-- Select field --</option><option value="Name">Name</option><option value="Id">Id</option>';
+        if (builderLookupAddBtn) builderLookupAddBtn.style.display = '';
+        return;
+      }
+
+      const fields = await fetchRelatedObjectFields(targetObj);
+      builderLookupField.innerHTML = '<option value="">-- Select field --</option>';
+      // Add common fields at top
+      const commonFields = ['Name', 'Id', 'Email', 'Phone', 'Title'];
+      const seenNames = new Set();
+      commonFields.forEach(name => {
+        const f = fields.find(x => x.name === name);
+        if (f) {
+          const opt = document.createElement('option');
+          opt.value = f.name;
+          opt.textContent = `${f.label} (${f.name})`;
+          builderLookupField.appendChild(opt);
+          seenNames.add(f.name);
+        }
+      });
+      // Add separator if we have common fields
+      if (seenNames.size > 0 && fields.length > seenNames.size) {
+        const sep = document.createElement('option');
+        sep.disabled = true;
+        sep.textContent = '───────────';
+        builderLookupField.appendChild(sep);
+      }
+      // Add remaining fields
+      fields.forEach((f) => {
+        if (seenNames.has(f.name)) return;
+        const opt = document.createElement('option');
+        opt.value = f.name;
+        opt.textContent = `${f.label} (${f.name})`;
+        builderLookupField.appendChild(opt);
+      });
+      if (builderLookupAddBtn) builderLookupAddBtn.style.display = '';
     }
 
     function renderBuilderFields() {
@@ -524,8 +671,45 @@
       builderFieldsWrap.appendChild(frag);
     }
 
-    function renderBuilderFilters() {
+    // Track if we're actively editing a filter to prevent re-render during typing
+    let isEditingFilter = false;
+    let filterEditTimeout = null;
+
+    function renderBuilderFilters(forceRender = false) {
       if (!builderFiltersWrap) return;
+
+      // Don't re-render while user is actively typing in a filter input
+      if (isEditingFilter && !forceRender) return;
+
+      // Check if we need to re-render (number of filters changed)
+      const currentRows = builderFiltersWrap.querySelectorAll('.filter-row');
+      const needsRender = currentRows.length !== (builderState.filters || []).length || forceRender;
+
+      if (!needsRender) {
+        // Just update values in existing rows without re-rendering
+        (builderState.filters || []).forEach((f, index) => {
+          const row = currentRows[index];
+          if (row && row.dataset.id === f.id) {
+            // Only update if values differ and element isn't focused
+            const fieldInput = row.querySelector('.filter-field');
+            const opSelect = row.querySelector('.filter-op');
+            const valueInput = row.querySelector('.filter-value');
+
+            if (fieldInput && fieldInput !== document.activeElement && fieldInput.value !== (f.field || '')) {
+              fieldInput.value = f.field || '';
+            }
+            if (opSelect && opSelect !== document.activeElement && opSelect.value !== (f.op || '=')) {
+              opSelect.value = f.op || '=';
+            }
+            if (valueInput && valueInput !== document.activeElement && valueInput.value !== (f.value || '')) {
+              valueInput.value = f.value || '';
+            }
+          }
+        });
+        return;
+      }
+
+      // Full re-render needed
       builderFiltersWrap.innerHTML = '';
       const frag = document.createDocumentFragment();
       (builderState.filters || []).forEach((f) => {
@@ -548,10 +732,66 @@
       if (builderOrderDir) builderOrderDir.value = builderState.orderBy?.dir || 'asc';
     }
 
+    // Render lookup fields (parent relationship fields like Account.Name)
+    function renderBuilderLookups() {
+      if (!builderLookupsWrap) return;
+      builderLookupsWrap.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      (builderState.lookups || []).forEach((path) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.dataset.badgeType = 'lookup';
+        chip.dataset.field = path;
+        chip.textContent = path;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'remove';
+        btn.setAttribute('aria-label', `Remove lookup ${path}`);
+        btn.textContent = '×';
+        chip.appendChild(btn);
+        frag.appendChild(chip);
+      });
+      builderLookupsWrap.appendChild(frag);
+    }
+
+    // Render subqueries (child relationship queries)
+    function renderBuilderSubqueries() {
+      if (!builderSubqueriesWrap) return;
+      builderSubqueriesWrap.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      (builderState.subqueries || []).forEach((sq) => {
+        const chip = document.createElement('div');
+        chip.className = 'subquery-chip';
+        chip.dataset.id = sq.id;
+
+        const label = document.createElement('span');
+        label.className = 'subquery-label';
+        label.textContent = sq.relationship;
+
+        const fieldsSpan = document.createElement('span');
+        fieldsSpan.className = 'subquery-fields';
+        fieldsSpan.textContent = `(${sq.fields})`;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'remove';
+        btn.setAttribute('aria-label', `Remove subquery ${sq.relationship}`);
+        btn.textContent = '×';
+
+        chip.appendChild(label);
+        chip.appendChild(fieldsSpan);
+        chip.appendChild(btn);
+        frag.appendChild(chip);
+      });
+      builderSubqueriesWrap.appendChild(frag);
+    }
+
     function syncBuilderUi(opts = {}) {
       const { loadFields = false } = opts;
       setBuilderVisibility(builderState.enabled);
       renderBuilderFields();
+      renderBuilderLookups();
+      renderBuilderSubqueries();
       renderBuilderFilters();
       renderBuilderOrder();
       if (builderFieldInput && builderState.fields.length && !builderFieldInput.value) builderFieldInput.value = '';
@@ -561,8 +801,26 @@
     function composeQueryFromBuilder(state) {
       const obj = String(state.object || '').trim();
       if (!obj) return '';
+
+      // Regular fields
       const fields = Array.isArray(state.fields) && state.fields.length ? state.fields : ['Id'];
-      const select = fields.map(quoteIdentifier).join(', ');
+
+      // Lookup fields (parent relationships like Account.Name)
+      const lookups = Array.isArray(state.lookups) ? state.lookups : [];
+
+      // Combine fields and lookups for SELECT
+      const allFields = [...fields, ...lookups];
+      const select = allFields.map(quoteIdentifier).join(', ');
+
+      // Subqueries (child relationships)
+      const subqueries = (state.subqueries || []).filter(sq => sq.relationship && sq.fields).map((sq) => {
+        const subFields = String(sq.fields || 'Id').split(',').map(f => f.trim()).filter(Boolean).map(quoteIdentifier).join(', ');
+        return `(SELECT ${subFields} FROM ${quoteIdentifier(sq.relationship)})`;
+      });
+
+      // Build full SELECT clause with subqueries
+      const selectParts = subqueries.length ? [select, ...subqueries].join(', ') : select;
+
       const where = (state.filters || []).filter(f => (f.field || '').trim() && (f.op || '').trim()).map((f) => {
         const op = (f.op || '=').toUpperCase();
         if (op === 'IN') {
@@ -574,7 +832,7 @@
       }).join(' AND ');
       const order = state.orderBy && state.orderBy.field ? ` ORDER BY ${quoteIdentifier(state.orderBy.field)} ${state.orderBy.dir === 'desc' ? 'DESC' : 'ASC'}` : '';
       const limit = Number.isFinite(state.limit) ? ` LIMIT ${state.limit}` : '';
-      return `SELECT ${select} FROM ${quoteIdentifier(obj)}${where ? ' WHERE ' + where : ''}${order}${limit}`;
+      return `SELECT ${selectParts} FROM ${quoteIdentifier(obj)}${where ? ' WHERE ' + where : ''}${order}${limit}`;
     }
 
     function tryImportQueryToBuilder(q) {
@@ -583,7 +841,24 @@
       const objMatch = src.match(/\bfrom\s+([`"\[]?[A-Za-z0-9_.`"\]]+)/i);
       if (objMatch && objMatch[1]) builderState.object = objMatch[1].replace(/^[`"\[]/, '').replace(/[`"\]]$/, '');
       const selectMatch = src.match(/select\s+(.+?)\s+from/i);
-      if (selectMatch && selectMatch[1]) builderState.fields = selectMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      if (selectMatch && selectMatch[1]) {
+        const allFields = selectMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+        // Separate regular fields from lookup fields (those containing a dot but not subqueries)
+        const regularFields = [];
+        const lookupFields = [];
+        allFields.forEach(f => {
+          // Skip subqueries (start with parenthesis)
+          if (f.startsWith('(')) return;
+          // Lookup fields contain a dot (e.g., Owner.Name, Account.Industry)
+          if (f.includes('.') && !f.startsWith('(')) {
+            lookupFields.push(f);
+          } else {
+            regularFields.push(f);
+          }
+        });
+        builderState.fields = regularFields.length ? regularFields : ['Id'];
+        builderState.lookups = lookupFields;
+      }
       const whereMatch = src.match(/\bwhere\s+(.+?)(?=\border\s+by\b|\blimit\b|$)/i);
       if (whereMatch && whereMatch[1]) {
         const clauses = whereMatch[1].split(/\s+and\s+/i).map(s => s.trim()).filter(Boolean);
@@ -912,9 +1187,15 @@
       const recordValString = (v) => {
         if (v == null) return '';
         if (typeof v === 'object') {
-          const rid = v.Id || v.id || null;
-          const nm = v.Name || v.name || null;
+          // Try to get Id directly, or extract from attributes.url
+          let rid = v.Id || v.id || null;
+          if (!rid && v.attributes && v.attributes.url) {
+            const urlMatch = v.attributes.url.match(/\/([a-zA-Z0-9]{15,18})$/);
+            if (urlMatch) rid = urlMatch[1];
+          }
+          const nm = v.Name || v.name || v.Title || v.Subject || v.Email || null;
           if (rid && isSalesforceId(rid)) return nm ? `${nm} (${rid})` : `${rid}`;
+          if (nm) return nm;
           try { return JSON.stringify(v); } catch { return String(v); }
         }
         return String(v);
@@ -948,11 +1229,23 @@
           let v = r[h];
           if (v == null) return `<td${width}></td>`;
           if (typeof v === 'object') {
-            const rid = v.Id || v.id || null;
-            const nm = v.Name || v.name || null;
+            // Try to get Id directly, or extract from attributes.url
+            let rid = v.Id || v.id || null;
+            if (!rid && v.attributes && v.attributes.url) {
+              // Extract ID from URL like "/services/data/v65.0/sobjects/User/0053V000001IXSZQA4"
+              const urlMatch = v.attributes.url.match(/\/([a-zA-Z0-9]{15,18})$/);
+              if (urlMatch) rid = urlMatch[1];
+            }
+            // Get display value - check common field names
+            const nm = v.Name || v.name || v.Title || v.Subject || v.Email || null;
+
             if (rid && isSalesforceId(rid)) {
               const label = nm ? `${nm}` : `${rid}`;
               return `<td${width}><div class=\"cell\">${buildIdLinkHtml(rid, label)}</div></td>`;
+            }
+            // If we have a name but no ID, just show the name as text
+            if (nm) {
+              return `<td${width}><div class=\"cell\">${escape(nm)}</div></td>`;
             }
             try { return `<td${width}><div class=\"cell\"><code>${escape(JSON.stringify(v))}</code></div></td>`; } catch { return `<td${width}></td>`; }
           }
@@ -1238,9 +1531,12 @@
         if (builderState.enabled) {
           builderState.object = v;
           builderState.fields = ['Id'];
+          builderState.lookups = [];
+          builderState.subqueries = [];
           builderState.filters = [];
           builderState.orderBy = null;
           builderState.limit = lim;
+          relatedObjectDescribes.clear();
           handleBuilderChange({ writeQuery: true, loadFields: true });
         } else {
           queryEl.value = templateQuery;
@@ -1397,15 +1693,22 @@
 
     if (clearBtn && results) {
       on(clearBtn, 'click', () => { 
-        clearUi(); 
-        builderState = defaultBuilderState(getLimitValue());
-        if (builderToggle) builderToggle.checked = false;
-        setBuilderVisibility(false);
-        syncBuilderUi({ loadFields: false });
+        // Only clear query text and results, preserve guided builder state
+        if (queryEl) queryEl.value = '';
+        lastSoqlResp = null;
+        lastSoqlMeta = null;
+        renderPlaceholder();
         try { setSoqlState('inprogress'); } catch {}
         try {
           const t = tabs.find(x => x.id === activeTabId);
-          if (t) { t.query = ''; t.lastResp = null; t.lastMeta = null; t.advState = null; t.builderState = cloneBuilderState(builderState); saveTabs(); }
+          if (t) {
+            t.query = '';
+            t.lastResp = null;
+            t.lastMeta = null;
+            t.advState = null;
+            // Preserve builder state, don't reset it
+            saveTabs();
+          }
         } catch {}
       });
     }
@@ -1488,6 +1791,119 @@
     if (builderOrderField) on(builderOrderField, 'input', () => { const f = (builderOrderField.value || '').trim(); builderState.orderBy = f ? { field: f, dir: builderOrderDir?.value === 'desc' ? 'desc' : 'asc' } : null; handleBuilderChange({ writeQuery: true }); });
     if (builderOrderDir) on(builderOrderDir, 'change', () => { if (builderState.orderBy) builderState.orderBy.dir = builderOrderDir.value === 'desc' ? 'desc' : 'asc'; handleBuilderChange({ writeQuery: true }); });
     if (builderClearOrder) on(builderClearOrder, 'click', () => { builderState.orderBy = null; handleBuilderChange({ writeQuery: true }); });
+
+    // === Lookup field handlers ===
+    if (builderAddLookupBtn) {
+      on(builderAddLookupBtn, 'click', () => {
+        // Toggle visibility of the lookup picker
+        if (builderLookupsPicker) {
+          const isHidden = builderLookupsPicker.style.display === 'none';
+          builderLookupsPicker.style.display = isHidden ? '' : 'none';
+          if (isHidden && builderLookupSelect) {
+            builderLookupSelect.value = '';
+            if (builderLookupField) builderLookupField.style.display = 'none';
+            if (builderLookupAddBtn) builderLookupAddBtn.style.display = 'none';
+          }
+        }
+      });
+    }
+    if (builderLookupSelect) {
+      on(builderLookupSelect, 'change', () => {
+        const selectedOpt = builderLookupSelect.selectedOptions[0];
+        if (!selectedOpt || !selectedOpt.value) {
+          if (builderLookupField) builderLookupField.style.display = 'none';
+          if (builderLookupAddBtn) builderLookupAddBtn.style.display = 'none';
+          return;
+        }
+        const refTo = selectedOpt.dataset.referenceTo ? JSON.parse(selectedOpt.dataset.referenceTo) : [];
+        populateLookupFieldSelect(refTo);
+      });
+    }
+    if (builderLookupAddBtn) {
+      on(builderLookupAddBtn, 'click', () => {
+        const relationship = builderLookupSelect?.value;
+        const field = builderLookupField?.value;
+        if (!relationship || !field) return;
+        const path = `${relationship}.${field}`;
+        if (!builderState.lookups) builderState.lookups = [];
+        if (!builderState.lookups.includes(path)) {
+          builderState.lookups.push(path);
+          handleBuilderChange({ writeQuery: true });
+        }
+        // Reset picker
+        if (builderLookupSelect) builderLookupSelect.value = '';
+        if (builderLookupField) { builderLookupField.style.display = 'none'; builderLookupField.value = ''; }
+        if (builderLookupAddBtn) builderLookupAddBtn.style.display = 'none';
+      });
+    }
+    if (builderLookupsWrap) {
+      on(builderLookupsWrap, 'click', (e) => {
+        const btn = e.target?.closest?.('button.remove');
+        if (!btn) return;
+        const path = btn.parentElement?.dataset?.field;
+        if (!path) return;
+        builderState.lookups = (builderState.lookups || []).filter(l => l !== path);
+        handleBuilderChange({ writeQuery: true });
+      });
+    }
+
+    // === Subquery handlers ===
+    if (builderAddSubqueryBtn) {
+      on(builderAddSubqueryBtn, 'click', () => {
+        // Toggle visibility of the subquery picker
+        if (builderSubqueryPicker) {
+          const isHidden = builderSubqueryPicker.style.display === 'none';
+          builderSubqueryPicker.style.display = isHidden ? '' : 'none';
+          if (isHidden && builderSubquerySelect) {
+            builderSubquerySelect.value = '';
+            if (builderSubqueryFieldsWrap) builderSubqueryFieldsWrap.style.display = 'none';
+            if (builderSubqueryFieldsInput) builderSubqueryFieldsInput.value = 'Id, Name';
+          }
+        }
+      });
+    }
+    if (builderSubquerySelect) {
+      on(builderSubquerySelect, 'change', () => {
+        const selectedOpt = builderSubquerySelect.selectedOptions[0];
+        if (!selectedOpt || !selectedOpt.value) {
+          if (builderSubqueryFieldsWrap) builderSubqueryFieldsWrap.style.display = 'none';
+          return;
+        }
+        if (builderSubqueryFieldsWrap) builderSubqueryFieldsWrap.style.display = '';
+        if (builderSubqueryFieldsInput) builderSubqueryFieldsInput.value = 'Id, Name';
+      });
+    }
+    if (builderSubqueryAddBtn) {
+      on(builderSubqueryAddBtn, 'click', () => {
+        const selectedOpt = builderSubquerySelect?.selectedOptions[0];
+        if (!selectedOpt || !selectedOpt.value) return;
+        const relationship = selectedOpt.value;
+        const childObject = selectedOpt.dataset.childSObject || '';
+        const fields = (builderSubqueryFieldsInput?.value || 'Id').trim();
+        if (!fields) return;
+        if (!builderState.subqueries) builderState.subqueries = [];
+        // Avoid duplicates
+        if (!builderState.subqueries.some(sq => sq.relationship === relationship)) {
+          builderState.subqueries.push({ id: uid(), relationship, childObject, fields });
+          handleBuilderChange({ writeQuery: true });
+        }
+        // Reset picker
+        if (builderSubquerySelect) builderSubquerySelect.value = '';
+        if (builderSubqueryFieldsWrap) builderSubqueryFieldsWrap.style.display = 'none';
+        if (builderSubqueryFieldsInput) builderSubqueryFieldsInput.value = 'Id, Name';
+      });
+    }
+    if (builderSubqueriesWrap) {
+      on(builderSubqueriesWrap, 'click', (e) => {
+        const btn = e.target?.closest?.('button.remove');
+        if (!btn) return;
+        const chip = btn.closest('.subquery-chip');
+        const id = chip?.dataset?.id;
+        if (!id) return;
+        builderState.subqueries = (builderState.subqueries || []).filter(sq => sq.id !== id);
+        handleBuilderChange({ writeQuery: true });
+      });
+    }
 
     // Test-only hooks (available after wireUiOnly runs)
     if (typeof window !== 'undefined') {

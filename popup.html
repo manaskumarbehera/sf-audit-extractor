@@ -205,14 +205,6 @@ File: `popup.html` (replace body content with this)
                 <!-- New: limit control -->
                 <label class="filter-label" for="soql-limit" title="Max records to fetch">Limit:</label>
                 <input id="soql-limit" type="number" min="1" max="5000" value="200" style="width: 90px; padding: 6px 8px;" aria-label="Max records to fetch" />
-
-
-                <button id="soql-run" class="icon-btn btn-sm" title="Run Query" aria-label="Run Query">
-                    <span aria-hidden="true">▶</span>
-                </button>
-                <button id="soql-clear" class="icon-btn btn-sm" title="Clear results" aria-label="Clear results">
-                    <span aria-hidden="true">🗑</span>
-                </button>
             </div>
 
             <!-- SOQL query tabs bar -->
@@ -224,6 +216,17 @@ File: `popup.html` (replace body content with this)
             <!-- Query Editor (Top) -->
             <div class="search-box" style="margin-bottom: 0; border-bottom: 1px solid var(--border-color);">
                 <textarea id="soql-query" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10" aria-label="SOQL query" style="resize: vertical; min-height: 80px; font-family: monospace;"></textarea>
+                <!-- Query action bar below textarea -->
+                <div class="soql-query-actions" style="display: flex; gap: 8px; padding: 8px 12px; background: var(--bg-subtle); border-top: 1px solid var(--border-color); align-items: center;">
+                    <button id="soql-run" class="btn-chip soql-run-btn" title="Run Query" aria-label="Run Query">
+                        <span aria-hidden="true">▶</span> Run
+                    </button>
+                    <button id="soql-clear" class="btn-chip soql-clear-btn" title="Clear query and results" aria-label="Clear query and results">
+                        <span aria-hidden="true">🗑</span> Clear
+                    </button>
+                    <span style="flex: 1;"></span>
+                    <span id="soql-query-status" style="font-size: 12px; color: var(--text-secondary);"></span>
+                </div>
                 <div id="soql-guidance" class="soql-guidance" aria-live="polite">
                     <div class="soql-guidance-card">
                         <div class="soql-guidance-card-title">Write a focused SOQL query</div>
@@ -258,6 +261,42 @@ File: `popup.html` (replace body content with this)
                                 <datalist id="soql-builder-field-list"></datalist>
                             </div>
                             <div id="soql-builder-fields" class="chip-wrap builder-chip-wrap" aria-live="polite"></div>
+                        </div>
+
+                        <!-- Lookup/Related Fields Section -->
+                        <div class="builder-section" aria-label="Lookup fields" style="margin-bottom: 12px;">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Lookups</span>
+                                <button id="soql-builder-add-lookup" class="btn-chip" type="button" title="Add lookup field">+ Lookup</button>
+                            </div>
+                            <div id="soql-builder-lookups-picker" class="builder-lookups-picker" style="display: none;">
+                                <select id="soql-builder-lookup-select" aria-label="Select lookup relationship">
+                                    <option value="">-- Select lookup --</option>
+                                </select>
+                                <select id="soql-builder-lookup-field" aria-label="Select field from related object" style="display: none;">
+                                    <option value="">-- Select field --</option>
+                                </select>
+                                <button id="soql-builder-lookup-add-btn" class="btn-chip" type="button" style="display: none;">Add</button>
+                            </div>
+                            <div id="soql-builder-lookups" class="chip-wrap builder-chip-wrap" aria-live="polite"></div>
+                        </div>
+
+                        <!-- Subquery Section (Child Relationships) -->
+                        <div class="builder-section" aria-label="Subqueries" style="margin-bottom: 12px;">
+                            <div class="builder-section-header">
+                                <span class="builder-title">Subqueries</span>
+                                <button id="soql-builder-add-subquery" class="btn-chip" type="button" title="Add child subquery">+ Subquery</button>
+                            </div>
+                            <div id="soql-builder-subquery-picker" class="builder-subquery-picker" style="display: none;">
+                                <select id="soql-builder-subquery-select" aria-label="Select child relationship">
+                                    <option value="">-- Select child relationship --</option>
+                                </select>
+                                <div id="soql-builder-subquery-fields-wrap" style="display: none;">
+                                    <input id="soql-builder-subquery-fields-input" placeholder="Fields (e.g., Id, Name)" aria-label="Subquery fields" />
+                                    <button id="soql-builder-subquery-add-btn" class="btn-chip" type="button">Add</button>
+                                </div>
+                            </div>
+                            <div id="soql-builder-subqueries" class="builder-subqueries" aria-live="polite"></div>
                         </div>
 
                         <div class="builder-section" aria-label="Add filters" style="margin-bottom: 12px;">
@@ -400,6 +439,32 @@ File: `popup.html` (replace body content with this)
                                 <input id="graphql-offset" type="number" value="0" min="0" aria-label="Result offset" />
                                 <label class="filter-label" for="graphql-after">After:</label>
                                 <input id="graphql-after" type="text" aria-label="After cursor" placeholder="cursor" />
+                            </div>
+                        </div>
+
+                        <!-- Related Objects Section (Composite Query) -->
+                        <div class="builder-section builder-related-section">
+                            <div class="builder-section-header">
+                                <span class="builder-title">🔗 Related Objects</span>
+                                <button id="graphql-builder-add-related" class="btn-chip btn-sm btn-primary-outline" type="button" title="Add related object">+ Add</button>
+                            </div>
+                            <div id="graphql-builder-related-picker" class="builder-related-picker" style="display: none;">
+                                <select id="graphql-builder-related-select" aria-label="Select related object">
+                                    <option value="">-- Select relationship --</option>
+                                </select>
+                                <div id="graphql-builder-related-fields-wrap" class="related-fields-wrap" style="display: none;">
+                                    <input id="graphql-builder-related-fields-input" placeholder="Fields: Id, Name, Email..." aria-label="Related object fields" />
+                                    <div class="related-actions">
+                                        <button id="graphql-builder-related-add-btn" class="btn-chip btn-sm btn-primary" type="button">Add</button>
+                                        <button id="graphql-builder-related-cancel-btn" class="btn-chip btn-sm" type="button">✕</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="graphql-builder-related-objects" class="builder-related-objects" aria-live="polite">
+                                <div class="related-empty-state">
+                                    <span class="empty-icon">📭</span>
+                                    <span class="empty-text">No related objects. Add child records or parent lookups.</span>
+                                </div>
                             </div>
                         </div>
 
@@ -586,6 +651,35 @@ File: `popup.html` (replace body content with this)
                                     <!-- Rendered dynamically by JavaScript -->
                                 </div>
                             </div>
+                            <div class="favicon-shape-row">
+                                <label class="filter-label">Shape:</label>
+                                <div class="favicon-shape-options" id="favicon-shape-options">
+                                    <label class="shape-option" title="Cloud">
+                                        <input type="radio" name="favicon-shape" value="cloud" checked />
+                                        <span class="shape-preview shape-cloud">☁</span>
+                                    </label>
+                                    <label class="shape-option" title="Circle">
+                                        <input type="radio" name="favicon-shape" value="circle" />
+                                        <span class="shape-preview shape-circle">●</span>
+                                    </label>
+                                    <label class="shape-option" title="Square">
+                                        <input type="radio" name="favicon-shape" value="square" />
+                                        <span class="shape-preview shape-square">■</span>
+                                    </label>
+                                    <label class="shape-option" title="Rounded Square">
+                                        <input type="radio" name="favicon-shape" value="rounded" />
+                                        <span class="shape-preview shape-rounded">▢</span>
+                                    </label>
+                                    <label class="shape-option" title="Diamond">
+                                        <input type="radio" name="favicon-shape" value="diamond" />
+                                        <span class="shape-preview shape-diamond">◆</span>
+                                    </label>
+                                    <label class="shape-option" title="Hexagon">
+                                        <input type="radio" name="favicon-shape" value="hexagon" />
+                                        <span class="shape-preview shape-hexagon">⬡</span>
+                                    </label>
+                                </div>
+                            </div>
                             <div class="favicon-color-row">
                                 <label class="filter-label" for="favicon-color">Badge Color:</label>
                                 <input type="color" id="favicon-color" value="#ff6b6b" aria-label="Favicon badge color" />
@@ -623,65 +717,80 @@ File: `popup.html` (replace body content with this)
 
             <!-- Sub-tab: User Manager -->
             <div id="subtab-user-manager" class="sub-tab-content" hidden aria-labelledby="user-manager">
-                <div class="user-manager-layout">
-                    <!-- Left Panel: Current User + Search -->
-                    <div class="user-manager-left">
-                        <div class="section-card compact">
-                            <div class="section-header-row">
-                                <h3 class="section-card-title compact">👤 Current User</h3>
-                                <button id="refresh-user-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
-                            </div>
-                            <div id="user-details-container" class="details-list compact">
-                                <div class="spinner">Loading...</div>
-                            </div>
+                <div class="user-manager-grid">
+                    <!-- Current User Section - Compact Header Card -->
+                    <div class="user-current-card">
+                        <div class="user-card-header">
+                            <span class="user-card-icon">👤</span>
+                            <h3 class="user-card-title">Current User</h3>
+                            <button id="refresh-user-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
                         </div>
-                        <div class="section-card compact user-search-section">
-                            <h3 class="section-card-title compact">🔍 Search & Select User</h3>
-                            <div class="user-search-row compact">
-                                <input type="text" id="user-search-input" placeholder="Type to search users..." aria-label="Search users" />
-                                <button id="user-search-btn" class="btn btn-primary btn-sm">🔍</button>
-                            </div>
-                            <div id="user-search-results" class="user-search-results compact">
-                                <div class="placeholder-note">Search by name, email, or username</div>
-                            </div>
+                        <div id="user-details-container" class="user-details-grid">
+                            <div class="spinner">Loading...</div>
                         </div>
                     </div>
-                    <!-- Right Panel: Update Settings -->
-                    <div class="user-manager-right">
-                        <div class="section-card compact user-update-section">
-                            <h3 class="section-card-title compact">⚙️ Update User Settings</h3>
-                            <div class="user-update-form compact">
-                                <div class="form-row compact inline">
-                                    <label class="filter-label" for="selected-user-display">User:</label>
-                                    <div class="input-with-action">
-                                        <input type="text" id="selected-user-display" readonly placeholder="Select a user from search" />
-                                        <input type="hidden" id="selected-user-id" />
-                                        <button id="user-clear-selection" class="icon-btn btn-sm" disabled title="Clear">✕</button>
-                                    </div>
+
+                    <!-- Search & Update Section - Combined for efficiency -->
+                    <div class="user-action-card">
+                        <div class="user-card-header">
+                            <span class="user-card-icon">🔍</span>
+                            <h3 class="user-card-title">Find & Update User</h3>
+                        </div>
+
+                        <!-- Search Row -->
+                        <div class="user-search-bar">
+                            <input type="text" id="user-search-input" placeholder="Search by name, email, or username..." aria-label="Search users" />
+                            <button id="user-search-btn" class="btn btn-primary btn-sm" title="Search">🔍</button>
+                        </div>
+
+                        <!-- Search Results (scrollable) -->
+                        <div id="user-search-results" class="user-search-results-grid">
+                            <div class="placeholder-note">Enter a search term above</div>
+                        </div>
+
+                        <!-- Divider -->
+                        <div class="user-section-divider">
+                            <span>Selected User Settings</span>
+                        </div>
+
+                        <!-- Update Form - Grid Layout -->
+                        <div class="user-update-grid">
+                            <div class="user-selected-row">
+                                <label>User:</label>
+                                <div class="user-selected-display">
+                                    <input type="text" id="selected-user-display" readonly placeholder="← Select a user from search results" />
+                                    <input type="hidden" id="selected-user-id" />
+                                    <button id="user-clear-selection" class="icon-btn btn-sm" disabled title="Clear selection">✕</button>
                                 </div>
-                                <div class="form-row compact">
-                                    <label class="filter-label" for="user-profile-select">Profile:</label>
+                            </div>
+
+                            <div class="user-fields-grid">
+                                <div class="user-field">
+                                    <label for="user-profile-select">Profile</label>
                                     <select id="user-profile-select" disabled aria-label="Select profile">
                                         <option value="">-- Select Profile --</option>
                                     </select>
                                 </div>
-                                <div class="form-row compact">
-                                    <label class="filter-label" for="user-role-select">Role:</label>
+                                <div class="user-field">
+                                    <label for="user-role-select">Role</label>
                                     <select id="user-role-select" disabled aria-label="Select role">
                                         <option value="">-- No Role --</option>
                                     </select>
                                 </div>
-                                <div class="form-row compact">
-                                    <label class="filter-label" for="user-language-select">Language:</label>
+                                <div class="user-field">
+                                    <label for="user-language-select">Language</label>
                                     <select id="user-language-select" disabled aria-label="Select language">
                                         <option value="">-- Select Language --</option>
                                     </select>
                                 </div>
-                                <div class="user-update-actions compact">
-                                    <button id="user-update-btn" class="btn btn-primary" disabled>💾 Update User</button>
-                                </div>
-                                <div id="user-update-status" class="update-status" hidden></div>
                             </div>
+
+                            <div class="user-update-actions">
+                                <button id="user-update-btn" class="btn btn-primary" disabled>
+                                    <span>💾</span> Update User
+                                </button>
+                            </div>
+                            <div id="user-update-status" class="update-status" hidden></div>
                         </div>
                     </div>
                 </div>

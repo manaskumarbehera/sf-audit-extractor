@@ -232,34 +232,57 @@
 
     function attachAppPopHandlers() {
         if (!appPopBtn) return;
+
+        const isStandalone = window.location.hash.includes('standalone');
+
         appPopBtn.disabled = true;
         // Track current popped state locally so we can include session when popping out
         let appPoppedState = false;
+
         chrome.runtime.sendMessage({ action: 'APP_POP_GET' }, (resp) => {
             if (chrome.runtime.lastError) {
-                updateAppPopButton(false);
+                updateAppPopButton(false, isStandalone);
                 appPopBtn.disabled = false;
                 return;
             }
             appPoppedState = resp && resp.success ? !!resp.popped : false;
-            updateAppPopButton(appPoppedState);
+            updateAppPopButton(appPoppedState, isStandalone);
             appPopBtn.disabled = false;
         });
 
         appPopBtn.addEventListener('click', () => {
             if (appPopBtn.disabled) return;
             appPopBtn.disabled = true;
+
+            // If we're in standalone window, clicking "pop in" should close this window
+            if (isStandalone) {
+                // Pop in: close standalone window and reset state
+                chrome.runtime.sendMessage({ action: 'APP_POP_SET', popped: false }, (resp) => {
+                    if (!chrome.runtime.lastError && resp && resp.success) {
+                        // Close the standalone window
+                        window.close();
+                    }
+                    appPopBtn.disabled = false;
+                });
+                return;
+            }
+
+            // If we're in popup, clicking "pop out" should open standalone and close popup
             const next = !appPoppedState;
             const payload = { action: 'APP_POP_SET', popped: next };
             // When popping out, include current session if available to transfer it
             if (next && sessionInfo) payload.session = sessionInfo;
+
             chrome.runtime.sendMessage(payload, (resp) => {
                 if (!chrome.runtime.lastError && resp && resp.success) {
                     appPoppedState = !!resp.popped;
-                    updateAppPopButton(appPoppedState);
-                    // Close the popup window when successfully popping out (only if this is the extension popup, not standalone)
-                    if (next && appPoppedState && !window.location.hash.includes('standalone')) {
-                        window.close();
+                    updateAppPopButton(appPoppedState, isStandalone);
+                    // Close the popup window when successfully popping out
+                    if (next && appPoppedState) {
+                        // Use a small timeout to ensure the message completes
+                        setTimeout(() => {
+                            try { window.close(); } catch (e) { /* ignore */ }
+                        }, 100);
                     }
                 }
                 appPopBtn.disabled = false;
@@ -309,13 +332,15 @@
         return svg.outerHTML;
     }
 
-    function updateAppPopButton(popped) {
+    function updateAppPopButton(popped, isStandalone = false) {
         if (!appPopBtn) return;
-        appPopBtn.classList.toggle('active', !!popped);
-        appPopBtn.setAttribute('aria-pressed', popped ? 'true' : 'false');
-        appPopBtn.title = popped ? 'Pop in window' : 'Pop out window';
+        // In standalone mode, always show "pop in" button
+        const showPopIn = isStandalone || popped;
+        appPopBtn.classList.toggle('active', showPopIn);
+        appPopBtn.setAttribute('aria-pressed', showPopIn ? 'true' : 'false');
+        appPopBtn.title = showPopIn ? 'Pop in (return to popup)' : 'Pop out to window';
         appPopBtn.setAttribute('aria-label', appPopBtn.title);
-        appPopBtn.innerHTML = popped ? svgPopIn() : svgPopOut();
+        appPopBtn.innerHTML = showPopIn ? svgPopIn() : svgPopOut();
     }
 
     async function findSalesforceTab() {

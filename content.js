@@ -38,7 +38,7 @@
 
         // Handle favicon update
         if (req && req.action === 'updateFavicon') {
-            updateFavicon(req.color, req.label);
+            updateFavicon(req.color, req.label, req.shape);
             sendResponse({ success: true });
             return false;
         }
@@ -133,10 +133,13 @@
     }
 
     /**
-     * Update the page favicon with a colored Salesforce cloud icon.
-     * Creates a canvas and draws a cloud shape with the specified color.
+     * Update the page favicon with a colored icon in the specified shape.
+     * Creates a canvas and draws the shape with the specified color.
+     * @param {string} color - The fill color for the favicon
+     * @param {string} label - Short text label to display on the favicon
+     * @param {string} shape - The shape type: 'cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'
      */
-    function updateFavicon(color, label) {
+    function updateFavicon(color, label, shape) {
         if (!isTop) return; // Only update in top frame
 
         // Store original favicon if not already stored
@@ -153,29 +156,83 @@
         canvas.height = 32;
         const ctx = canvas.getContext('2d');
 
-        // Draw Salesforce cloud with the specified color
-        drawSalesforceCloud(ctx, color || '#ff6b6b', label);
+        // Draw the favicon shape with the specified color
+        drawFaviconShape(ctx, color || '#ff6b6b', label, shape || 'cloud');
 
         // Apply the new favicon
         applyFavicon(canvas.toDataURL('image/png'));
     }
 
-    function drawSalesforceCloud(ctx, color, label) {
+    /**
+     * Draw the favicon in the specified shape
+     */
+    function drawFaviconShape(ctx, color, label, shape) {
         // Clear canvas
         ctx.clearRect(0, 0, 32, 32);
-
-        // Draw a Salesforce-style cloud shape
         ctx.fillStyle = color;
-        ctx.beginPath();
 
-        // Cloud shape using arcs - creates a recognizable cloud silhouette
-        ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5); // Left arc
-        ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5); // Top-left bump
-        ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8); // Top middle bump
-        ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3); // Top-right bump
-        ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5); // Right arc
-        ctx.closePath();
-        ctx.fill();
+        switch (shape) {
+            case 'circle':
+                ctx.beginPath();
+                ctx.arc(16, 16, 14, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+
+            case 'square':
+                ctx.fillRect(2, 2, 28, 28);
+                break;
+
+            case 'rounded':
+                ctx.beginPath();
+                ctx.moveTo(8, 2);
+                ctx.lineTo(24, 2);
+                ctx.quadraticCurveTo(30, 2, 30, 8);
+                ctx.lineTo(30, 24);
+                ctx.quadraticCurveTo(30, 30, 24, 30);
+                ctx.lineTo(8, 30);
+                ctx.quadraticCurveTo(2, 30, 2, 24);
+                ctx.lineTo(2, 8);
+                ctx.quadraticCurveTo(2, 2, 8, 2);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'diamond':
+                ctx.beginPath();
+                ctx.moveTo(16, 1);
+                ctx.lineTo(30, 16);
+                ctx.lineTo(16, 31);
+                ctx.lineTo(2, 16);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'hexagon':
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i - Math.PI / 2;
+                    const x = 16 + 14 * Math.cos(angle);
+                    const y = 16 + 14 * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'cloud':
+            default:
+                // Draw Salesforce-style cloud shape
+                ctx.beginPath();
+                ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
+                ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
+                ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
+                ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
+                ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
+                ctx.closePath();
+                ctx.fill();
+                break;
+        }
 
         // Draw label text if provided
         if (label) {
@@ -185,6 +242,11 @@
             ctx.textBaseline = 'middle';
             ctx.fillText(label.substring(0, 3).toUpperCase(), 16, 16);
         }
+    }
+
+    // Legacy function for backwards compatibility
+    function drawSalesforceCloud(ctx, color, label) {
+        drawFaviconShape(ctx, color, label, 'cloud');
     }
 
 
@@ -363,10 +425,10 @@
 
         // Strategy 1: Direct org ID match
         if (orgId && orgFavicons[orgId]) {
-            const { color, label } = orgFavicons[orgId];
+            const { color, label, shape } = orgFavicons[orgId];
             if (color || label) {
                 console.log('[TrackForcePro] Strategy 1: Org ID match found');
-                updateFavicon(color, label);
+                updateFavicon(color, label, shape);
                 return true;
             }
         }
@@ -379,10 +441,10 @@
         for (const [_savedOrgId, settings] of Object.entries(orgFavicons)) {
             console.log(`[TrackForcePro] Comparing: saved=${settings.hostname} vs current=${currentHostname}`);
             if (settings.hostname === currentHostname) {
-                const { color, label } = settings;
+                const { color, label, shape } = settings;
                 if (color || label) {
                     console.log('[TrackForcePro] Strategy 2: Hostname match found');
-                    updateFavicon(color, label);
+                    updateFavicon(color, label, shape);
                     return true;
                 }
             }
@@ -397,10 +459,10 @@
                 const savedBaseOrg = settings.hostname ? extractBaseOrg(settings.hostname) : null;
                 console.log(`[TrackForcePro] Comparing base orgs: saved=${savedBaseOrg} vs current=${baseOrg}`);
                 if (savedBaseOrg && savedBaseOrg === baseOrg) {
-                    const { color, label } = settings;
+                    const { color, label, shape } = settings;
                     if (color || label) {
                         console.log('[TrackForcePro] Strategy 3: Base org match found');
-                        updateFavicon(color, label);
+                        updateFavicon(color, label, shape);
                         return true;
                     }
                 }
