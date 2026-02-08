@@ -6,7 +6,15 @@ File: `popup.html` (replace body content with this)
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Salesforce Audit Trail Extractor</title>
+    <title>TrackForcePro</title>
+    <!-- Favicons for browser tab icon -->
+    <link rel="icon" type="image/png" sizes="128x128" href="icons/Icon-128.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="icons/Icon-64.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="icons/Icon-48.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/Icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/Icon-16.png" />
+    <link rel="shortcut icon" type="image/png" href="icons/Icon-32.png" />
+    <link rel="apple-touch-icon" sizes="128x128" href="icons/Icon-128.png" />
     <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
@@ -14,32 +22,15 @@ File: `popup.html` (replace body content with this)
     <header class="tabs-header">
         <div class="tabs-left">
             <nav class="tabs" role="tablist" aria-label="Views">
-                <button class="tab-button active" role="tab" aria-selected="true" data-tab="sf">Audit Trails</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="platform">Platform Events</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="lms">Lightning Message Service</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="soql">SOQL Query Builder</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="graphql">GraphQL Query Builder</button>
-                <button class="tab-button" role="tab" aria-selected="false" data-tab="data">Data Explorer</button>
-                <button class="tab-button tab-icon-only" role="tab" aria-selected="false" data-tab="settings" title="Settings" aria-label="Settings">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                </button>
-                <button class="tab-button tab-icon-only" role="tab" aria-selected="false" data-tab="help" title="Help" aria-label="Help">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                </button>
-                <button class="tab-button tab-icon-only" role="tab" aria-selected="false" data-tab="about" title="About" aria-label="About">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                </button>
+                <button class="tab-button active" role="tab" aria-selected="true" data-tab="sf"><span class="tab-icon">🔍</span><span class="tab-text">Audit Trails</span></button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="platform"><span class="tab-icon">📡</span><span class="tab-text">Platform Events</span></button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="lms"><span class="tab-icon">📢</span><span class="tab-text">LMS</span></button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="soql"><span class="tab-icon">📊</span><span class="tab-text">SOQL Builder</span></button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="graphql"><span class="tab-icon">🔗</span><span class="tab-text">GraphQL Builder</span></button>
+                <button class="tab-button" role="tab" aria-selected="false" data-tab="data"><span class="tab-icon">💾</span><span class="tab-text">Data Explorer</span></button>
+                <button class="tab-button tab-icon-only" role="tab" aria-selected="false" data-tab="settings" title="Settings" aria-label="Settings"><span class="tab-icon">⚙️</span></button>
+                <button class="tab-button tab-icon-only" role="tab" aria-selected="false" data-tab="help" title="Help" aria-label="Help"><span class="tab-icon">❓</span></button>
+                <button class="tab-button tab-icon-only" role="tab" aria-selected="false" data-tab="about" title="About" aria-label="About"><span class="tab-icon">ℹ️</span></button>
             </nav>
         </div>
 

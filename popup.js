@@ -77,8 +77,9 @@
                 // reflect connected status in UI if possible
                 if (sessionInfo && sessionInfo.isLoggedIn) {
                     updateStatus(true, 'Connected to Salesforce (transferred session)');
-                    // Fetch org name for title update in standalone mode
-                    if (window.location.hash.includes('standalone')) {
+                    // Fetch org name for title update in standalone/tab mode
+                    const isStandaloneOrTab = window.location.hash.includes('standalone') || window.location.hash.includes('tab');
+                    if (isStandaloneOrTab) {
                         const accessToken = getAccessToken();
                         const instanceUrl = sessionInfo.instanceUrl;
                         if (accessToken && instanceUrl) {
@@ -97,8 +98,9 @@
                 try { chrome.storage.local.remove('appSession'); } catch {}
             }
 
-            // Restore builder state if we're in standalone mode and have stored state
-            if (stored && stored.appBuilderState && window.location.hash.includes('standalone')) {
+            // Restore builder state if we're in standalone/tab mode and have stored state
+            const isStandaloneOrTab = window.location.hash.includes('standalone') || window.location.hash.includes('tab');
+            if (stored && stored.appBuilderState && isStandaloneOrTab) {
                 // Defer builder state restoration until GraphqlHelper is initialized
                 window.__pendingBuilderState = stored.appBuilderState;
                 // clear consumed builder state
@@ -121,8 +123,10 @@
                     try {
                         const orgName = await fetchOrgName(instanceUrl, accessToken, apiVersion);
                         updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
-                        if (orgName && window.location.hash.includes('standalone')) {
-                            document.title = `${orgName} : TrackForcePro`;
+                        // Update title in standalone or tab mode
+                        const isStandaloneOrTab = window.location.hash.includes('standalone') || window.location.hash.includes('tab');
+                        if (orgName && isStandaloneOrTab) {
+                            document.title = `${orgName} - TrackForcePro`;
                         }
                     } catch {
                         updateStatus(true, 'Connected to Salesforce');

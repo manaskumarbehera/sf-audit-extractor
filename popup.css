@@ -603,12 +603,14 @@ h1 {
 .tabs-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
 .tabs-left { flex: 1 1 auto; min-width: 0; }
 .tabs { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-.tab-button { background: transparent; border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; flex: 0 0 auto; }
+.tab-button { background: transparent; border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
 .tab-button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+/* Tab icon and text styling */
+.tab-icon { font-size: 14px; line-height: 1; flex-shrink: 0; }
+.tab-text { white-space: nowrap; }
 /* Icon-only tab buttons (Settings, Help, About) */
-.tab-button.tab-icon-only { padding: 6px 8px; display: flex; align-items: center; justify-content: center; }
-.tab-button.tab-icon-only svg { width: 16px; height: 16px; stroke: currentColor; }
-.tab-button.tab-icon-only:hover svg { opacity: 0.8; }
+.tab-button.tab-icon-only { padding: 6px 8px; }
+.tab-button.tab-icon-only .tab-icon { font-size: 15px; }
 /* Drag-and-drop affordances */
 .tab-button[draggable="true"] { cursor: grab; }
 .tab-button.dragging { opacity: 0.6; cursor: grabbing; }

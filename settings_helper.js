@@ -137,12 +137,24 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         const names = buttons.map(b => b.dataset.tab);
         const labels = new Map(names.map(n => {
             const b = buttons.find(x => x.dataset.tab === n);
-            return [n, (b?.textContent || n).trim()];
+            // Get only the text content, not the icon
+            // For icon-only tabs, use title or aria-label attribute
+            const textSpan = b?.querySelector('.tab-text');
+            let label;
+            if (textSpan) {
+                label = textSpan.textContent.trim();
+            } else if (b?.classList.contains('tab-icon-only')) {
+                // Icon-only tab - use title or aria-label
+                label = b.getAttribute('title') || b.getAttribute('aria-label') || n;
+            } else {
+                label = (b?.textContent || n).trim();
+            }
+            return [n, label];
         }));
 
         const tabIcons = {
             sf: '🔍', soql: '📊', graphql: '🔗', platform: '📡',
-            data: '💾', help: '❓', settings: '⚙️', lms: '📢'
+            data: '💾', help: '❓', settings: '⚙️', lms: '📢', about: 'ℹ️'
         };
 
         const vis = await getTabVisibility(names);
