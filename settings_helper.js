@@ -3,6 +3,8 @@
 
     const DEFAULT_HIDDEN_TABS = new Set(['soql', 'graphql']);
     const SETTINGS_TAB = 'settings';
+    const ALWAYS_VISIBLE_TABS = new Set(['settings', 'about']); // Tabs that cannot be hidden
+    const DEFAULT_TAB = 'about'; // Default tab on first install
 
     function injectFlexCss() {
         if (document.head.querySelector('style[data-injected="popup-flex"]')) return;
@@ -92,8 +94,11 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             vis = r?.tabVisibility || {};
         } catch {}
         names.forEach(n => {
-            if (typeof vis[n] === 'undefined') {
-                vis[n] = (n === SETTINGS_TAB) ? true : !DEFAULT_HIDDEN_TABS.has(n);
+            if (ALWAYS_VISIBLE_TABS.has(n)) {
+                // These tabs are always visible and cannot be hidden
+                vis[n] = true;
+            } else if (typeof vis[n] === 'undefined') {
+                vis[n] = !DEFAULT_HIDDEN_TABS.has(n);
             }
         });
         return vis;
@@ -176,8 +181,8 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         // Track dragged element at module level for drag-and-drop
         let draggedItem = null;
 
-        // Create accordion items for each tab (except settings)
-        names.filter(n => n !== SETTINGS_TAB).forEach(n => {
+        // Create accordion items for each tab (except settings and about - they're always visible)
+        names.filter(n => !ALWAYS_VISIBLE_TABS.has(n)).forEach(n => {
             const item = document.createElement('div');
             item.className = 'accordion-item';
             item.dataset.tab = n;
@@ -435,7 +440,7 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         const order = Array.from(document.querySelectorAll('.tab-button'))
             .filter(b => !b.hidden)
             .map(b => b.dataset.tab);
-        return order[0] || SETTINGS_TAB;
+        return order[0] || DEFAULT_TAB;
     }
 
     function showTab(name, currentVisibility, opts) {
@@ -531,6 +536,8 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         firstVisibleTabName,
         showTab,
         DEFAULT_HIDDEN_TABS,
+        DEFAULT_TAB,
+        ALWAYS_VISIBLE_TABS,
         getSoqlObjectSelectorVisibility,
         getGraphqlObjectSelectorVisibility,
         getGraphqlAutoFormatPreference,

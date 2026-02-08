@@ -657,3 +657,128 @@ describe('Run and Clear button placement', () => {
   });
 });
 
+// ============================================================================
+// Field Validation Tests - Prevent child relationships from being added as fields
+// ============================================================================
+describe('Field validation', () => {
+  beforeEach(() => {
+    // Set up mock field options (simulating describe result for Account)
+    hooks.setBuilderFieldOptions([
+      { name: 'Id', label: 'Account ID', type: 'id' },
+      { name: 'Name', label: 'Account Name', type: 'string' },
+      { name: 'BillingLatitude', label: 'Billing Latitude', type: 'double' },
+      { name: 'CleanStatus', label: 'Clean Status', type: 'picklist' },
+      { name: 'OwnerId', label: 'Owner ID', type: 'reference', relationshipName: 'Owner', referenceTo: ['User'] },
+    ]);
+
+    // Set up mock object describe with child relationships
+    hooks.setCurrentObjectDescribe({
+      name: 'Account',
+      fields: [
+        { name: 'Id', label: 'Account ID', type: 'id' },
+        { name: 'Name', label: 'Account Name', type: 'string' },
+      ],
+      childRelationships: [
+        { relationshipName: 'Cases', childSObject: 'Case', field: 'AccountId' },
+        { relationshipName: 'Contacts', childSObject: 'Contact', field: 'AccountId' },
+        { relationshipName: 'Opportunities', childSObject: 'Opportunity', field: 'AccountId' },
+      ]
+    });
+  });
+
+  test('validateFieldForBuilder identifies valid field', () => {
+    const result = hooks.validateFieldForBuilder('Name');
+    expect(result.isValidField).toBe(true);
+    expect(result.isChildRelationship).toBe(false);
+  });
+
+  test('validateFieldForBuilder identifies valid field case-insensitively', () => {
+    const result = hooks.validateFieldForBuilder('name');
+    expect(result.isValidField).toBe(true);
+    expect(result.isChildRelationship).toBe(false);
+  });
+
+  test('validateFieldForBuilder identifies child relationship name as not a valid field', () => {
+    const result = hooks.validateFieldForBuilder('Cases');
+    expect(result.isValidField).toBe(false);
+    expect(result.isChildRelationship).toBe(true);
+  });
+
+  test('validateFieldForBuilder identifies child SObject name as child relationship', () => {
+    const result = hooks.validateFieldForBuilder('Case');
+    expect(result.isValidField).toBe(false);
+    expect(result.isChildRelationship).toBe(true);
+  });
+
+  test('validateFieldForBuilder identifies Contacts as child relationship', () => {
+    const result = hooks.validateFieldForBuilder('Contacts');
+    expect(result.isValidField).toBe(false);
+    expect(result.isChildRelationship).toBe(true);
+  });
+
+  test('validateFieldForBuilder identifies Contact (child object) as child relationship', () => {
+    const result = hooks.validateFieldForBuilder('Contact');
+    expect(result.isValidField).toBe(false);
+    expect(result.isChildRelationship).toBe(true);
+  });
+
+  test('validateFieldForBuilder identifies unknown field', () => {
+    const result = hooks.validateFieldForBuilder('NonExistentField');
+    expect(result.isValidField).toBe(false);
+    expect(result.isChildRelationship).toBe(false);
+  });
+
+  test('validateFieldForBuilder identifies reference field as valid', () => {
+    const result = hooks.validateFieldForBuilder('OwnerId');
+    expect(result.isValidField).toBe(true);
+    expect(result.isChildRelationship).toBe(false);
+  });
+
+  test('validateFieldForBuilder with BillingLatitude (actual field from error)', () => {
+    const result = hooks.validateFieldForBuilder('BillingLatitude');
+    expect(result.isValidField).toBe(true);
+    expect(result.isChildRelationship).toBe(false);
+  });
+
+  test('validateFieldForBuilder with CleanStatus (actual field from error)', () => {
+    const result = hooks.validateFieldForBuilder('CleanStatus');
+    expect(result.isValidField).toBe(true);
+    expect(result.isChildRelationship).toBe(false);
+  });
+});
+
+describe('Field validation prevents invalid SOQL', () => {
+  test('composeQueryFromBuilder with valid fields produces correct SOQL', () => {
+    const state = hooks.defaultBuilderState();
+    state.enabled = true;
+    state.object = 'Account';
+    state.fields = ['Id', 'BillingLatitude', 'CleanStatus'];
+    state.lookups = ['Owner.Name'];
+    state.limit = 200;
+
+    const q = hooks.composeQueryFromBuilder(state);
+    expect(q).toBe(
+      "SELECT Id, BillingLatitude, CleanStatus, Owner.Name FROM Account LIMIT 200"
+    );
+    // Verify that "Case" is NOT in the query
+    expect(q).not.toContain('Case');
+  });
+
+  test('child relationships should be in subqueries, not fields', () => {
+    const state = hooks.defaultBuilderState();
+    state.enabled = true;
+    state.object = 'Account';
+    state.fields = ['Id', 'Name'];
+    state.subqueries = [
+      { id: '1', relationship: 'Cases', childObject: 'Case', fields: 'Id, Subject' }
+    ];
+    state.limit = 200;
+
+    const q = hooks.composeQueryFromBuilder(state);
+    expect(q).toBe(
+      "SELECT Id, Name, (SELECT Id, Subject FROM Cases) FROM Account LIMIT 200"
+    );
+    // The word "Cases" should only appear in the subquery, not as a direct field
+    expect(q.indexOf('Cases')).toBeGreaterThan(q.indexOf('(SELECT'));
+  });
+});

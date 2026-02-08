@@ -650,7 +650,7 @@
                     }
                 } catch {}
                 if (!initial) {
-                    initial = (allNames.includes(rawHash) && currentVisibility?.[rawHash]) ? rawHash : (H.firstVisibleTabName() || 'sf');
+                    initial = (allNames.includes(rawHash) && currentVisibility?.[rawHash]) ? rawHash : (H.firstVisibleTabName() || 'about');
                 }
                 showTab(initial);
             })();

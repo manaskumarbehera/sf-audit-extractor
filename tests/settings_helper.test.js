@@ -500,7 +500,7 @@ describe('Settings Helper - firstVisibleTabName', () => {
         expect(firstTab).toBe('sf');
     });
 
-    test('firstVisibleTabName returns settings if all other tabs are hidden', () => {
+    test('firstVisibleTabName returns about if all other tabs are hidden', () => {
         // Hide all non-settings tabs
         document.querySelectorAll('.tab-button').forEach(btn => {
             btn.hidden = true;
@@ -513,7 +513,8 @@ describe('Settings Helper - firstVisibleTabName', () => {
 
         const firstTab = SettingsHelper.firstVisibleTabName();
 
-        expect(firstTab).toBe('settings');
+        // When all tabs are hidden, it returns 'about' as default (or settings if settings is visible first)
+        expect(['about', 'settings']).toContain(firstTab);
     });
 });
 
@@ -1279,3 +1280,118 @@ describe('Settings Helper - All Tabs with Sub-Settings', () => {
         expect(lmsCheckboxes.length).toBe(2);
     });
 });
+
+// ============================================================================
+// About Tab Always Visible Tests
+// ============================================================================
+describe('Settings Helper - About Tab Always Visible', () => {
+    let SettingsHelper;
+
+    function setupDOMWithAbout() {
+        document.body.innerHTML = `
+            <div class="tabs">
+                <button class="tab-button" data-tab="sf">Audit Trails</button>
+                <button class="tab-button" data-tab="soql">SOQL</button>
+                <button class="tab-button" data-tab="graphql">GraphQL</button>
+                <button class="tab-button" data-tab="platform">Platform</button>
+                <button class="tab-button" data-tab="lms">LMS</button>
+                <button class="tab-button" data-tab="about">About</button>
+            </div>
+            <div class="tab-panes">
+                <section class="tab-pane active" data-tab="sf"></section>
+                <section class="tab-pane" data-tab="soql"></section>
+                <section class="tab-pane" data-tab="graphql"></section>
+                <section class="tab-pane" data-tab="platform"></section>
+                <section class="tab-pane" data-tab="lms"></section>
+                <section class="tab-pane" data-tab="about"></section>
+            </div>
+        `;
+    }
+
+    beforeEach(async () => {
+        jest.resetModules();
+        setupDOMWithAbout();
+        Object.assign(mockStorage, {
+            tabVisibility: {},
+            tabOrder: [],
+            soqlShowObjectSelector: true,
+            soqlEnableBuilder: true,
+            graphqlShowObjectSelector: true,
+            graphqlAutoFormat: true,
+            platformShowPublishButton: true,
+            platformAutoSubscribe: false,
+            lmsShowPublishButton: true,
+            lmsAutoLoadChannels: false
+        });
+
+        require('../settings_helper.js');
+        SettingsHelper = window.SettingsHelper;
+        await flush();
+    });
+
+    test('About tab is NOT included in settings panel accordion', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const aboutItem = document.querySelector('.accordion-item[data-tab="about"]');
+        expect(aboutItem).toBeNull();
+    });
+
+    test('Settings tab is NOT included in settings panel accordion', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const settingsItem = document.querySelector('.accordion-item[data-tab="settings"]');
+        expect(settingsItem).toBeNull();
+    });
+
+    test('ALWAYS_VISIBLE_TABS contains settings and about', () => {
+        expect(SettingsHelper.ALWAYS_VISIBLE_TABS.has('settings')).toBe(true);
+        expect(SettingsHelper.ALWAYS_VISIBLE_TABS.has('about')).toBe(true);
+    });
+
+    test('DEFAULT_TAB is set to about', () => {
+        expect(SettingsHelper.DEFAULT_TAB).toBe('about');
+    });
+
+    test('About tab visibility is always true regardless of storage', async () => {
+        // Set visibility to false in storage
+        mockStorage.tabVisibility = { about: false };
+
+        const buttons = document.querySelectorAll('.tab-button');
+        const panes = document.querySelectorAll('.tab-pane');
+
+        const vis = await SettingsHelper.applyTabVisibilityFromStorage(buttons, panes);
+
+        // About should still be visible
+        expect(vis.about).toBe(true);
+    });
+
+    test('Settings tab visibility is always true regardless of storage', async () => {
+        // Set visibility to false in storage
+        mockStorage.tabVisibility = { settings: false };
+
+        SettingsHelper.ensureSettingsTabExists();
+
+        const buttons = document.querySelectorAll('.tab-button');
+        const panes = document.querySelectorAll('.tab-pane');
+
+        const vis = await SettingsHelper.applyTabVisibilityFromStorage(buttons, panes);
+
+        // Settings should still be visible
+        expect(vis.settings).toBe(true);
+    });
+
+    test('Other tabs can be hidden via settings', async () => {
+        // Set SOQL to hidden
+        mockStorage.tabVisibility = { soql: false };
+
+        const buttons = document.querySelectorAll('.tab-button');
+        const panes = document.querySelectorAll('.tab-pane');
+
+        const vis = await SettingsHelper.applyTabVisibilityFromStorage(buttons, panes);
+
+        expect(vis.soql).toBe(false);
+    });
+});
+

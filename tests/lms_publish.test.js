@@ -711,7 +711,7 @@ describe('LmsHelper publish functionality', () => {
 
       document.execCommand = jest.fn().mockReturnValue(true);
 
-      copyBtn.click();
+      modalCopyBtn.click();
       await flush();
       await flush(); // Wait for async fallback
 
@@ -719,14 +719,14 @@ describe('LmsHelper publish functionality', () => {
     });
 
     test('copy button does nothing with empty payload', async () => {
-      payloadTa.value = '';
+      modalPayload.value = '';
 
       const mockWriteText = jest.fn();
       Object.assign(navigator, {
         clipboard: { writeText: mockWriteText }
       });
 
-      copyBtn.click();
+      modalCopyBtn.click();
       await flush();
 
       expect(mockWriteText).not.toHaveBeenCalled();
@@ -761,50 +761,24 @@ describe('LmsHelper publish functionality', () => {
       expect(logEl.querySelector('.placeholder-note')).toBeTruthy();
     });
 
-    test('payload input updates button states', () => {
-      hooks.setState({ selectedChannelIndex: 0, channels: [{ id: '1' }] });
+    test('openPublishModal populates channel name and payload', () => {
+      const testChannel = { id: '1', developerName: 'TestChannel', fullName: 'TestChannel', fields: [{ name: 'Message__c' }] };
+      hooks.setState({ channels: [testChannel] });
 
-      payloadTa.value = '{"test": true}';
-      payloadTa.dispatchEvent(new Event('input'));
+      hooks.openPublishModal(0);
 
-      expect(copyBtn.disabled).toBe(false);
+      expect(modalChannelName.textContent).toBe('TestChannel');
+      expect(modalPayload.value).toContain('Message__c');
+      expect(publishModal.hidden).toBe(false);
     });
 
-    test('payload blur formats JSON', () => {
-      payloadTa.value = '{"a":1,"b":2}';
-      payloadTa.dispatchEvent(new Event('blur'));
+    test('closePublishModal hides modal', () => {
+      publishModal.hidden = false;
+      hooks.setState({ publishModalChannel: { id: '1' } });
 
-      expect(payloadTa.value).toBe('{\n  "a": 1,\n  "b": 2\n}');
-    });
+      hooks.closePublishModal();
 
-    test('payload blur handles invalid JSON', () => {
-      payloadTa.value = 'not json';
-      payloadTa.dispatchEvent(new Event('blur'));
-
-      expect(payloadTa.classList.contains('error')).toBe(true);
-    });
-
-    test('channel change generates sample payload', () => {
-      hooks.setState({
-        channels: [
-          { id: '1', developerName: 'Test', fields: [{ name: 'Message__c' }] }
-        ]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-
-      channelSel.dispatchEvent(new Event('change'));
-
-      expect(payloadTa.value).toContain('Message__c');
-    });
-
-    test('channel change with no selection clears payload', () => {
-      payloadTa.value = 'some text';
-      channelSel.value = '';
-
-      channelSel.dispatchEvent(new Event('change'));
-
-      expect(payloadTa.value).toBe('');
+      expect(publishModal.hidden).toBe(true);
     });
   });
 
@@ -813,89 +787,39 @@ describe('LmsHelper publish functionality', () => {
   // ---------------------------------------------------------------------------
   describe('sample payload generation', () => {
     test('generates default payload when no fields', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [] }],
-        selectedChannelIndex: 0
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(parsed.text).toBe('Hello from LMS');
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [] });
+      expect(result.text).toBe('Hello from LMS');
     });
 
     test('generates number for count fields', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [{ name: 'ItemCount__c' }] }]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(parsed.ItemCount__c).toBe(1);
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [{ name: 'ItemCount__c' }] });
+      expect(result.ItemCount__c).toBe(1);
     });
 
     test('generates ID for id fields', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [{ name: 'RecordId' }] }]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(parsed.RecordId).toBe('a0123456789ABCDE');
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [{ name: 'RecordId' }] });
+      expect(result.RecordId).toBe('a0123456789ABCDE');
     });
 
     test('generates ISO date for date fields', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [{ name: 'EventDate__c' }] }]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(parsed.EventDate__c).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [{ name: 'EventDate__c' }] });
+      expect(result.EventDate__c).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
     test('generates URL for url fields', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [{ name: 'CallbackUrl__c' }] }]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(parsed.CallbackUrl__c).toBe('https://example.com');
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [{ name: 'CallbackUrl__c' }] });
+      expect(result.CallbackUrl__c).toBe('https://example.com');
     });
 
     test('generates Sample for other fields', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [{ name: 'CustomField__c' }] }]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(parsed.CustomField__c).toBe('Sample');
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [{ name: 'CustomField__c' }] });
+      expect(result.CustomField__c).toBe('Sample');
     });
 
     test('skips empty field names', () => {
-      hooks.setState({
-        channels: [{ id: '1', developerName: 'Test', fields: [{ name: '' }, { name: 'Valid__c' }] }]
-      });
-      channelSel.innerHTML = '<option value="">Select</option><option value="0">Test</option>';
-      channelSel.value = '0';
-      channelSel.dispatchEvent(new Event('change'));
-
-      const parsed = JSON.parse(payloadTa.value);
-      expect(Object.keys(parsed)).toHaveLength(1);
-      expect(parsed.Valid__c).toBe('Sample');
+      const result = hooks.generateSamplePayload({ id: '1', developerName: 'Test', fields: [{ name: '' }, { name: 'Valid__c' }] });
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result.Valid__c).toBe('Sample');
     });
   });
 });
@@ -1447,33 +1371,49 @@ describe('LmsHelper passes instanceUrl from session', () => {
       }
     };
 
-    // Create minimal DOM
+   // Create minimal DOM for new modal-based UI
     const logEl = document.createElement('div');
     logEl.id = 'lms-log';
     document.body.appendChild(logEl);
 
-    const channelSel = document.createElement('select');
-    channelSel.id = 'lms-channel';
-    document.body.appendChild(channelSel);
+    const channelsList = document.createElement('div');
+    channelsList.id = 'lms-channels-list';
+    document.body.appendChild(channelsList);
 
-    const payloadTa = document.createElement('textarea');
-    payloadTa.id = 'lms-payload';
-    document.body.appendChild(payloadTa);
+    const publishModal = document.createElement('div');
+    publishModal.id = 'lms-publish-modal';
+    publishModal.hidden = true;
+    document.body.appendChild(publishModal);
 
-    const publishBtn = document.createElement('button');
-    publishBtn.id = 'lms-publish';
-    document.body.appendChild(publishBtn);
+    const modalChannelName = document.createElement('span');
+    modalChannelName.id = 'lms-modal-channel-name';
+    document.body.appendChild(modalChannelName);
 
-    const copyBtn = document.createElement('button');
-    copyBtn.id = 'lms-payload-copy';
-    document.body.appendChild(copyBtn);
+    const modalPayload = document.createElement('textarea');
+    modalPayload.id = 'lms-modal-payload';
+    document.body.appendChild(modalPayload);
+    const modalPublishBtn = document.createElement('button');
+    modalPublishBtn.id = 'lms-modal-publish';
+    document.body.appendChild(modalPublishBtn);
+
+    const modalCloseBtn = document.createElement('button');
+    modalCloseBtn.id = 'lms-modal-close';
+    document.body.appendChild(modalCloseBtn);
+
+    const modalCancelBtn = document.createElement('button');
+    modalCancelBtn.id = 'lms-modal-cancel';
+    document.body.appendChild(modalCancelBtn);
+
+    const modalCopyBtn = document.createElement('button');
+    modalCopyBtn.id = 'lms-modal-copy';
+    document.body.appendChild(modalCopyBtn);
 
     const refreshBtn = document.createElement('button');
     refreshBtn.id = 'lms-refresh';
     document.body.appendChild(refreshBtn);
 
     const clearLogBtn = document.createElement('button');
-    clearLogBtn.id = 'lms-clear-log';
+    clearLogBtn.id = 'lms-log-clear';
     document.body.appendChild(clearLogBtn);
 
     await import('../lms_helper.js');
@@ -1484,7 +1424,7 @@ describe('LmsHelper passes instanceUrl from session', () => {
     mockSendMessage.mockReset();
   });
 
-  test('handlePublish includes instanceUrl from session', async () => {
+  test('handleModalPublish includes instanceUrl from session', async () => {
     const testInstanceUrl = 'https://test-org.my.salesforce.com';
 
     window.LmsHelper.init({
@@ -1494,20 +1434,21 @@ describe('LmsHelper passes instanceUrl from session', () => {
       })
     });
 
+    const testChannel = { id: '1', developerName: 'TestChannel', fullName: 'TestChannel', fields: [] };
     hooks.setState({
-      channels: [{ id: '1', developerName: 'TestChannel', fullName: 'TestChannel', fields: [] }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
-    payloadTa.value = '{ "msg": "test" }';
+    const modalPayload = document.getElementById('lms-modal-payload');
+    modalPayload.value = '{ "msg": "test" }';
 
     mockSendMessage.mockImplementation((msg, callback) => {
       callback({ success: true });
     });
 
-    await hooks.handlePublish();
+    await hooks.handleModalPublish();
 
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1549,20 +1490,21 @@ describe('LmsHelper passes instanceUrl from session', () => {
       getSession: () => null
     });
 
+    const testChannel = { id: '1', developerName: 'TestChannel', fullName: 'TestChannel', fields: [] };
     hooks.setState({
-      channels: [{ id: '1', developerName: 'TestChannel', fullName: 'TestChannel', fields: [] }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
-    payloadTa.value = '{ "msg": "test" }';
+    const modalPayload = document.getElementById('lms-modal-payload');
+    modalPayload.value = '{ "msg": "test" }';
 
     mockSendMessage.mockImplementation((msg, callback) => {
       callback({ success: true });
     });
 
-    await hooks.handlePublish();
+    await hooks.handleModalPublish();
 
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1730,16 +1672,17 @@ describe('Edge cases and error handling', () => {
     expect(hooks.getState().channels).toHaveLength(3);
   });
 
-  test('handles very long channel names', () => {
+  test('handles very long channel names', async () => {
     const longName = 'A'.repeat(1000);
+    const testChannel = { id: '1', developerName: longName, fullName: longName };
     hooks.setState({
-      channels: [{ id: '1', developerName: longName, fullName: longName }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
-    payloadTa.value = '{}';
+    const modalPayload = document.getElementById('lms-modal-payload');
+    modalPayload.value = '{}';
 
     mockSendMessage.mockImplementation((msg, callback) => {
       expect(msg.channel).toBe(longName);
@@ -1747,80 +1690,84 @@ describe('Edge cases and error handling', () => {
     });
 
     // Should handle long names
-    hooks.handlePublish();
+    await hooks.handleModalPublish();
   });
 
   test('handles special characters in payload', async () => {
+    const testChannel = { id: '1', developerName: 'Test', fullName: 'Test' };
     hooks.setState({
-      channels: [{ id: '1', developerName: 'Test', fullName: 'Test' }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
-    payloadTa.value = '{"text": "Hello <script>alert(1)</script> & \\"quoted\\""}';
+    const modalPayload = document.getElementById('lms-modal-payload');
+    modalPayload.value = '{"text": "Hello <script>alert(1)</script> & \\"quoted\\""}';
 
     mockSendMessage.mockImplementation((msg, callback) => {
       callback({ success: true });
     });
 
-    await hooks.handlePublish();
+    await hooks.handleModalPublish();
 
     expect(mockSendMessage).toHaveBeenCalled();
   });
 
   test('handles Unicode in payload', async () => {
+    const testChannel = { id: '1', developerName: 'Test', fullName: 'Test' };
     hooks.setState({
-      channels: [{ id: '1', developerName: 'Test', fullName: 'Test' }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
-    payloadTa.value = '{"text": "こんにちは 🎉 مرحبا"}';
+    const modalPayload = document.getElementById('lms-modal-payload');
+    modalPayload.value = '{"text": "こんにちは 🎉 مرحبا"}';
 
     mockSendMessage.mockImplementation((msg, callback) => {
       expect(msg.payload.text).toBe('こんにちは 🎉 مرحبا');
       callback({ success: true });
     });
 
-    await hooks.handlePublish();
+    await hooks.handleModalPublish();
   });
 
   test('handles deeply nested payload', async () => {
+    const testChannel = { id: '1', developerName: 'Test', fullName: 'Test' };
     hooks.setState({
-      channels: [{ id: '1', developerName: 'Test', fullName: 'Test' }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
+    const modalPayload = document.getElementById('lms-modal-payload');
     const deepObj = { level1: { level2: { level3: { level4: { value: 'deep' } } } } };
-    payloadTa.value = JSON.stringify(deepObj);
+    modalPayload.value = JSON.stringify(deepObj);
 
     mockSendMessage.mockImplementation((msg, callback) => {
       expect(msg.payload.level1.level2.level3.level4.value).toBe('deep');
       callback({ success: true });
     });
 
-    await hooks.handlePublish();
+    await hooks.handleModalPublish();
   });
 
   test('handles empty response from background', async () => {
+    const testChannel = { id: '1', developerName: 'Test', fullName: 'Test' };
     hooks.setState({
-      channels: [{ id: '1', developerName: 'Test', fullName: 'Test' }],
+      channels: [testChannel],
       loaded: true,
-      selectedChannelIndex: 0
+      publishModalChannel: testChannel
     });
 
-    const payloadTa = document.getElementById('lms-payload');
-    payloadTa.value = '{}';
+    const modalPayload = document.getElementById('lms-modal-payload');
+    modalPayload.value = '{}';
 
     mockSendMessage.mockImplementation((msg, callback) => {
       callback(undefined);
     });
 
-    await hooks.handlePublish();
+    await hooks.handleModalPublish();
 
     // Should log error
     const logEl = document.getElementById('lms-log');

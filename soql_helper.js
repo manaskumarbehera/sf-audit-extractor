@@ -1732,7 +1732,31 @@
       on(builderAddFieldBtn, 'click', () => {
         const val = (builderFieldInput?.value || '').trim();
         if (!val) return;
-        if (!builderState.fields.includes(val)) builderState.fields.push(val);
+
+        // Validate that the field exists on the object
+        const isValidField = builderFieldOptions.some(f => f.name === val || f.name?.toLowerCase() === val.toLowerCase());
+
+        // Also check if it's a child relationship name (which is NOT a valid field to select directly)
+        const isChildRelationship = currentObjectDescribe?.childRelationships?.some(
+          cr => cr.relationshipName === val || cr.childSObject === val
+        );
+
+        if (isChildRelationship && !isValidField) {
+          setBuilderStatus(`⚠️ "${val}" is a child relationship, not a field. Use Subqueries section to query child records.`);
+          builderFieldInput.value = '';
+          return;
+        }
+
+        if (!isValidField && builderFieldOptions.length > 0) {
+          // Allow but warn - field might be valid but not in our cache
+          setBuilderStatus(`⚠️ "${val}" may not be a valid field on this object.`);
+        }
+
+        // Use the correctly-cased field name if we found a match
+        const matchedField = builderFieldOptions.find(f => f.name?.toLowerCase() === val.toLowerCase());
+        const fieldToAdd = matchedField ? matchedField.name : val;
+
+        if (!builderState.fields.includes(fieldToAdd)) builderState.fields.push(fieldToAdd);
         builderFieldInput.value = '';
         handleBuilderChange({ writeQuery: true });
       });
@@ -1915,6 +1939,18 @@
         getBuilderState: () => cloneBuilderState(builderState),
         setBuilderState: (s) => { builderState = cloneBuilderState(s); },
         uid,
+        // Field validation test hooks
+        setBuilderFieldOptions: (opts) => { builderFieldOptions = opts; },
+        getBuilderFieldOptions: () => builderFieldOptions,
+        setCurrentObjectDescribe: (desc) => { currentObjectDescribe = desc; },
+        getCurrentObjectDescribe: () => currentObjectDescribe,
+        validateFieldForBuilder: (fieldName) => {
+          const isValidField = builderFieldOptions.some(f => f.name === fieldName || f.name?.toLowerCase() === fieldName.toLowerCase());
+          const isChildRelationship = currentObjectDescribe?.childRelationships?.some(
+            cr => cr.relationshipName === fieldName || cr.childSObject === fieldName
+          );
+          return { isValidField, isChildRelationship };
+        },
       };
     }
 
