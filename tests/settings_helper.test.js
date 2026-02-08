@@ -11,7 +11,11 @@ const mockStorage = {
     soqlShowObjectSelector: true,
     graphqlShowObjectSelector: true,
     graphqlAutoFormat: true,
-    soqlEnableBuilder: true
+    soqlEnableBuilder: true,
+    platformShowPublishButton: true,
+    platformAutoSubscribe: false,
+    lmsShowPublishButton: true,
+    lmsAutoLoadChannels: false
 };
 
 global.chrome = {
@@ -719,3 +723,559 @@ describe('Settings Helper - Existing Placeholder Pane', () => {
     });
 });
 
+// ============================================================================
+// Platform Events Sub-Settings Tests
+// ============================================================================
+describe('Settings Helper - Platform Events Sub-Settings', () => {
+    let SettingsHelper;
+
+    beforeEach(async () => {
+        jest.resetModules();
+        setupDOM();
+        // Add platform and lms tabs to DOM
+        const tabs = document.querySelector('.tabs');
+        const panes = document.querySelector('.tab-panes');
+
+        const platformBtn = document.createElement('button');
+        platformBtn.className = 'tab-button';
+        platformBtn.dataset.tab = 'platform';
+        platformBtn.textContent = 'Platform Events';
+        tabs.appendChild(platformBtn);
+
+        const platformPane = document.createElement('section');
+        platformPane.className = 'tab-pane';
+        platformPane.dataset.tab = 'platform';
+        panes.appendChild(platformPane);
+
+        const lmsBtn = document.createElement('button');
+        lmsBtn.className = 'tab-button';
+        lmsBtn.dataset.tab = 'lms';
+        lmsBtn.textContent = 'LMS';
+        tabs.appendChild(lmsBtn);
+
+        const lmsPane = document.createElement('section');
+        lmsPane.className = 'tab-pane';
+        lmsPane.dataset.tab = 'lms';
+        panes.appendChild(lmsPane);
+
+        Object.assign(mockStorage, {
+            tabVisibility: { sf: true, soql: true, graphql: true, platform: true, data: true, help: true, lms: true },
+            tabOrder: [],
+            soqlShowObjectSelector: true,
+            soqlEnableBuilder: true,
+            graphqlShowObjectSelector: true,
+            graphqlAutoFormat: true,
+            platformShowPublishButton: true,
+            platformAutoSubscribe: false,
+            lmsShowPublishButton: true,
+            lmsAutoLoadChannels: false
+        });
+
+        require('../settings_helper.js');
+        SettingsHelper = window.SettingsHelper;
+        await flush();
+    });
+
+    test('Platform Events accordion item has expand button', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
+        const expandBtn = platformItem.querySelector('.accordion-expand');
+
+        expect(expandBtn).not.toBeNull();
+    });
+
+    test('Platform Events accordion item has sub-settings container', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
+        const subSettings = platformItem.querySelector('.accordion-sub-settings');
+
+        expect(subSettings).not.toBeNull();
+    });
+
+    test('Platform Events sub-settings contain Show Publish button checkbox', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const showPublish = document.getElementById('setting-platform-show-publish');
+        expect(showPublish).not.toBeNull();
+        expect(showPublish.type).toBe('checkbox');
+        expect(showPublish.checked).toBe(true);
+    });
+
+    test('Platform Events sub-settings contain Auto-subscribe checkbox', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const autoSubscribe = document.getElementById('setting-platform-auto-subscribe');
+        expect(autoSubscribe).not.toBeNull();
+        expect(autoSubscribe.type).toBe('checkbox');
+        expect(autoSubscribe.checked).toBe(false);
+    });
+
+    test('Platform Events Show Publish button checkbox reflects storage value', async () => {
+        mockStorage.platformShowPublishButton = false;
+
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const showPublish = document.getElementById('setting-platform-show-publish');
+        expect(showPublish.checked).toBe(false);
+    });
+
+    test('Platform Events Auto-subscribe checkbox reflects storage value when true', async () => {
+        mockStorage.platformAutoSubscribe = true;
+
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const autoSubscribe = document.getElementById('setting-platform-auto-subscribe');
+        expect(autoSubscribe.checked).toBe(true);
+    });
+
+    test('Changing Platform Show Publish saves to storage', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const showPublish = document.getElementById('setting-platform-show-publish');
+        showPublish.checked = false;
+        showPublish.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await flush();
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith(
+            expect.objectContaining({ platformShowPublishButton: false })
+        );
+    });
+
+    test('Changing Platform Auto-subscribe saves to storage', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const autoSubscribe = document.getElementById('setting-platform-auto-subscribe');
+        autoSubscribe.checked = true;
+        autoSubscribe.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await flush();
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith(
+            expect.objectContaining({ platformAutoSubscribe: true })
+        );
+    });
+
+    test('Changing Platform settings dispatches platform-settings-changed event', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const eventHandler = jest.fn();
+        document.addEventListener('platform-settings-changed', eventHandler);
+
+        const showPublish = document.getElementById('setting-platform-show-publish');
+        showPublish.checked = false;
+        showPublish.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await flush();
+
+        expect(eventHandler).toHaveBeenCalled();
+
+        document.removeEventListener('platform-settings-changed', eventHandler);
+    });
+
+    test('Clicking Platform expand button toggles expanded class', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
+        const expandBtn = platformItem.querySelector('.accordion-expand');
+
+        expect(platformItem.classList.contains('expanded')).toBe(false);
+
+        expandBtn.click();
+
+        expect(platformItem.classList.contains('expanded')).toBe(true);
+    });
+});
+
+// ============================================================================
+// LMS Sub-Settings Tests
+// ============================================================================
+describe('Settings Helper - LMS Sub-Settings', () => {
+    let SettingsHelper;
+
+    beforeEach(async () => {
+        jest.resetModules();
+        setupDOM();
+        // Add platform and lms tabs to DOM
+        const tabs = document.querySelector('.tabs');
+        const panes = document.querySelector('.tab-panes');
+
+        const platformBtn = document.createElement('button');
+        platformBtn.className = 'tab-button';
+        platformBtn.dataset.tab = 'platform';
+        platformBtn.textContent = 'Platform Events';
+        tabs.appendChild(platformBtn);
+
+        const platformPane = document.createElement('section');
+        platformPane.className = 'tab-pane';
+        platformPane.dataset.tab = 'platform';
+        panes.appendChild(platformPane);
+
+        const lmsBtn = document.createElement('button');
+        lmsBtn.className = 'tab-button';
+        lmsBtn.dataset.tab = 'lms';
+        lmsBtn.textContent = 'LMS';
+        tabs.appendChild(lmsBtn);
+
+        const lmsPane = document.createElement('section');
+        lmsPane.className = 'tab-pane';
+        lmsPane.dataset.tab = 'lms';
+        panes.appendChild(lmsPane);
+
+        Object.assign(mockStorage, {
+            tabVisibility: { sf: true, soql: true, graphql: true, platform: true, data: true, help: true, lms: true },
+            tabOrder: [],
+            soqlShowObjectSelector: true,
+            soqlEnableBuilder: true,
+            graphqlShowObjectSelector: true,
+            graphqlAutoFormat: true,
+            platformShowPublishButton: true,
+            platformAutoSubscribe: false,
+            lmsShowPublishButton: true,
+            lmsAutoLoadChannels: false
+        });
+
+        require('../settings_helper.js');
+        SettingsHelper = window.SettingsHelper;
+        await flush();
+    });
+
+    test('LMS accordion item has expand button', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+        const expandBtn = lmsItem.querySelector('.accordion-expand');
+
+        expect(expandBtn).not.toBeNull();
+    });
+
+    test('LMS accordion item has sub-settings container', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+        const subSettings = lmsItem.querySelector('.accordion-sub-settings');
+
+        expect(subSettings).not.toBeNull();
+    });
+
+    test('LMS sub-settings contain Show Publish button checkbox', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const showPublish = document.getElementById('setting-lms-show-publish');
+        expect(showPublish).not.toBeNull();
+        expect(showPublish.type).toBe('checkbox');
+        expect(showPublish.checked).toBe(true);
+    });
+
+    test('LMS sub-settings contain Auto-load channels checkbox', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const autoLoad = document.getElementById('setting-lms-auto-load');
+        expect(autoLoad).not.toBeNull();
+        expect(autoLoad.type).toBe('checkbox');
+        expect(autoLoad.checked).toBe(false);
+    });
+
+    test('LMS Show Publish button checkbox reflects storage value', async () => {
+        mockStorage.lmsShowPublishButton = false;
+
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const showPublish = document.getElementById('setting-lms-show-publish');
+        expect(showPublish.checked).toBe(false);
+    });
+
+    test('LMS Auto-load channels checkbox reflects storage value when true', async () => {
+        mockStorage.lmsAutoLoadChannels = true;
+
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const autoLoad = document.getElementById('setting-lms-auto-load');
+        expect(autoLoad.checked).toBe(true);
+    });
+
+    test('Changing LMS Show Publish saves to storage', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const showPublish = document.getElementById('setting-lms-show-publish');
+        showPublish.checked = false;
+        showPublish.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await flush();
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith(
+            expect.objectContaining({ lmsShowPublishButton: false })
+        );
+    });
+
+    test('Changing LMS Auto-load channels saves to storage', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const autoLoad = document.getElementById('setting-lms-auto-load');
+        autoLoad.checked = true;
+        autoLoad.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await flush();
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith(
+            expect.objectContaining({ lmsAutoLoadChannels: true })
+        );
+    });
+
+    test('Changing LMS settings dispatches lms-settings-changed event', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const eventHandler = jest.fn();
+        document.addEventListener('lms-settings-changed', eventHandler);
+
+        const showPublish = document.getElementById('setting-lms-show-publish');
+        showPublish.checked = false;
+        showPublish.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await flush();
+
+        expect(eventHandler).toHaveBeenCalled();
+
+        document.removeEventListener('lms-settings-changed', eventHandler);
+    });
+
+    test('Clicking LMS expand button toggles expanded class', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+        const expandBtn = lmsItem.querySelector('.accordion-expand');
+
+        expect(lmsItem.classList.contains('expanded')).toBe(false);
+
+        expandBtn.click();
+
+        expect(lmsItem.classList.contains('expanded')).toBe(true);
+    });
+});
+
+// ============================================================================
+// Settings Getter Functions Tests
+// ============================================================================
+describe('Settings Helper - Getter Functions', () => {
+    let SettingsHelper;
+
+    beforeEach(async () => {
+        jest.resetModules();
+        setupDOM();
+        Object.assign(mockStorage, {
+            platformShowPublishButton: true,
+            platformAutoSubscribe: false,
+            lmsShowPublishButton: true,
+            lmsAutoLoadChannels: false
+        });
+
+        require('../settings_helper.js');
+        SettingsHelper = window.SettingsHelper;
+        await flush();
+    });
+
+    test('getPlatformShowPublishButton returns correct value when true', async () => {
+        mockStorage.platformShowPublishButton = true;
+        const result = await SettingsHelper.getPlatformShowPublishButton();
+        expect(result).toBe(true);
+    });
+
+    test('getPlatformShowPublishButton returns correct value when false', async () => {
+        mockStorage.platformShowPublishButton = false;
+        const result = await SettingsHelper.getPlatformShowPublishButton();
+        expect(result).toBe(false);
+    });
+
+    test('getPlatformShowPublishButton defaults to true when not set', async () => {
+        delete mockStorage.platformShowPublishButton;
+        const result = await SettingsHelper.getPlatformShowPublishButton();
+        expect(result).toBe(true);
+    });
+
+    test('getPlatformAutoSubscribe returns correct value when true', async () => {
+        mockStorage.platformAutoSubscribe = true;
+        const result = await SettingsHelper.getPlatformAutoSubscribe();
+        expect(result).toBe(true);
+    });
+
+    test('getPlatformAutoSubscribe returns correct value when false', async () => {
+        mockStorage.platformAutoSubscribe = false;
+        const result = await SettingsHelper.getPlatformAutoSubscribe();
+        expect(result).toBe(false);
+    });
+
+    test('getPlatformAutoSubscribe defaults to false when not set', async () => {
+        delete mockStorage.platformAutoSubscribe;
+        const result = await SettingsHelper.getPlatformAutoSubscribe();
+        expect(result).toBe(false);
+    });
+
+    test('getLmsShowPublishButton returns correct value when true', async () => {
+        mockStorage.lmsShowPublishButton = true;
+        const result = await SettingsHelper.getLmsShowPublishButton();
+        expect(result).toBe(true);
+    });
+
+    test('getLmsShowPublishButton returns correct value when false', async () => {
+        mockStorage.lmsShowPublishButton = false;
+        const result = await SettingsHelper.getLmsShowPublishButton();
+        expect(result).toBe(false);
+    });
+
+    test('getLmsShowPublishButton defaults to true when not set', async () => {
+        delete mockStorage.lmsShowPublishButton;
+        const result = await SettingsHelper.getLmsShowPublishButton();
+        expect(result).toBe(true);
+    });
+
+    test('getLmsAutoLoadChannels returns correct value when true', async () => {
+        mockStorage.lmsAutoLoadChannels = true;
+        const result = await SettingsHelper.getLmsAutoLoadChannels();
+        expect(result).toBe(true);
+    });
+
+    test('getLmsAutoLoadChannels returns correct value when false', async () => {
+        mockStorage.lmsAutoLoadChannels = false;
+        const result = await SettingsHelper.getLmsAutoLoadChannels();
+        expect(result).toBe(false);
+    });
+
+    test('getLmsAutoLoadChannels defaults to false when not set', async () => {
+        delete mockStorage.lmsAutoLoadChannels;
+        const result = await SettingsHelper.getLmsAutoLoadChannels();
+        expect(result).toBe(false);
+    });
+});
+
+// ============================================================================
+// Platform and LMS Tabs have Sub-Settings in Combined View
+// ============================================================================
+describe('Settings Helper - All Tabs with Sub-Settings', () => {
+    let SettingsHelper;
+
+    beforeEach(async () => {
+        jest.resetModules();
+        setupDOM();
+        // Add platform and lms tabs to DOM
+        const tabs = document.querySelector('.tabs');
+        const panes = document.querySelector('.tab-panes');
+
+        const platformBtn = document.createElement('button');
+        platformBtn.className = 'tab-button';
+        platformBtn.dataset.tab = 'platform';
+        platformBtn.textContent = 'Platform Events';
+        tabs.appendChild(platformBtn);
+
+        const platformPane = document.createElement('section');
+        platformPane.className = 'tab-pane';
+        platformPane.dataset.tab = 'platform';
+        panes.appendChild(platformPane);
+
+        const lmsBtn = document.createElement('button');
+        lmsBtn.className = 'tab-button';
+        lmsBtn.dataset.tab = 'lms';
+        lmsBtn.textContent = 'LMS';
+        tabs.appendChild(lmsBtn);
+
+        const lmsPane = document.createElement('section');
+        lmsPane.className = 'tab-pane';
+        lmsPane.dataset.tab = 'lms';
+        panes.appendChild(lmsPane);
+
+        Object.assign(mockStorage, {
+            tabVisibility: { sf: true, soql: true, graphql: true, platform: true, data: true, help: true, lms: true },
+            tabOrder: [],
+            soqlShowObjectSelector: true,
+            soqlEnableBuilder: true,
+            graphqlShowObjectSelector: true,
+            graphqlAutoFormat: true,
+            platformShowPublishButton: true,
+            platformAutoSubscribe: false,
+            lmsShowPublishButton: true,
+            lmsAutoLoadChannels: false
+        });
+
+        require('../settings_helper.js');
+        SettingsHelper = window.SettingsHelper;
+        await flush();
+    });
+
+    test('SOQL, GraphQL, Platform, and LMS all have expand buttons', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const soqlItem = document.querySelector('.accordion-item[data-tab="soql"]');
+        const graphqlItem = document.querySelector('.accordion-item[data-tab="graphql"]');
+        const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
+        const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+
+        expect(soqlItem.querySelector('.accordion-expand')).not.toBeNull();
+        expect(graphqlItem.querySelector('.accordion-expand')).not.toBeNull();
+        expect(platformItem.querySelector('.accordion-expand')).not.toBeNull();
+        expect(lmsItem.querySelector('.accordion-expand')).not.toBeNull();
+    });
+
+    test('SF, Data, and Help tabs do NOT have expand buttons', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const sfItem = document.querySelector('.accordion-item[data-tab="sf"]');
+        const dataItem = document.querySelector('.accordion-item[data-tab="data"]');
+        const helpItem = document.querySelector('.accordion-item[data-tab="help"]');
+
+        expect(sfItem.querySelector('.accordion-expand')).toBeNull();
+        expect(dataItem.querySelector('.accordion-expand')).toBeNull();
+        expect(helpItem.querySelector('.accordion-expand')).toBeNull();
+    });
+
+    test('All tabs with sub-settings have accordion-sub-settings container', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const soqlItem = document.querySelector('.accordion-item[data-tab="soql"]');
+        const graphqlItem = document.querySelector('.accordion-item[data-tab="graphql"]');
+        const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
+        const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+
+        expect(soqlItem.querySelector('.accordion-sub-settings')).not.toBeNull();
+        expect(graphqlItem.querySelector('.accordion-sub-settings')).not.toBeNull();
+        expect(platformItem.querySelector('.accordion-sub-settings')).not.toBeNull();
+        expect(lmsItem.querySelector('.accordion-sub-settings')).not.toBeNull();
+    });
+
+    test('Platform and LMS settings each have 2 checkboxes', async () => {
+        SettingsHelper.ensureSettingsTabExists();
+        await SettingsHelper.buildSettingsPanel();
+
+        const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
+        const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+
+        const platformCheckboxes = platformItem.querySelectorAll('.accordion-sub-settings input[type="checkbox"]');
+        const lmsCheckboxes = lmsItem.querySelectorAll('.accordion-sub-settings input[type="checkbox"]');
+
+        expect(platformCheckboxes.length).toBe(2);
+        expect(lmsCheckboxes.length).toBe(2);
+    });
+});

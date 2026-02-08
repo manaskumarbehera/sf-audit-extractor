@@ -164,7 +164,11 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             soqlShowObjectSelector: true,
             soqlEnableBuilder: true,
             graphqlShowObjectSelector: true,
-            graphqlAutoFormat: true
+            graphqlAutoFormat: true,
+            platformAutoSubscribe: false,
+            platformShowPublishButton: true,
+            lmsShowPublishButton: true,
+            lmsAutoLoadChannels: false
         }) || {};
 
         accordion.innerHTML = '';
@@ -180,7 +184,7 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             item.draggable = true;
 
             // Check if this tab has sub-settings
-            const hasSubSettings = (n === 'soql' || n === 'graphql');
+            const hasSubSettings = (n === 'soql' || n === 'graphql' || n === 'platform' || n === 'lms');
 
             // Build sub-settings HTML for SOQL
             let subSettingsHtml = '';
@@ -207,6 +211,32 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
                         <label class="sub-setting-item">
                             <input type="checkbox" id="setting-graphql-auto-format" ${editorSettings.graphqlAutoFormat ? 'checked' : ''}>
                             <span>Auto-format queries on load</span>
+                        </label>
+                    </div>
+                `;
+            } else if (n === 'platform') {
+                subSettingsHtml = `
+                    <div class="accordion-sub-settings">
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-platform-show-publish" ${editorSettings.platformShowPublishButton ? 'checked' : ''}>
+                            <span>Show Publish button</span>
+                        </label>
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-platform-auto-subscribe" ${editorSettings.platformAutoSubscribe ? 'checked' : ''}>
+                            <span>Auto-subscribe on select</span>
+                        </label>
+                    </div>
+                `;
+            } else if (n === 'lms') {
+                subSettingsHtml = `
+                    <div class="accordion-sub-settings">
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-lms-show-publish" ${editorSettings.lmsShowPublishButton ? 'checked' : ''}>
+                            <span>Show Publish button</span>
+                        </label>
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-lms-auto-load" ${editorSettings.lmsAutoLoadChannels ? 'checked' : ''}>
+                            <span>Auto-load channels on tab open</span>
                         </label>
                     </div>
                 `;
@@ -272,6 +302,36 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
                     autoFormat.addEventListener('change', async () => {
                         try { await chrome.storage?.local?.set?.({ graphqlAutoFormat: autoFormat.checked }); } catch {}
                         try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
+                    });
+                }
+            } else if (n === 'platform') {
+                const showPublish = item.querySelector('#setting-platform-show-publish');
+                const autoSubscribe = item.querySelector('#setting-platform-auto-subscribe');
+                if (showPublish) {
+                    showPublish.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ platformShowPublishButton: showPublish.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('platform-settings-changed')); } catch {}
+                    });
+                }
+                if (autoSubscribe) {
+                    autoSubscribe.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ platformAutoSubscribe: autoSubscribe.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('platform-settings-changed')); } catch {}
+                    });
+                }
+            } else if (n === 'lms') {
+                const showPublish = item.querySelector('#setting-lms-show-publish');
+                const autoLoad = item.querySelector('#setting-lms-auto-load');
+                if (showPublish) {
+                    showPublish.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ lmsShowPublishButton: showPublish.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('lms-settings-changed')); } catch {}
+                    });
+                }
+                if (autoLoad) {
+                    autoLoad.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ lmsAutoLoadChannels: autoLoad.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('lms-settings-changed')); } catch {}
                     });
                 }
             }
@@ -435,6 +495,34 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         } catch { return true; }
     }
 
+    async function getPlatformShowPublishButton() {
+        try {
+            const { platformShowPublishButton = true } = await chrome.storage?.local?.get?.({ platformShowPublishButton: true }) || {};
+            return !!platformShowPublishButton;
+        } catch { return true; }
+    }
+
+    async function getPlatformAutoSubscribe() {
+        try {
+            const { platformAutoSubscribe = false } = await chrome.storage?.local?.get?.({ platformAutoSubscribe: false }) || {};
+            return !!platformAutoSubscribe;
+        } catch { return false; }
+    }
+
+    async function getLmsShowPublishButton() {
+        try {
+            const { lmsShowPublishButton = true } = await chrome.storage?.local?.get?.({ lmsShowPublishButton: true }) || {};
+            return !!lmsShowPublishButton;
+        } catch { return true; }
+    }
+
+    async function getLmsAutoLoadChannels() {
+        try {
+            const { lmsAutoLoadChannels = false } = await chrome.storage?.local?.get?.({ lmsAutoLoadChannels: false }) || {};
+            return !!lmsAutoLoadChannels;
+        } catch { return false; }
+    }
+
     window.SettingsHelper = {
         injectFlexCss,
         ensureSettingsTabExists,
@@ -446,5 +534,9 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         getSoqlObjectSelectorVisibility,
         getGraphqlObjectSelectorVisibility,
         getGraphqlAutoFormatPreference,
+        getPlatformShowPublishButton,
+        getPlatformAutoSubscribe,
+        getLmsShowPublishButton,
+        getLmsAutoLoadChannels,
     };
 })();

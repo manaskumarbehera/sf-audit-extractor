@@ -27,3 +27,29 @@ npm run build
 npm run package
 ```
 
+## Settings Configuration
+
+### Platform Events Settings
+| Setting | Storage Key | Default | Description |
+|---------|-------------|---------|-------------|
+| Show Publish Button | `platformShowPublishButton` | `true` | Show/hide the publish button for Platform Events |
+| Auto-subscribe on Select | `platformAutoSubscribe` | `false` | Automatically subscribe when an event is selected |
+
+### LMS Settings
+| Setting | Storage Key | Default | Description |
+|---------|-------------|---------|-------------|
+| Show Publish Button | `lmsShowPublishButton` | `true` | Show/hide publish buttons for LMS channels |
+| Auto-load Channels | `lmsAutoLoadChannels` | `false` | Automatically load channels when LMS tab opens |
+
+### SOQL Builder Settings
+| Setting | Storage Key | Default | Description |
+|---------|-------------|---------|-------------|
+| Show Object Selector | `soqlShowObjectSelector` | `true` | Show/hide the SObject selector |
+| Enable Query Builder | `soqlEnableBuilder` | `true` | Enable/disable the guided query builder |
+
+### GraphQL Builder Settings
+| Setting | Storage Key | Default | Description |
+|---------|-------------|---------|-------------|
+| Show Object Selector | `graphqlShowObjectSelector` | `true` | Show/hide the object selector |
+| Auto-format Queries | `graphqlAutoFormat` | `true` | Auto-format queries on load |
+
