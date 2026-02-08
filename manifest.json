@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TrackForcePro",
-  "version": "1.0.5",
+  "version": "1.0.8",
   "action": {
     "default_title": "TrackForcePro",
     "default_popup": "popup.html",
@@ -28,7 +28,9 @@
   "host_permissions": [
     "https://*.salesforce.com/*",
     "https://*.force.com/*",
-    "https://*.salesforce-setup.com/*"
+    "https://*.salesforce-setup.com/*",
+    "https://*.visualforce.com/*",
+    "https://*.lightning.force.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -39,7 +41,8 @@
       "matches": [
         "https://*.salesforce.com/*",
         "https://*.force.com/*",
-        "https://*.salesforce-setup.com/*"
+        "https://*.salesforce-setup.com/*",
+        "https://*.visualforce.com/*"
       ],
       "js": ["content.js"],
       "all_frames": true,

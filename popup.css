@@ -18,6 +18,34 @@
     --theme-gradient-end: #0d9ddb;
 }
 
+/* Blinking hand pointer animation for popout button */
+@keyframes blinkPointer {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(0.95);
+    }
+}
+
+.popout-blinking {
+    cursor: pointer !important;
+    animation: blinkPointer 0.5s ease-in-out infinite !important;
+    position: relative;
+}
+
+.popout-blinking::after {
+    content: '👆';
+    position: absolute;
+    top: -20px;
+    right: -5px;
+    font-size: 16px;
+    animation: blinkPointer 0.5s ease-in-out infinite;
+    pointer-events: none;
+}
+
 /* Themed elements - will respond to org color changes */
 .themed-header {
     background: linear-gradient(135deg, var(--theme-gradient-start) 0%, var(--theme-gradient-end) 100%) !important;
@@ -503,6 +531,67 @@ h1 {
 
 .error { background: #ffe3e3; border: 1px solid #ffa8a8; color: #c92a2a; padding: 12px; border-radius: 6px; margin: 16px 20px; font-size: 14px; }
 
+/* Enhanced Error Panel UI */
+.error-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 24px;
+    margin: 16px;
+    background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.08);
+}
+.error-panel .error-icon {
+    font-size: 40px;
+    line-height: 1;
+}
+.error-panel .error-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #dc2626;
+    margin: 0;
+}
+.error-panel .error-message {
+    font-size: 14px;
+    color: #7f1d1d;
+    line-height: 1.5;
+    max-width: 320px;
+    white-space: pre-wrap;
+}
+.error-panel .error-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+.error-panel .error-tips {
+    font-size: 12px;
+    color: #6c757d;
+    text-align: left;
+    background: #f8f9fa;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-top: 8px;
+    width: 100%;
+    max-width: 320px;
+}
+.error-panel .error-tips strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #495057;
+}
+.error-panel .error-tips ul {
+    margin: 0;
+    padding-left: 20px;
+}
+.error-panel .error-tips li {
+    margin: 4px 0;
+    line-height: 1.4;
+}
+
 .empty-state { text-align: center; padding: 40px 20px; color: #6c757d; }
 
 ::-webkit-scrollbar { width: 8px; }
@@ -606,6 +695,9 @@ h1 {
 .log-badge.unsubscribe { background: #fff3bf; color: #e67700; }
 .log-badge.event { background: #e7f5ff; color: #1971c2; }
 .log-badge.error { background: #ffe3e3; color: #c92a2a; }
+.log-badge.warning { background: #fff3bf; color: #e67700; }
+.log-badge.info { background: #e7f5ff; color: #1971c2; }
+.record-count { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #d3f9d8; color: #2b8a3e; margin-left: 8px; }
 .log-time { font-size: 11px; color: #868e96; }
 .log-message { font-size: 12px; color: #212529; font-weight: 500; }
 .log-actions { display: flex; align-items: center; gap: 6px; }
@@ -850,6 +942,257 @@ h1 {
 .builder-section { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
 .builder-section-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .builder-title { font-size: 13px; font-weight: 600; color: #212529; }
+
+/* ===================== Collapsible Builder Sections (Issue 7) ===================== */
+details.builder-section.collapsible {
+    padding: 0;
+}
+
+details.builder-section.collapsible > summary {
+    padding: 10px 12px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
+}
+
+details.builder-section.collapsible > summary::-webkit-details-marker {
+    display: none;
+}
+
+details.builder-section.collapsible > summary::before {
+    content: '▶';
+    font-size: 10px;
+    margin-right: 8px;
+    display: inline-block;
+    transition: transform 0.2s ease;
+    color: #6c757d;
+}
+
+details.builder-section.collapsible[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+details.builder-section.collapsible > summary:hover {
+    background: #f8f9fa;
+}
+
+details.builder-section.collapsible[open] > summary {
+    border-bottom: 1px solid #e9ecef;
+    border-radius: 8px 8px 0 0;
+}
+
+details.builder-section.collapsible > *:not(summary) {
+    padding: 10px 12px;
+}
+
+details.builder-section.collapsible > .builder-field-add,
+details.builder-section.collapsible > .builder-filters,
+details.builder-section.collapsible > .builder-field-chips,
+details.builder-section.collapsible > .builder-inline,
+details.builder-section.collapsible > .builder-pagination,
+details.builder-section.collapsible > .builder-related-picker,
+details.builder-section.collapsible > .builder-related-objects {
+    padding: 10px 12px;
+}
+
+/* Section count badge */
+.section-count {
+    font-weight: 400;
+    font-size: 11px;
+    color: #6c757d;
+    margin-left: 4px;
+}
+
+/* ===================== Field Search Input (Issue 6) ===================== */
+#graphql-builder-field-search {
+    flex: 1;
+    min-width: 120px;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 8px center;
+    padding-left: 28px;
+}
+
+#graphql-builder-field-search:focus {
+    outline: 2px solid #339af0;
+    outline-offset: 1px;
+    border-color: #339af0;
+}
+
+#graphql-builder-field-search::placeholder {
+    color: #adb5bd;
+}
+
+/* Clear button for search inputs */
+#graphql-builder-field-search::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    height: 14px;
+    width: 14px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2'%3E%3Cline x1='18' y1='6' x2='6' y2='18'/%3E%3Cline x1='6' y1='6' x2='18' y2='18'/%3E%3C/svg%3E") no-repeat center;
+    cursor: pointer;
+}
+
+/* ===================== Distinct Icons (Issue 9) ===================== */
+/* Clear/Close button - X icon */
+.btn-clear,
+.btn-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-clear:hover,
+.btn-cancel:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+.btn-clear svg,
+.btn-cancel svg {
+    display: block;
+}
+
+/* Delete/Remove button - Trash icon */
+.btn-delete,
+.filter-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: #6c757d;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-delete:hover,
+.filter-remove:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+/* Replace text X with trash SVG for filter remove */
+.builder-filters .filter-row .filter-remove {
+    font-size: 0; /* Hide text content */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2'%3E%3Cpolyline points='3 6 5 6 21 6'/%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.builder-filters .filter-row .filter-remove:hover {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23dc2626' stroke-width='2'%3E%3Cpolyline points='3 6 5 6 21 6'/%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E");
+}
+
+/* Tooltip styles for action buttons */
+[title] {
+    position: relative;
+}
+
+.icon-btn[title]:hover::after,
+.btn-clear[title]:hover::after,
+.btn-delete[title]:hover::after,
+.btn-chip[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background: #1f2937;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+    border-radius: 4px;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    animation: tooltipFadeIn 0.15s ease forwards;
+    animation-delay: 0.3s;
+}
+
+@keyframes tooltipFadeIn {
+    to { opacity: 1; }
+}
+
+/* ===================== Dropdown Constraints (Issue 10) ===================== */
+.builder-section select,
+.filter-logic-select,
+#graphql-builder-order-dir,
+#graphql-builder-related-select {
+    max-height: 200px;
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Dropdown container positioning */
+.builder-section {
+    position: relative;
+    overflow: visible;
+}
+
+/* Select dropdown styling with constrained height */
+.builder-section select {
+    padding: 6px 28px 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    min-width: 80px;
+}
+
+.builder-section select:focus {
+    outline: 2px solid #339af0;
+    outline-offset: 1px;
+    border-color: #339af0;
+}
+
+/* Related objects dropdown */
+#graphql-builder-related-select {
+    flex: 1;
+    min-width: 150px;
+    max-width: 100%;
+}
+
+/* Ensure dropdowns don't overflow container */
+.builder-related-picker {
+    position: relative;
+}
+
+.builder-related-picker select {
+    max-height: 36px;
+}
+
+/* Filter row select constraints */
+.builder-filters .filter-row select {
+    min-width: 80px;
+    max-width: 120px;
+}
+
+.filter-logic-toggle { margin-left: auto; margin-right: 4px; }
+.filter-logic-select { padding: 2px 6px; font-size: 11px; font-weight: 600; border: 1px solid #dee2e6; border-radius: 4px; background: #f8f9fa; color: #495057; cursor: pointer; }
+.filter-logic-select:hover { background: #e9ecef; }
+.filter-logic-select:focus { outline: 2px solid #339af0; outline-offset: 1px; }
 .builder-field-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .builder-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .builder-field-add input,
@@ -864,8 +1207,180 @@ h1 {
 .builder-filters .filter-row input,
 .builder-filters .filter-row select { flex: 1; }
 .builder-filters .filter-row .filter-remove { width: 28px; height: 28px; }
+
+/* Phase 3: Inline validation feedback (Issue 11) */
+.builder-filters .filter-row.filter-error {
+    background: rgba(220, 53, 69, 0.05);
+    border-radius: 6px;
+    padding: 4px;
+    margin: -4px;
+    border: 1px solid rgba(220, 53, 69, 0.2);
+}
+.builder-filters .filter-row.filter-error::after {
+    content: attr(data-error);
+    display: block;
+    width: 100%;
+    font-size: 11px;
+    color: #dc3545;
+    margin-top: 2px;
+}
+.builder-filters .filter-row .input-error,
+.builder-filters .filter-row input.input-error {
+    border-color: #dc3545 !important;
+    background: rgba(220, 53, 69, 0.05);
+}
+.builder-filters .filter-row .input-error:focus {
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25);
+}
+
+/* Phase 3: Order-by unsortable field warning (Issue 14) */
+#graphql-builder-order-field.input-warning,
+.input-warning {
+    border-color: #ffc107 !important;
+    background: rgba(255, 193, 7, 0.1);
+}
+#graphql-builder-order-field.input-warning:focus,
+.input-warning:focus {
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25);
+}
+
+/* Phase 3: Operator tooltip styling (Issue 12) */
+.builder-filters .filter-row select.filter-op-select {
+    cursor: help;
+}
+.builder-filters .filter-row select option[title] {
+    cursor: help;
+}
+
 .builder-status { font-size: 12px; color: #6c757d; min-height: 18px; }
 .builder-note-section .builder-note { font-size: 12px; color: #495057; }
+
+/* ==========================================================================
+   Results & Export UX (Issues 15-20)
+   ========================================================================== */
+
+/* Issue 15: Table view for results */
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    overflow-x: auto;
+}
+.results-table thead {
+    background: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.results-table th,
+.results-table td {
+    padding: 8px 10px;
+    border: 1px solid #dee2e6;
+    text-align: left;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.results-table th {
+    font-weight: 600;
+    color: #495057;
+    background: #f1f3f4;
+}
+.results-table tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+.results-table tbody tr:hover {
+    background: #e8f4ff;
+}
+.empty-table-message {
+    padding: 20px;
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Issue 17: Export buttons */
+#graphql-export-csv,
+#graphql-export-json,
+#graphql-copy-results {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Issue 18: Section counts in collapsible headers */
+.section-count {
+    font-size: 11px;
+    color: #6c757d;
+    font-weight: normal;
+    margin-left: 4px;
+}
+.builder-section-header .section-count {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+/* Issue 19: Query readiness status indicator */
+.query-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+}
+.query-status-ready {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+.query-status-warning {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+.query-status-error {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+}
+.query-status-info {
+    background: rgba(108, 117, 125, 0.1);
+    color: #6c757d;
+}
+
+/* Issue 20: Visual summary for query */
+.visual-summary {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 12px;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    color: #495057;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.visual-summary:empty::before {
+    content: 'Build a query to see summary';
+    color: #adb5bd;
+    font-style: italic;
+}
+
+/* Result count badge */
+.result-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: #6c757d;
+    background: #e9ecef;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+}
+.result-count:empty {
+    display: none;
+}
 
 /* SOQL Builder - Lookups picker */
 .builder-lookups-picker,
@@ -1645,16 +2160,16 @@ textarea.valid:focus {
 }
 
 .graphql-object-card {
-  padding: 20px 16px;
+  padding: 16px 12px;
   border: 2px solid #e9ecef;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease-out;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 10px;
-  text-align: center;
+  text-align: left;
   background: #ffffff;
 }
 
@@ -1676,20 +2191,78 @@ textarea.valid:focus {
   background: #0161b8;
 }
 
+.graphql-object-card.custom-object {
+  border-left: 3px solid #fcc419;
+}
+
 .graphql-object-icon {
-  font-size: 28px;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.graphql-object-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .graphql-object-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   max-width: 100%;
   word-break: break-word;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.graphql-object-label {
+  font-size: 10px;
+  color: #6c757d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-badge {
+  font-size: 9px;
+  background: #fff3bf;
+  color: #845f00;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.graphql-object-card.selected .custom-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.graphql-object-card.selected .graphql-object-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.graphql-objects-count {
+  font-size: 11px;
+  color: #6c757d;
+  padding: 4px 0;
 }
 
 .graphql-object-count {
   font-size: 11px;
   opacity: 0.7;
+}
+
+.graphql-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 20px;
+  color: #6c757d;
+}
+
+.graphql-empty-state button {
+  margin-top: 12px;
 }
 
 .graphql-picker-footer {
@@ -2074,6 +2647,76 @@ textarea.valid:focus {
   overflow: hidden;
   flex: 1;
   height: 100%;
+}
+
+/* Beta Testing Banner */
+.beta-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    margin: 8px 12px;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.15);
+}
+.beta-banner-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+.beta-banner-content {
+    flex: 1;
+    min-width: 0;
+}
+.beta-banner-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: #92400e;
+    margin-bottom: 2px;
+}
+.beta-banner-message {
+    font-size: 12px;
+    color: #a16207;
+    line-height: 1.4;
+}
+.beta-banner-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #f59e0b;
+    color: white;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+.beta-banner-action:hover {
+    background: #d97706;
+    color: white;
+}
+.beta-banner-action-icon {
+    font-size: 14px;
+}
+.beta-banner-dismiss {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    color: #92400e;
+    cursor: pointer;
+    padding: 4px 8px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+.beta-banner-dismiss:hover {
+    opacity: 1;
+}
+.beta-banner.hidden {
+    display: none;
 }
 
 /* Endpoint Banner (Top) */

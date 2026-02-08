@@ -460,7 +460,17 @@
       }
 
       if (!resp || !resp.success) {
-        throw new Error(`SObjects list failed: ${String(resp?.error || 'unknown')}`);
+        const errStr = String(resp?.error || 'unknown');
+        // Create user-friendly error message
+        let friendlyError = errStr;
+        if (errStr.includes('Failed to fetch') || errStr.includes('NetworkError') || errStr.includes('Connection failed')) {
+          friendlyError = 'Unable to connect to Salesforce';
+        } else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('Unauthorized')) {
+          friendlyError = 'Session expired or unauthorized';
+        } else if (errStr.includes('404')) {
+          friendlyError = 'Salesforce API endpoint not found';
+        }
+        throw new Error(friendlyError);
       }
 
       const sobjects = Array.isArray(resp.objects) ? resp.objects : [];
@@ -468,7 +478,26 @@
       renderPlatformEvents(events);
       state.platformEventsLoaded = true;
     } catch (e) {
-      if (dom.peListEl) dom.peListEl.innerHTML = `<div class="error">${Utils.escapeHtml(String(e))}</div>`;
+      const errMsg = String(e?.message || e || 'Unknown error');
+      if (dom.peListEl) {
+        dom.peListEl.innerHTML = `
+          <div class="error-panel">
+            <div class="error-icon">⚠️</div>
+            <div class="error-title">Failed to Load Platform Events</div>
+            <div class="error-message">${Utils.escapeHtml(errMsg)}</div>
+            <div class="error-actions">
+              <button class="btn btn-sm btn-primary" onclick="window.PlatformHelper?.loadPlatformEvents?.()">Try Again</button>
+            </div>
+            <div class="error-tips">
+              <strong>Troubleshooting tips:</strong>
+              <ul>
+                <li>Refresh the Salesforce page and try again</li>
+                <li>Ensure you are logged into Salesforce</li>
+                <li>Check your internet connection</li>
+              </ul>
+            </div>
+          </div>`;
+      }
     }
   }
 

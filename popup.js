@@ -76,7 +76,7 @@
         // If we are a popped-out standalone window, try to load a transferred session from storage
         try {
             const stored = await new Promise((resolve) => {
-                try { chrome.storage.local.get({ appSession: null }, (r) => resolve(r || {})); } catch { resolve({ appSession: null }); }
+                try { chrome.storage.local.get({ appSession: null, appBuilderState: null }, (r) => resolve(r || {})); } catch { resolve({ appSession: null, appBuilderState: null }); }
             });
             if (stored && stored.appSession) {
                 sessionInfo = stored.appSession;
@@ -102,6 +102,14 @@
                 }
                 // clear consumed session so it doesn't linger across future launches
                 try { chrome.storage.local.remove('appSession'); } catch {}
+            }
+
+            // Restore builder state if we're in standalone mode and have stored state
+            if (stored && stored.appBuilderState && window.location.hash.includes('standalone')) {
+                // Defer builder state restoration until GraphqlHelper is initialized
+                window.__pendingBuilderState = stored.appBuilderState;
+                // clear consumed builder state
+                try { chrome.storage.local.remove('appBuilderState'); } catch {}
             }
         } catch {}
 
@@ -137,6 +145,23 @@
         await setupTabs();
 
         attachAppPopHandlers();
+
+        // In standalone mode, persist window size changes for restoration on next pop-out
+        if (window.location.hash.includes('standalone')) {
+            let resizeTimeout = null;
+            window.addEventListener('resize', () => {
+                if (resizeTimeout) clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    try {
+                        const width = window.outerWidth || window.innerWidth;
+                        const height = window.outerHeight || window.innerHeight;
+                        if (width > 0 && height > 0) {
+                            chrome.storage.local.set({ appWindowSize: { width, height } });
+                        }
+                    } catch {}
+                }, 500); // Debounce resize events
+            });
+        }
     }
 
     async function loadAndBindApiVersion() {
@@ -257,14 +282,30 @@
             appPopBtn.disabled = false;
         });
 
-        appPopBtn.addEventListener('click', () => {
+        appPopBtn.addEventListener('click', async () => {
             if (appPopBtn.disabled) return;
             appPopBtn.disabled = true;
 
             // If we're in standalone window, clicking "pop in" should close this window
             if (isStandalone) {
+                // Add blinking effect while processing
+                appPopBtn.classList.add('popout-blinking');
+
+                // Save current state before popping in for restoration in popup
+                try {
+                    const builderState = window.GraphqlHelper?.getBuilderState?.() ||
+                                         (window.__GraphqlTestHooks?.getBuilderState?.()) || null;
+                    if (builderState || sessionInfo) {
+                        const storagePayload = {};
+                        if (sessionInfo) storagePayload.appSession = sessionInfo;
+                        if (builderState) storagePayload.appBuilderState = builderState;
+                        await chrome.storage.local.set(storagePayload);
+                    }
+                } catch {}
+
                 // Pop in: close standalone window and reset state
                 chrome.runtime.sendMessage({ action: 'APP_POP_SET', popped: false }, (resp) => {
+                    appPopBtn.classList.remove('popout-blinking');
                     if (!chrome.runtime.lastError && resp && resp.success) {
                         // Close the standalone window
                         window.close();
@@ -277,10 +318,42 @@
             // If we're in popup, clicking "pop out" should open standalone and close popup
             const next = !appPoppedState;
             const payload = { action: 'APP_POP_SET', popped: next };
-            // When popping out, include current session if available to transfer it
-            if (next && sessionInfo) payload.session = sessionInfo;
+
+            // IMPORTANT: Capture session and builder state BEFORE sending APP_POP_SET
+            // This ensures the popped window receives complete state
+            if (next) {
+                // Ensure we have fresh session info
+                try {
+                    if (!sessionInfo || !sessionInfo.instanceUrl) {
+                        const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                        if (fresh && fresh.success && fresh.isLoggedIn) {
+                            sessionInfo = fresh;
+                        }
+                    }
+                } catch {}
+
+                // Include session if available
+                if (sessionInfo) {
+                    payload.session = { ...sessionInfo };
+                }
+
+                // Capture and include GraphQL builder state for full state transfer
+                try {
+                    const builderState = window.GraphqlHelper?.getBuilderState?.() ||
+                                         (window.__GraphqlTestHooks?.getBuilderState?.()) || null;
+                    if (builderState) {
+                        payload.builderState = builderState;
+                    }
+                } catch {}
+
+                // Add blinking hand pointer effect while waiting for popout
+                appPopBtn.classList.add('popout-blinking');
+            }
 
             chrome.runtime.sendMessage(payload, (resp) => {
+                // Remove blinking effect
+                appPopBtn.classList.remove('popout-blinking');
+
                 if (!chrome.runtime.lastError && resp && resp.success) {
                     appPoppedState = !!resp.popped;
                     updateAppPopButton(appPoppedState, isStandalone);

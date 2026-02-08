@@ -307,9 +307,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const next = !!msg?.popped;
                 await chrome.storage.local.set({ appPoppedOut: next });
                 // If a session payload is supplied, persist it for the popped window to read
+                // Key by instanceUrl to support multi-window session isolation
                 try {
                     if (msg && msg.session) {
-                        await chrome.storage.local.set({ appSession: msg.session });
+                        const instanceUrl = msg.session.instanceUrl || '';
+                        const sessionKey = instanceUrl ? `appSession_${btoa(instanceUrl).replace(/=/g, '')}` : 'appSession';
+
+                        // Store both the keyed session and the default appSession for backward compatibility
+                        const storagePayload = { appSession: msg.session };
+                        if (instanceUrl) {
+                            storagePayload[sessionKey] = msg.session;
+                        }
+
+                        // Include builderState if provided in the message
+                        if (msg.builderState) {
+                            storagePayload.appBuilderState = msg.builderState;
+                            if (instanceUrl) {
+                                storagePayload[`appBuilderState_${btoa(instanceUrl).replace(/=/g, '')}`] = msg.builderState;
+                            }
+                        }
+
+                        await chrome.storage.local.set(storagePayload);
                     }
                 } catch {}
                 if (next) {
@@ -553,8 +571,28 @@ async function openAppWindow() {
     }
     const url = chrome.runtime.getURL('popup.html#standalone');
     try {
-        // Create with larger dimensions for better usability
-        const win = await chrome.windows.create({ url, type: 'popup', width: 1400, height: 900, focused: true });
+        // Restore saved window size or use defaults with minimum constraints
+        let width = 1400;
+        let height = 900;
+        const MIN_WIDTH = 800;
+        const MIN_HEIGHT = 600;
+
+        try {
+            const stored = await chrome.storage.local.get({ appWindowSize: null });
+            if (stored && stored.appWindowSize) {
+                width = Math.max(MIN_WIDTH, stored.appWindowSize.width || 1400);
+                height = Math.max(MIN_HEIGHT, stored.appWindowSize.height || 900);
+            }
+        } catch {}
+
+        // Create with enforced minimum dimensions for usability
+        const win = await chrome.windows.create({
+            url,
+            type: 'popup',
+            width: Math.max(MIN_WIDTH, width),
+            height: Math.max(MIN_HEIGHT, height),
+            focused: true
+        });
         appWindowId = win?.id || null;
         return appWindowId;
     } catch (e) {
@@ -926,13 +964,13 @@ async function describeGlobal(instanceUrl, sessionId, useTooling = false) {
         }
     }
 
-    // Enhance error message for common issues
+    // Enhance error message for common issues with clearer, more actionable descriptions
     const errMsg = String(lastError || 'Unknown error');
     if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
-        throw new Error(`Network error fetching SObjects from ${url}. This may be caused by: 1) Invalid or expired session - try refreshing the page, 2) Network connectivity issues, 3) Salesforce instance is unreachable. Original error: ${errMsg}`);
+        throw new Error(`Connection failed: Unable to reach Salesforce.\n\nTry these steps:\n• Refresh the Salesforce page and try again\n• Check your internet connection\n• Ensure you're logged into Salesforce\n• If using a VPN, try disconnecting temporarily`);
     }
     if (lastError?.name === 'AbortError' || errMsg.includes('AbortError')) {
-        throw new Error(`Request timed out fetching SObjects from ${url}. The Salesforce server may be slow or unreachable.`);
+        throw new Error(`Request timed out: Salesforce is taking too long to respond.\n\nTry again in a few moments. If the issue persists, the server may be experiencing high load.`);
     }
     throw lastError || new Error('Failed to fetch SObjects');
 }
@@ -1020,13 +1058,13 @@ async function describeSObject(instanceUrl, sessionId, name, useTooling = false)
         }
     }
 
-    // Enhance error message for common issues
+    // Enhance error message for common issues with clearer descriptions
     const errMsg = String(lastError || 'Unknown error');
     if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
-        throw new Error(`Network error describing ${name} from ${url}. This may be caused by: 1) Invalid or expired session - try refreshing the page, 2) Network connectivity issues, 3) Salesforce instance is unreachable. Original error: ${errMsg}`);
+        throw new Error(`Connection failed: Unable to load ${name} details.\n\nTry refreshing the Salesforce page and ensure you're logged in.`);
     }
     if (lastError?.name === 'AbortError' || errMsg.includes('AbortError')) {
-        throw new Error(`Request timed out describing ${name} from ${url}. The Salesforce server may be slow or unreachable.`);
+        throw new Error(`Request timed out loading ${name}. Try again in a few moments.`);
     }
     throw lastError || new Error(`Failed to describe ${name}`);
 }

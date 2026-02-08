@@ -22,7 +22,43 @@
 
   function showError(message) {
     if (!dom.logs) return;
-    dom.logs.innerHTML = `<div class="error">${escape(message)}</div>`;
+
+    // Create user-friendly error message
+    let friendlyMsg = message;
+    let tips = [];
+
+    if (message.includes('Failed to fetch') || message.includes('NetworkError') || message.includes('Connection failed')) {
+      friendlyMsg = 'Unable to connect to Salesforce';
+      tips = [
+        'Refresh the Salesforce page and try again',
+        'Check your internet connection',
+        'Ensure you are logged into Salesforce'
+      ];
+    } else if (message.includes('401') || message.includes('403') || message.includes('session') || message.includes('Unauthorized')) {
+      friendlyMsg = 'Session expired or unauthorized';
+      tips = [
+        'Refresh the Salesforce page to get a new session',
+        'Ensure you have permission to view Setup Audit Trail'
+      ];
+    } else if (message.includes('timeout') || message.includes('timed out')) {
+      friendlyMsg = 'Request timed out';
+      tips = [
+        'Try again in a few moments',
+        'The server may be experiencing high load'
+      ];
+    }
+
+    const tipsHtml = tips.length > 0
+      ? `<div class="error-tips"><strong>Try:</strong><ul>${tips.map(t => `<li>${escape(t)}</li>`).join('')}</ul></div>`
+      : '';
+
+    dom.logs.innerHTML = `
+      <div class="error-panel">
+        <div class="error-icon">⚠️</div>
+        <div class="error-title">Failed to Load Audit Trail</div>
+        <div class="error-message">${escape(friendlyMsg)}</div>
+        ${tipsHtml}
+      </div>`;
   }
 
   function enableControls() {

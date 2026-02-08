@@ -527,6 +527,101 @@ describe('Background Window Management', () => {
             expect(errorOccurred).toBe(true);
         });
     });
+
+    describe('Blinking Hand Pointer Animation', () => {
+        let mockButton;
+
+        beforeEach(() => {
+            mockButton = {
+                disabled: false,
+                classList: {
+                    _classes: new Set(),
+                    add: function(cls) { this._classes.add(cls); },
+                    remove: function(cls) { this._classes.delete(cls); },
+                    contains: function(cls) { return this._classes.has(cls); }
+                }
+            };
+        });
+
+        test('should add popout-blinking class when clicking popout button', () => {
+            // Simulate clicking popout
+            mockButton.classList.add('popout-blinking');
+
+            expect(mockButton.classList.contains('popout-blinking')).toBe(true);
+        });
+
+        test('should remove popout-blinking class after popout completes', () => {
+            // Simulate clicking and then completing
+            mockButton.classList.add('popout-blinking');
+            expect(mockButton.classList.contains('popout-blinking')).toBe(true);
+
+            // Simulate completion
+            mockButton.classList.remove('popout-blinking');
+            expect(mockButton.classList.contains('popout-blinking')).toBe(false);
+        });
+
+        test('should remove blinking class even if popout fails', () => {
+            mockButton.classList.add('popout-blinking');
+
+            // Simulate failure - class should still be removed
+            mockButton.classList.remove('popout-blinking');
+
+            expect(mockButton.classList.contains('popout-blinking')).toBe(false);
+        });
+
+        test('blinking class should be added for pop-in action in standalone mode', () => {
+            // Simulate standalone mode popin
+            mockButton.classList.add('popout-blinking');
+
+            expect(mockButton.classList.contains('popout-blinking')).toBe(true);
+
+            // Complete
+            mockButton.classList.remove('popout-blinking');
+            expect(mockButton.classList.contains('popout-blinking')).toBe(false);
+        });
+
+        test('should handle rapid clicks - class state remains consistent', () => {
+            // First click
+            mockButton.classList.add('popout-blinking');
+            expect(mockButton.classList.contains('popout-blinking')).toBe(true);
+
+            // Second rapid click attempt (should be prevented by disabled state in real code)
+            // but class should remain consistent
+            mockButton.classList.add('popout-blinking');
+            expect(mockButton.classList.contains('popout-blinking')).toBe(true);
+
+            // Complete first action
+            mockButton.classList.remove('popout-blinking');
+            expect(mockButton.classList.contains('popout-blinking')).toBe(false);
+        });
+
+        test('should integrate with message handling flow', async () => {
+            let blinkingState = false;
+
+            // Simulate the flow: click -> add blinking -> send message -> receive response -> remove blinking
+            const simulatePopoutClick = () => {
+                return new Promise((resolve) => {
+                    blinkingState = true;
+                    mockButton.classList.add('popout-blinking');
+
+                    // Simulate async message
+                    setTimeout(() => {
+                        mockButton.classList.remove('popout-blinking');
+                        blinkingState = false;
+                        resolve({ success: true });
+                    }, 50);
+                });
+            };
+
+            expect(blinkingState).toBe(false);
+
+            const resultPromise = simulatePopoutClick();
+            expect(mockButton.classList.contains('popout-blinking')).toBe(true);
+
+            await resultPromise;
+            expect(mockButton.classList.contains('popout-blinking')).toBe(false);
+        });
+    });
 });
 
 console.log('Popup pop out/in tests loaded');

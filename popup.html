@@ -354,6 +354,20 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
         <div id="tab-graphql" class="tab-pane" data-tab="graphql" hidden>
+            <!-- Beta Testing Banner -->
+            <div class="beta-banner">
+                <div class="beta-banner-icon">🚧</div>
+                <div class="beta-banner-content">
+                    <div class="beta-banner-title">GraphQL Builder is in Beta</div>
+                    <div class="beta-banner-message">We're still working on making this perfect. You can execute queries, but some features may be incomplete.</div>
+                </div>
+                <a href="https://github.com/user/sf-audit-extractor/issues" target="_blank" class="beta-banner-action" title="Report issues or suggestions">
+                    <span class="beta-banner-action-icon">🐛</span>
+                    <span class="beta-banner-action-text">Report Issue</span>
+                </a>
+                <button class="beta-banner-dismiss" title="Dismiss" aria-label="Dismiss banner">&times;</button>
+            </div>
+
             <!-- Screen 1: Object Selection -->
             <div id="graphql-screen-objects" class="graphql-screen active">
                 <div class="graphql-objects-picker">
@@ -387,6 +401,7 @@ File: `popup.html` (replace body content with this)
                             <span>Builder</span>
                         </label>
                         <span id="graphql-schema-status" class="schema-status" aria-live="polite">Ready</span>
+                        <span id="graphql-query-status" class="query-status" aria-live="polite"></span>
                     </div>
                 </div>
 
@@ -395,33 +410,44 @@ File: `popup.html` (replace body content with this)
                     <div class="graphql-builder-left" id="graphql-builder-panel">
                         <datalist id="graphql-builder-field-list"></datalist>
 
-                        <!-- Fields Section -->
-                        <div class="builder-section">
-                            <div class="builder-section-header">
-                                <span class="builder-title">Fields</span>
+                        <!-- Fields Section - Open by default -->
+                        <details open class="builder-section collapsible" id="fields-section">
+                            <summary class="builder-section-header">
+                                <span class="builder-title">Fields <span class="section-count" id="fields-count">(0)</span></span>
                                 <button id="graphql-builder-add-field" class="btn-chip btn-sm" type="button" title="Add field">+ Add</button>
-                            </div>
+                            </summary>
                             <div class="builder-field-add">
+                                <input id="graphql-builder-field-search" type="search" placeholder="Search fields..." aria-label="Search fields" />
                                 <input id="graphql-builder-field-input" list="graphql-builder-field-list" placeholder="Field name..." aria-label="Field name" />
                             </div>
                             <div id="graphql-builder-fields" class="builder-field-chips" aria-live="polite"></div>
-                        </div>
+                        </details>
 
-                        <!-- Filters Section -->
-                        <div class="builder-section">
-                            <div class="builder-section-header">
-                                <span class="builder-title">Filters</span>
+                        <!-- Filters Section - Open by default -->
+                        <details open class="builder-section collapsible" id="filters-section">
+                            <summary class="builder-section-header">
+                                <span class="builder-title">Filters <span class="section-count" id="filters-count">(0)</span></span>
+                                <div class="filter-logic-toggle">
+                                    <select id="graphql-builder-filter-logic" class="filter-logic-select" aria-label="Filter logic">
+                                        <option value="and">AND</option>
+                                        <option value="or">OR</option>
+                                    </select>
+                                </div>
                                 <button id="graphql-builder-add-filter" class="btn-chip btn-sm" type="button" title="Add filter">+ Filter</button>
-                            </div>
+                            </summary>
                             <div id="graphql-builder-filters" class="builder-filters" aria-live="polite"></div>
-                        </div>
+                        </details>
 
-                        <!-- Order By Section -->
-                        <div class="builder-section">
-                            <div class="builder-section-header">
+                        <!-- Order By Section - Collapsed by default -->
+                        <details class="builder-section collapsible" id="orderby-section">
+                            <summary class="builder-section-header">
                                 <span class="builder-title">Order By</span>
-                                <button id="graphql-builder-clear-order" class="icon-btn btn-sm" type="button" title="Clear ordering">✕</button>
-                            </div>
+                                <button id="graphql-builder-clear-order" class="icon-btn btn-sm btn-clear" type="button" title="Clear ordering" aria-label="Clear ordering">
+                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    </svg>
+                                </button>
+                            </summary>
                             <div class="builder-inline">
                                 <input id="graphql-builder-order-field" list="graphql-builder-field-list" placeholder="Field" aria-label="Order by field" />
                                 <select id="graphql-builder-order-dir" aria-label="Order direction">
@@ -429,13 +455,13 @@ File: `popup.html` (replace body content with this)
                                     <option value="desc">DESC</option>
                                 </select>
                             </div>
-                        </div>
+                        </details>
 
-                        <!-- Pagination Section -->
-                        <div class="builder-section">
-                            <div class="builder-section-header">
+                        <!-- Pagination Section - Collapsed by default -->
+                        <details class="builder-section collapsible" id="pagination-section">
+                            <summary class="builder-section-header">
                                 <span class="builder-title">Pagination</span>
-                            </div>
+                            </summary>
                             <div class="builder-pagination">
                                 <label class="filter-label" for="graphql-limit">Limit:</label>
                                 <input id="graphql-limit" type="number" value="50" min="1" aria-label="Result limit" />
@@ -444,14 +470,14 @@ File: `popup.html` (replace body content with this)
                                 <label class="filter-label" for="graphql-after">After:</label>
                                 <input id="graphql-after" type="text" aria-label="After cursor" placeholder="cursor" />
                             </div>
-                        </div>
+                        </details>
 
-                        <!-- Related Objects Section (Composite Query) -->
-                        <div class="builder-section builder-related-section">
-                            <div class="builder-section-header">
-                                <span class="builder-title">🔗 Related Objects</span>
+                        <!-- Related Objects Section - Collapsed by default -->
+                        <details class="builder-section collapsible builder-related-section" id="related-section">
+                            <summary class="builder-section-header">
+                                <span class="builder-title">🔗 Related Objects <span class="section-count" id="related-count">(0)</span></span>
                                 <button id="graphql-builder-add-related" class="btn-chip btn-sm btn-primary-outline" type="button" title="Add related object">+ Add</button>
-                            </div>
+                            </summary>
                             <div id="graphql-builder-related-picker" class="builder-related-picker" style="display: none;">
                                 <select id="graphql-builder-related-select" aria-label="Select related object">
                                     <option value="">-- Select relationship --</option>
@@ -460,7 +486,11 @@ File: `popup.html` (replace body content with this)
                                     <input id="graphql-builder-related-fields-input" placeholder="Fields: Id, Name, Email..." aria-label="Related object fields" />
                                     <div class="related-actions">
                                         <button id="graphql-builder-related-add-btn" class="btn-chip btn-sm btn-primary" type="button">Add</button>
-                                        <button id="graphql-builder-related-cancel-btn" class="btn-chip btn-sm" type="button">✕</button>
+                                        <button id="graphql-builder-related-cancel-btn" class="btn-chip btn-sm btn-cancel" type="button" title="Cancel">
+                                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                            </svg>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -470,7 +500,7 @@ File: `popup.html` (replace body content with this)
                                     <span class="empty-text">No related objects. Add child records or parent lookups.</span>
                                 </div>
                             </div>
-                        </div>
+                        </details>
 
                         <!-- Builder Status -->
                         <div class="builder-section builder-status-section">
@@ -517,6 +547,8 @@ File: `popup.html` (replace body content with this)
                                         </button>
                                     </div>
                                 </div>
+                                <!-- Visual Summary Toggle (Issue 20) -->
+                                <div id="graphql-visual-summary" class="visual-summary" style="display: none;"></div>
                                 <textarea id="graphql-query" placeholder='query {
   uiapi {
     query {
@@ -566,7 +598,20 @@ File: `popup.html` (replace body content with this)
                                 <div class="graphql-results-section">
                                     <div class="section-header">
                                         <span class="section-title">Response</span>
+                                        <span id="graphql-result-count" class="result-count"></span>
                                         <div class="section-actions">
+                                            <button id="graphql-results-view-toggle" class="action-btn" type="button" data-view="json" title="Toggle Table/JSON View">
+                                                <span class="action-icon">📊</span>
+                                                <span class="action-label">Table</span>
+                                            </button>
+                                            <button id="graphql-export-csv" class="action-btn" type="button" title="Export as CSV">
+                                                <span class="action-icon">📄</span>
+                                                <span class="action-label">CSV</span>
+                                            </button>
+                                            <button id="graphql-export-json" class="action-btn" type="button" title="Export as JSON">
+                                                <span class="action-icon">{ }</span>
+                                                <span class="action-label">JSON</span>
+                                            </button>
                                             <button id="graphql-copy-results" class="action-btn" type="button" title="Copy Results">
                                                 <span class="action-icon">📋</span>
                                                 <span class="action-label">Copy</span>
@@ -579,6 +624,7 @@ File: `popup.html` (replace body content with this)
                                     </div>
                                     <div id="graphql-results-container" class="results-container">
                                         <pre id="graphql-results" class="results-pre"><span class="placeholder-note">Run a query to see results</span></pre>
+                                        <table id="graphql-results-table" class="results-table" style="display: none;"></table>
                                     </div>
                                 </div>
                             </div>
@@ -933,7 +979,7 @@ File: `popup.html` (replace body content with this)
                         </div>
                         <div class="about-title-section">
                             <h2 class="about-title">TrackForcePro</h2>
-                            <span class="about-version">Version 1.0.4</span>
+                            <span class="about-version">Version 1.0.8</span>
                             <p class="about-tagline">Your Salesforce Development & Admin Companion</p>
                         </div>
                     </div>
