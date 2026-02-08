@@ -36,3 +36,7 @@ venv/
 *.crx
 *.pem
 *.zip
+
+# Developer notes
+NOTES.md
+
