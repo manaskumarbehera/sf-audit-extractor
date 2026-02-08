@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackForcePro - Quick Start Guide</title>
+    <style>
+        :root {
+            --primary-color: #0176d3;
+            --secondary-color: #032d60;
+            --accent-color: #00a1e0;
+            --success-color: #2e844a;
+            --warning-color: #fe9339;
+            --error-color: #ea001e;
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-color: #181818;
+            --text-muted: #706e6b;
+            --border-color: #e5e5e5;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-color) 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        header .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        header .version-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+        }
+
+        /* Navigation */
+        nav {
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow);
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 15px;
+            gap: 10px;
+        }
+
+        nav a {
+            color: var(--primary-color);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        nav a:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        /* Sections */
+        section {
+            background: var(--card-bg);
+            margin: 30px 0;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: var(--secondary-color);
+            color: white;
+            padding: 20px 30px;
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-header .step-number {
+            background: var(--accent-color);
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .section-content {
+            padding: 30px;
+        }
+
+        /* Screenshot placeholders */
+        .screenshot-placeholder {
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 60px 30px;
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .screenshot-placeholder::before {
+            content: '📷';
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        .screenshot-placeholder .placeholder-title {
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 5px;
+        }
+
+        .screenshot-placeholder .placeholder-desc {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .screenshot-placeholder.large {
+            padding: 100px 30px;
+        }
+
+        .screenshot-placeholder.small {
+            padding: 40px 20px;
+            display: inline-block;
+            min-width: 200px;
+        }
+
+        /* Instructions */
+        .instructions {
+            counter-reset: instruction;
+        }
+
+        .instruction-step {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+            align-items: flex-start;
+        }
+
+        .instruction-step::before {
+            counter-increment: instruction;
+            content: counter(instruction);
+            background: var(--primary-color);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .instruction-content h4 {
+            margin-bottom: 5px;
+            color: var(--secondary-color);
+        }
+
+        .instruction-content p {
+            color: var(--text-muted);
+        }
+
+        /* Code blocks */
+        code {
+            background: #f1f5f9;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            color: var(--secondary-color);
+        }
+
+        /* Tips */
+        .tip {
+            background: #e8f5e9;
+            border-left: 4px solid var(--success-color);
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .tip::before {
+            content: '💡 Tip: ';
+            font-weight: 600;
+            color: var(--success-color);
+        }
+
+        .warning {
+            background: #fff3e0;
+            border-left: 4px solid var(--warning-color);
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .warning::before {
+            content: '⚠️ Note: ';
+            font-weight: 600;
+            color: var(--warning-color);
+        }
+
+        /* Feature cards */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .feature-card {
+            background: var(--bg-color);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .feature-card h4 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--bg-color);
+            font-weight: 600;
+            color: var(--secondary-color);
+        }
+
+        tr:hover {
+            background: #f8fafc;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--secondary-color);
+        }
+
+        /* Keyboard shortcuts */
+        kbd {
+            background: #eee;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 0.9em;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            margin-top: 40px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8rem;
+            }
+
+            nav ul {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .section-content {
+                padding: 20px;
+            }
+
+            .instruction-step {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            nav, .no-print {
+                display: none;
+            }
+
+            section {
+                break-inside: avoid;
+                box-shadow: none;
+                border: 1px solid #ccc;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div style="background: #fff; padding: 10px 20px; border-bottom: 1px solid #e5e5e5;">
+        <div style="max-width: 1200px; margin: 0 auto;">
+            <a href="index.html" style="color: #0176d3; text-decoration: none; font-weight: 500;">← Back to Documentation Home</a>
+        </div>
+    </div>
+
+    <header>
+        <h1>🚀 TrackForcePro</h1>
+        <p class="subtitle">Quick Start Guide - Salesforce Admin & Developer Toolkit</p>
+        <span class="version-badge">Version 1.1.0</span>
+    </header>
+
+    <nav>
+        <ul>
+            <li><a href="#installation">Installation</a></li>
+            <li><a href="#first-launch">First Launch</a></li>
+            <li><a href="#connecting">Connecting</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#tab-window">Tab & Window Modes</a></li>
+            <li><a href="#shortcuts">Shortcuts</a></li>
+            <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+
+        <!-- Installation Section -->
+        <section id="installation">
+            <div class="section-header">
+                <h2><span class="step-number">1</span> Installation</h2>
+            </div>
+            <div class="section-content">
+                <div class="instructions">
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Download the Extension</h4>
+                            <p>Download the TrackForcePro extension package (.zip file) from the official source.</p>
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Extract the Files</h4>
+                            <p>Right-click the downloaded .zip file and select "Extract All" (Windows) or double-click to extract (Mac).</p>
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Open Chrome Extensions Page</h4>
+                            <p>Open Google Chrome and navigate to <code>chrome://extensions/</code></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="screenshot-placeholder large">
+                    <div class="placeholder-title">Screenshot: Chrome Extensions Page</div>
+                    <div class="placeholder-desc">Shows the chrome://extensions/ page with extension cards</div>
+                </div>
+
+                <div class="instructions">
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Enable Developer Mode</h4>
+                            <p>Toggle the "Developer mode" switch in the top-right corner of the extensions page.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: Developer Mode Toggle</div>
+                    <div class="placeholder-desc">Shows the Developer mode toggle switch enabled (blue)</div>
+                </div>
+
+                <div class="instructions">
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Load the Extension</h4>
+                            <p>Click "Load unpacked" button, navigate to the extracted TrackForcePro folder, and select it.</p>
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Pin the Extension</h4>
+                            <p>Click the puzzle piece icon (🧩) in Chrome's toolbar and pin TrackForcePro for easy access.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: Extension Installed</div>
+                    <div class="placeholder-desc">Shows TrackForcePro in the extensions list with icon visible in toolbar</div>
+                </div>
+
+                <div class="tip">
+                    After installation, you'll see the TrackForcePro icon in your Chrome toolbar. If you don't see it, click the puzzle piece icon and pin it!
+                </div>
+            </div>
+        </section>
+
+        <!-- First Launch Section -->
+        <section id="first-launch">
+            <div class="section-header">
+                <h2><span class="step-number">2</span> First Launch</h2>
+            </div>
+            <div class="section-content">
+                <p>Click the TrackForcePro icon in your Chrome toolbar to open the extension popup.</p>
+
+                <div class="screenshot-placeholder large">
+                    <div class="placeholder-title">Screenshot: TrackForcePro Main Interface</div>
+                    <div class="placeholder-desc">Shows the main popup window with tab navigation (Audit, GraphQL, SOQL, Data, Platform, Settings)</div>
+                </div>
+
+                <h3>Interface Overview</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>📑 Tab Navigation</h4>
+                        <p>Switch between tools: Audit Trails, GraphQL Builder, SOQL Builder, Data Explorer, Platform Events, Settings</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🔌 Connection Status</h4>
+                        <p>Shows whether you're connected to a Salesforce org (green = connected, red = not connected)</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>📊 API Version</h4>
+                        <p>Select your preferred Salesforce API version from the dropdown</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>⧉ Pop Button</h4>
+                        <p>Open TrackForcePro as a tab (click) or window (Shift+click)</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Connecting Section -->
+        <section id="connecting">
+            <div class="section-header">
+                <h2><span class="step-number">3</span> Connecting to Salesforce</h2>
+            </div>
+            <div class="section-content">
+                <p>TrackForcePro automatically detects your Salesforce session from open browser tabs.</p>
+
+                <div class="instructions">
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Open Salesforce</h4>
+                            <p>Open a new browser tab and navigate to your Salesforce org. Log in if needed.</p>
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Keep the Tab Open</h4>
+                            <p>Keep the Salesforce tab open in your browser (don't close it).</p>
+                        </div>
+                    </div>
+                    <div class="instruction-step">
+                        <div class="instruction-content">
+                            <h4>Open TrackForcePro</h4>
+                            <p>Click the TrackForcePro icon. The extension will automatically detect your session.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Connection Status Indicators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Indicator</th>
+                            <th>Status</th>
+                            <th>What to Do</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>🟢 Green</td>
+                            <td>Connected</td>
+                            <td>You're ready to use all features!</td>
+                        </tr>
+                        <tr>
+                            <td>🔴 Red / "Not Connected"</td>
+                            <td>Disconnected</td>
+                            <td>Open a Salesforce tab and log in</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: Connected State</div>
+                    <div class="placeholder-desc">Shows the extension with green "Connected" status and org name displayed</div>
+                </div>
+
+                <div class="warning">
+                    The extension requires an active Salesforce tab with a valid login session. If you see "Not Connected," ensure you're logged into Salesforce in another tab.
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Overview Section -->
+        <section id="features">
+            <div class="section-header">
+                <h2><span class="step-number">4</span> Features Overview</h2>
+            </div>
+            <div class="section-content">
+
+                <h3>🔍 Audit Trail Extractor</h3>
+                <p>Extract and export Salesforce Setup Audit Trail logs for compliance and analysis.</p>
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: Audit Trail Tab</div>
+                    <div class="placeholder-desc">Shows the audit trail interface with search, filters, and export buttons</div>
+                </div>
+
+                <h3>📊 GraphQL Query Builder</h3>
+                <p>Build and execute GraphQL queries against Salesforce's UI API with a visual interface.</p>
+                <div class="screenshot-placeholder large">
+                    <div class="placeholder-title">Screenshot: GraphQL Builder</div>
+                    <div class="placeholder-desc">Shows object selection grid, field checkboxes, query preview, and results panel</div>
+                </div>
+
+                <h3>🔧 SOQL Query Builder</h3>
+                <p>Build and run SOQL queries with field selection, filters, and ordering.</p>
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: SOQL Builder</div>
+                    <div class="placeholder-desc">Shows object dropdown, field selection, filter builder, and query output</div>
+                </div>
+
+                <h3>🗃️ Data Explorer</h3>
+                <p>Four powerful sub-tools for data exploration and org management.</p>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>🎨 Sandbox & Favicon Manager</h4>
+                        <p>Customize browser tab icons to visually identify different orgs</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>👤 User Manager</h4>
+                        <p>View current user, search users, update profiles/roles</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>📋 Current Record</h4>
+                        <p>Auto-detect and display record details from URL</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🔎 Record Search</h4>
+                        <p>Look up any Salesforce ID to identify object type</p>
+                    </div>
+                </div>
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: Data Explorer - Favicon Manager</div>
+                    <div class="placeholder-desc">Shows org info panel, color picker, label input, and saved favicons list</div>
+                </div>
+
+                <h3>⚡ Platform Events & LMS</h3>
+                <p>Monitor and publish Platform Events and Lightning Message Service channels.</p>
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: Platform Events Monitor</div>
+                    <div class="placeholder-desc">Shows event subscription panel, real-time event log, and publish form</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab & Window Modes Section -->
+        <section id="tab-window">
+            <div class="section-header">
+                <h2><span class="step-number">5</span> Tab & Window Modes</h2>
+            </div>
+            <div class="section-content">
+                <p>TrackForcePro offers flexible ways to open for more screen space.</p>
+
+                <h3>🗂️ Open as Browser Tab (Single Click)</h3>
+                <p>Click the pop button <code>⧉</code> in the header to open TrackForcePro as a new browser tab.</p>
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: TrackForcePro in Browser Tab</div>
+                    <div class="placeholder-desc">Shows extension running as a full browser tab with tab bar visible</div>
+                </div>
+
+                <h3>🪟 Open as Standalone Window (Shift+Click)</h3>
+                <p>Hold <kbd>Shift</kbd> and click the pop button to open in a separate window.</p>
+                <div class="screenshot-placeholder">
+                    <div class="placeholder-title">Screenshot: TrackForcePro Standalone Window</div>
+                    <div class="placeholder-desc">Shows extension in a separate popup window with org name in title bar</div>
+                </div>
+
+                <h3>Quick Reference</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Current Mode</th>
+                            <th>Action</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Popup</td>
+                            <td>Click pop button</td>
+                            <td>Opens as browser tab</td>
+                        </tr>
+                        <tr>
+                            <td>Popup</td>
+                            <td><kbd>Shift</kbd> + Click pop button</td>
+                            <td>Opens as standalone window</td>
+                        </tr>
+                        <tr>
+                            <td>Tab</td>
+                            <td>Click pop button</td>
+                            <td>Closes the tab</td>
+                        </tr>
+                        <tr>
+                            <td>Window</td>
+                            <td>Click pop button</td>
+                            <td>Opens as tab, closes window</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="tip">
+                    Your session and query state are automatically transferred when switching between modes!
+                </div>
+            </div>
+        </section>
+
+        <!-- Keyboard Shortcuts Section -->
+        <section id="shortcuts">
+            <div class="section-header">
+                <h2><span class="step-number">6</span> Keyboard Shortcuts</h2>
+            </div>
+            <div class="section-content">
+                <h3>General</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Windows/Linux</th>
+                            <th>Mac</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Copy</td>
+                            <td><kbd>Ctrl</kbd> + <kbd>C</kbd></td>
+                            <td><kbd>Cmd</kbd> + <kbd>C</kbd></td>
+                        </tr>
+                        <tr>
+                            <td>Paste</td>
+                            <td><kbd>Ctrl</kbd> + <kbd>V</kbd></td>
+                            <td><kbd>Cmd</kbd> + <kbd>V</kbd></td>
+                        </tr>
+                        <tr>
+                            <td>Select All</td>
+                            <td><kbd>Ctrl</kbd> + <kbd>A</kbd></td>
+                            <td><kbd>Cmd</kbd> + <kbd>A</kbd></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Window & Tab Actions</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Shortcut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Open as Tab</td>
+                            <td>Click pop button</td>
+                        </tr>
+                        <tr>
+                            <td>Open as Window</td>
+                            <td><kbd>Shift</kbd> + Click pop button</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Query Editors</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Key</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Execute Search</td>
+                            <td><kbd>Enter</kbd></td>
+                        </tr>
+                        <tr>
+                            <td>Move to Next Field</td>
+                            <td><kbd>Tab</kbd></td>
+                        </tr>
+                        <tr>
+                            <td>Move to Previous Field</td>
+                            <td><kbd>Shift</kbd> + <kbd>Tab</kbd></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Troubleshooting Section -->
+        <section id="troubleshooting">
+            <div class="section-header">
+                <h2><span class="step-number">7</span> Troubleshooting</h2>
+            </div>
+            <div class="section-content">
+                <h3>Common Issues</h3>
+
+                <h4>❌ "Not Connected" Error</h4>
+                <div class="screenshot-placeholder small">
+                    <div class="placeholder-title">Screenshot: Not Connected State</div>
+                    <div class="placeholder-desc">Shows red status indicator</div>
+                </div>
+                <p><strong>Solutions:</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li>Open a new tab and log into Salesforce</li>
+                    <li>Make sure the Salesforce tab stays open</li>
+                    <li>Refresh the Salesforce page</li>
+                    <li>Close and reopen the extension</li>
+                </ul>
+
+                <h4>❌ Objects Not Loading</h4>
+                <p><strong>Solutions:</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li>Check your internet connection</li>
+                    <li>Verify you're logged into Salesforce</li>
+                    <li>Click "Refresh Objects" button</li>
+                    <li>Check the browser console for errors (F12 → Console)</li>
+                </ul>
+
+                <h4>❌ Favicon Not Appearing</h4>
+                <p><strong>Solutions:</strong></p>
+                <ul style="margin-left: 20px; margin-bottom: 20px;">
+                    <li>Refresh the Salesforce page after applying</li>
+                    <li>Try closing and reopening the Salesforce tab</li>
+                    <li>Verify the favicon was saved (check Saved Favicons list)</li>
+                </ul>
+
+                <h3>Error Messages</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Error</th>
+                            <th>Meaning</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>"No access token"</td>
+                            <td>Session expired</td>
+                            <td>Log into Salesforce again</td>
+                        </tr>
+                        <tr>
+                            <td>"Invalid ID length"</td>
+                            <td>Wrong ID format</td>
+                            <td>Use 15 or 18 character ID</td>
+                        </tr>
+                        <tr>
+                            <td>"Handshake failed"</td>
+                            <td>Streaming connection issue</td>
+                            <td>Refresh and reconnect</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Quick Start Checklist -->
+        <section>
+            <div class="section-header">
+                <h2>✅ Quick Start Checklist</h2>
+            </div>
+            <div class="section-content">
+                <div style="font-size: 1.1rem; line-height: 2;">
+                    <p>☐ Downloaded and extracted TrackForcePro</p>
+                    <p>☐ Enabled Developer Mode in Chrome</p>
+                    <p>☐ Loaded the extension using "Load unpacked"</p>
+                    <p>☐ Pinned TrackForcePro to toolbar</p>
+                    <p>☐ Logged into Salesforce in a browser tab</p>
+                    <p>☐ Opened TrackForcePro and verified "Connected" status</p>
+                    <p>☐ Tried opening as a tab (single click on pop button)</p>
+                    <p>☐ Explored the main features!</p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <footer>
+        <p><strong>TrackForcePro</strong> - Salesforce Admin & Developer Toolkit</p>
+        <p>Version 1.1.0 | February 2026</p>
+        <p style="margin-top: 10px; font-size: 0.9rem;">
+            For detailed documentation, see the <a href="https://github.com/manaskumarbehera/sf-audit-extractor/blob/main/DOCUMENTATION/guides/CHROME_EXTENSION_USER_GUIDE.md">Full User Guide</a>
+        </p>
+    </footer>
+
+</body>
+</html>
+
