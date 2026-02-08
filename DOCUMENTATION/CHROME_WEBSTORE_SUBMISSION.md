@@ -251,7 +251,7 @@ Consider verifying your domain if you have a website.
 
 - [ ] ZIP file created with `./build.sh`
 - [ ] All icons present (16x16, 32x32, 48x48, 128x128 PNG)
-- [ ] manifest.json version matches your release (currently 1.0.1)
+- [ ] manifest.json version matches your release (currently 1.1.1)
 - [ ] Screenshots taken (1280x800 or 640x400)
 - [ ] Privacy policy hosted online
 - [ ] Extension tested in Chrome

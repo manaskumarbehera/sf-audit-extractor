@@ -594,7 +594,7 @@ If you encounter issues or have questions:
 
 When reporting a problem, please include:
 - Chrome version (chrome://version)
-- Extension version (1.0.1)
+- Extension version (1.1.1)
 - Salesforce edition (Production/Sandbox)
 - Steps to reproduce the issue
 - Console error messages (if any)

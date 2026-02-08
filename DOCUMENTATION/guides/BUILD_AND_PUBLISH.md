@@ -7,7 +7,7 @@ This document describes how to create a distribution package for the TrackForceP
 Run this command from the project root directory to create a zip file for Chrome Web Store submission:
 
 ```bash
-zip -r TrackForcePro-v1.0.1.zip manifest.json background.js content.js popup.html popup.js popup.css audit_helper.js constants.js data_explorer_helper.js graphql_helper.js lms_helper.js oauth_helper.js platform_helper.js settings_helper.js soql_helper.js url_helper.js utils.js icons/ rules/ scripts/
+zip -r TrackForcePro-v1.1.1.zip manifest.json background.js content.js popup.html popup.js popup.css audit_helper.js constants.js data_explorer_helper.js graphql_helper.js lms_helper.js oauth_helper.js platform_helper.js settings_helper.js soql_helper.js url_helper.js utils.js icons/ rules/ scripts/
 ```
 
 > **Note:** Update the version number in the filename (e.g., `TrackForcePro-v1.0.2.zip`) when releasing a new version. The version should match the `version` field in `manifest.json`.
