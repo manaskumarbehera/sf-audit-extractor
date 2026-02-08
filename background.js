@@ -462,6 +462,110 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, channels };
             }
 
+            if (is('LMS_PUBLISH')) {
+                // LMS publishing requires injecting code into a Salesforce Lightning page
+                // We relay this to the content script which handles the injection
+                const channelApiName = msg?.channel || msg?.channelApiName || '';
+                const payload = msg?.payload || {};
+
+                if (!channelApiName) {
+                    return { success: false, error: 'Channel name is required' };
+                }
+
+                // Find the active Salesforce tab to send the publish request
+                let targetTabId = null;
+
+                // First try the sender tab if it's a Salesforce page
+                if (sender?.tab?.id && sender?.tab?.url && isSalesforceUrl(sender.tab.url)) {
+                    targetTabId = sender.tab.id;
+                }
+
+                // Otherwise find an active Salesforce tab
+                if (!targetTabId) {
+                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                    const activeTab = tabs[0];
+                    if (activeTab && activeTab.url && isSalesforceUrl(activeTab.url)) {
+                        targetTabId = activeTab.id;
+                    }
+                }
+
+                // Last resort: any Salesforce tab
+                if (!targetTabId) {
+                    const sfTabs = await chrome.tabs.query({
+                        url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.lightning.force.com/*']
+                    });
+                    if (sfTabs.length > 0) {
+                        targetTabId = sfTabs[0].id;
+                    }
+                }
+
+                if (!targetTabId) {
+                    return {
+                        success: false,
+                        error: 'No Salesforce tab found. Please open a Salesforce Lightning page.'
+                    };
+                }
+
+                // Send publish request to content script
+                return new Promise((resolve) => {
+                    chrome.tabs.sendMessage(targetTabId, {
+                        action: 'LMS_PUBLISH',
+                        channel: channelApiName,
+                        payload: payload
+                    }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            resolve({
+                                success: false,
+                                error: 'Failed to communicate with Salesforce tab: ' + chrome.runtime.lastError.message
+                            });
+                        } else {
+                            resolve(response || { success: false, error: 'No response from content script' });
+                        }
+                    });
+                });
+            }
+
+            if (is('LMS_CHECK_AVAILABILITY')) {
+                // Check if LMS is available on the current page
+                let targetTabId = null;
+
+                if (sender?.tab?.id && sender?.tab?.url && isSalesforceUrl(sender.tab.url)) {
+                    targetTabId = sender.tab.id;
+                }
+
+                if (!targetTabId) {
+                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                    const activeTab = tabs[0];
+                    if (activeTab && activeTab.url && isSalesforceUrl(activeTab.url)) {
+                        targetTabId = activeTab.id;
+                    }
+                }
+
+                if (!targetTabId) {
+                    return {
+                        success: false,
+                        isLightningPage: false,
+                        error: 'No Salesforce tab found'
+                    };
+                }
+
+                return new Promise((resolve) => {
+                    chrome.tabs.sendMessage(targetTabId, {
+                        action: 'LMS_CHECK_AVAILABILITY'
+                    }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            resolve({
+                                success: false,
+                                isLightningPage: false,
+                                error: chrome.runtime.lastError.message
+                            });
+                        } else {
+                            resolve(response || { success: false, isLightningPage: false });
+                        }
+                    });
+                });
+            }
+
             if (is('DESCRIBE_GLOBAL')) {
                 let rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
                 if (!rawUrl) {

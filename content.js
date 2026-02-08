@@ -59,6 +59,22 @@
             sendResponse({ success: true });
             return false;
         }
+
+        // Handle LMS publish request
+        if (req && req.action === 'LMS_PUBLISH') {
+            handleLmsPublish(req.channel, req.payload)
+                .then((result) => sendResponse(result))
+                .catch((err) => sendResponse({ success: false, error: String(err) }));
+            return true; // async
+        }
+
+        // Handle LMS availability check
+        if (req && req.action === 'LMS_CHECK_AVAILABILITY') {
+            checkLmsAvailability()
+                .then((result) => sendResponse(result))
+                .catch((err) => sendResponse({ success: false, error: String(err) }));
+            return true; // async
+        }
     });
 
     // Notify background when ready (top frame only) so it can update state/UI.
@@ -602,4 +618,170 @@
 
         return null;
     }
+
+    // =====================================================
+    // LMS (Lightning Message Service) Publishing Support
+    // =====================================================
+
+    let lmsBridgeInjected = false;
+    let lmsBridgeReady = false;
+    const lmsPendingRequests = new Map();
+    let lmsRequestIdCounter = 0;
+
+    const LMS_MSG_PREFIX = 'TRACKFORCEPRO_LMS_';
+
+    /**
+     * Listen for responses from the injected LMS bridge script
+     */
+    window.addEventListener('message', (event) => {
+        if (event.source !== window) return;
+        const data = event.data;
+        if (!data || typeof data.type !== 'string') return;
+        if (!data.type.startsWith(LMS_MSG_PREFIX)) return;
+
+        // Handle bridge ready signal
+        if (data.type === LMS_MSG_PREFIX + 'BRIDGE_READY') {
+            lmsBridgeReady = true;
+            console.log('[TrackForcePro] LMS Bridge is ready');
+            return;
+        }
+
+        // Handle responses to pending requests
+        const requestId = data.requestId;
+        if (requestId && lmsPendingRequests.has(requestId)) {
+            const { resolve, reject } = lmsPendingRequests.get(requestId);
+            lmsPendingRequests.delete(requestId);
+
+            if (data.success) {
+                resolve(data.data || { success: true });
+            } else {
+                reject(new Error(data.error || 'Unknown error'));
+            }
+        }
+    });
+
+    /**
+     * Inject the LMS bridge script into the page
+     */
+    async function injectLmsBridge() {
+        if (lmsBridgeInjected) return;
+
+        return new Promise((resolve, reject) => {
+            try {
+                const script = document.createElement('script');
+                script.src = chrome.runtime.getURL('scripts/lms_injected.js');
+                script.onload = () => {
+                    lmsBridgeInjected = true;
+                    // Wait a moment for the bridge to initialize
+                    setTimeout(() => {
+                        lmsBridgeReady = true;
+                        resolve();
+                    }, 100);
+                };
+                script.onerror = (e) => {
+                    reject(new Error('Failed to load LMS bridge script'));
+                };
+                (document.head || document.documentElement).appendChild(script);
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+
+    /**
+     * Send a message to the LMS bridge and wait for response
+     */
+    async function sendToLmsBridge(type, data, timeoutMs = 5000) {
+        // Ensure bridge is injected
+        if (!lmsBridgeInjected) {
+            await injectLmsBridge();
+        }
+
+        return new Promise((resolve, reject) => {
+            const requestId = ++lmsRequestIdCounter;
+            const timeout = setTimeout(() => {
+                lmsPendingRequests.delete(requestId);
+                reject(new Error('LMS bridge request timed out'));
+            }, timeoutMs);
+
+            lmsPendingRequests.set(requestId, {
+                resolve: (result) => {
+                    clearTimeout(timeout);
+                    resolve(result);
+                },
+                reject: (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                }
+            });
+
+            window.postMessage({
+                type: LMS_MSG_PREFIX + type,
+                requestId: requestId,
+                ...data
+            }, '*');
+        });
+    }
+
+    /**
+     * Check if LMS is available on the current page
+     */
+    async function checkLmsAvailability() {
+        try {
+            const result = await sendToLmsBridge('CHECK_AVAILABILITY', {});
+            return { success: true, ...result };
+        } catch (e) {
+            // Fallback: basic detection without bridge
+            const hasAura = typeof window.$A !== 'undefined';
+            const isLightning = window.location.pathname.includes('/lightning/');
+            return {
+                success: true,
+                isLightningPage: hasAura && isLightning,
+                hasAura: hasAura,
+                pageType: isLightning ? 'lightning' : 'other',
+                note: 'Bridge check failed, using fallback detection'
+            };
+        }
+    }
+
+    /**
+     * Publish a message to an LMS channel
+     */
+    async function handleLmsPublish(channelApiName, payload) {
+        if (!channelApiName) {
+            return { success: false, error: 'Channel name is required' };
+        }
+
+        try {
+            // First check if we're on a Lightning page
+            const availability = await checkLmsAvailability();
+            if (!availability.isLightningPage && !availability.hasAura) {
+                return {
+                    success: false,
+                    error: 'LMS publishing requires a Lightning Experience page. Please navigate to a Lightning page and try again.',
+                    availability: availability
+                };
+            }
+
+            // Attempt to publish via the bridge
+            const result = await sendToLmsBridge('PUBLISH', {
+                channel: channelApiName,
+                payload: payload || {}
+            }, 10000);
+
+            return {
+                success: true,
+                message: result.message || 'Message published successfully',
+                channel: channelApiName,
+                note: result.note,
+                response: result
+            };
+        } catch (e) {
+            return {
+                success: false,
+                error: e.message || 'Failed to publish LMS message'
+            };
+        }
+    }
 })();
+

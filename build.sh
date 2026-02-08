@@ -49,9 +49,12 @@ cp icons/*.png "$BUILD_DIR/icons/"
 mkdir -p "$BUILD_DIR/rules"
 cp rules/*.json "$BUILD_DIR/rules/"
 
-# Copy scripts folder (SOQL guidance)
+# Copy scripts folder (SOQL guidance and LMS)
 mkdir -p "$BUILD_DIR/scripts/soql"
 cp scripts/soql/*.js "$BUILD_DIR/scripts/soql/"
+
+# Copy LMS injected script (for web_accessible_resources)
+cp scripts/lms_injected.js "$BUILD_DIR/scripts/"
 
 # Remove any source maps or development files if they exist
 find "$BUILD_DIR" -name "*.map" -delete 2>/dev/null || true
