@@ -46,12 +46,16 @@ describe('Version Consistency', () => {
         expect(popupHtmlContent).toContain('Version ');
     });
 
-    test('manifest.json version should be 1.0.8 or higher', () => {
+    test('manifest.json version should be 1.1.1 or higher', () => {
         const [major, minor, patch] = manifestVersion.split('.').map(Number);
         const versionNumber = major * 10000 + minor * 100 + patch;
 
-        // 1.0.8 = 10008
-        expect(versionNumber).toBeGreaterThanOrEqual(10008);
+        // 1.1.1 = 10101
+        expect(versionNumber).toBeGreaterThanOrEqual(10101);
+    });
+
+    test('current version should be 1.1.1', () => {
+        expect(manifestVersion).toBe('1.1.1');
     });
 
     test('build output filename should match manifest version', () => {
@@ -102,3 +106,125 @@ describe('Manifest.json Validation', () => {
     });
 });
 
+describe('Help Links Validation', () => {
+    const GITHUB_PAGES_BASE = 'https://manaskumarbehera.github.io/sf-audit-extractor/';
+    const GITHUB_ISSUES_URL = 'https://github.com/manaskumarbehera/sf-audit-extractor/issues';
+    let popupHtmlContent;
+
+    beforeAll(() => {
+        const popupPath = path.join(__dirname, '..', 'popup.html');
+        popupHtmlContent = fs.readFileSync(popupPath, 'utf8');
+    });
+
+    test('should link to GitHub Pages help.html', () => {
+        expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}help.html`);
+    });
+
+    test('should link to GitHub Pages QUICK_START_GUIDE.html', () => {
+        expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}QUICK_START_GUIDE.html`);
+    });
+
+    test('should link to GitHub Pages privacy-policy.html', () => {
+        expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}privacy-policy.html`);
+    });
+
+    test('should link to GitHub issues for bug reports', () => {
+        expect(popupHtmlContent).toContain(GITHUB_ISSUES_URL);
+    });
+
+    test('should NOT contain direct GitHub MD file links for USER_GUIDE', () => {
+        expect(popupHtmlContent).not.toContain('DOCUMENTATION/guides/USER_GUIDE.md');
+    });
+
+    test('should NOT contain direct GitHub MD file links for DEVELOPER_GUIDE', () => {
+        expect(popupHtmlContent).not.toContain('DOCUMENTATION/guides/DEVELOPER_GUIDE.md');
+    });
+
+    test('should NOT contain direct GitHub MD file links for QUICK_REFERENCE', () => {
+        expect(popupHtmlContent).not.toContain('DOCUMENTATION/reference/QUICK_REFERENCE.md');
+    });
+
+    test('should NOT contain placeholder GitHub user links', () => {
+        expect(popupHtmlContent).not.toContain('github.com/user/sf-audit-extractor');
+    });
+});
+
+describe('Docs HTML Files Version', () => {
+    const EXPECTED_VERSION = '1.1.1';
+
+    test('docs/index.html should have correct version', () => {
+        const filePath = path.join(__dirname, '..', 'docs', 'index.html');
+        const content = fs.readFileSync(filePath, 'utf8');
+        expect(content).toContain(`Version ${EXPECTED_VERSION}`);
+    });
+
+    test('docs/help.html should have correct version', () => {
+        const filePath = path.join(__dirname, '..', 'docs', 'help.html');
+        const content = fs.readFileSync(filePath, 'utf8');
+        expect(content).toContain(`Version ${EXPECTED_VERSION}`);
+    });
+
+    test('docs/QUICK_START_GUIDE.html should have correct version', () => {
+        const filePath = path.join(__dirname, '..', 'docs', 'QUICK_START_GUIDE.html');
+        const content = fs.readFileSync(filePath, 'utf8');
+        expect(content).toContain(`Version ${EXPECTED_VERSION}`);
+    });
+});
+
+describe('docs/help.html Structure', () => {
+    let helpContent;
+
+    beforeAll(() => {
+        const helpPath = path.join(__dirname, '..', 'docs', 'help.html');
+        helpContent = fs.readFileSync(helpPath, 'utf8');
+    });
+
+    test('help.html file should exist', () => {
+        const helpPath = path.join(__dirname, '..', 'docs', 'help.html');
+        expect(fs.existsSync(helpPath)).toBe(true);
+    });
+
+    test('should have Documentation section', () => {
+        expect(helpContent).toContain('Documentation');
+    });
+
+    test('should have Features Overview section', () => {
+        expect(helpContent).toContain('Features Overview');
+    });
+
+    test('should have FAQ section', () => {
+        expect(helpContent).toContain('Frequently Asked Questions');
+    });
+
+    test('should have Support section', () => {
+        expect(helpContent).toContain('Support');
+    });
+
+    test('should have Troubleshooting section', () => {
+        expect(helpContent).toContain('Troubleshooting');
+    });
+
+    test('should have navigation links to other pages', () => {
+        expect(helpContent).toContain('href="index.html"');
+        expect(helpContent).toContain('href="QUICK_START_GUIDE.html"');
+        expect(helpContent).toContain('href="privacy-policy.html"');
+    });
+
+    test('should only link to GitHub issues (not repo directly)', () => {
+        const GITHUB_ISSUES_URL = 'https://github.com/manaskumarbehera/sf-audit-extractor/issues';
+        expect(helpContent).toContain(GITHUB_ISSUES_URL);
+
+        // Check that all github.com links are to /issues
+        const githubLinks = helpContent.match(/github\.com\/manaskumarbehera\/sf-audit-extractor[^"']*/g) || [];
+        githubLinks.forEach(link => {
+            expect(link).toContain('/issues');
+        });
+    });
+});
+
+describe('Build Zip File', () => {
+    test('TrackForcePro-v1.1.1.zip should exist', () => {
+        const zipPath = path.join(__dirname, '..', 'TrackForcePro-v1.1.1.zip');
+        expect(fs.existsSync(zipPath)).toBe(true);
+    });
+});

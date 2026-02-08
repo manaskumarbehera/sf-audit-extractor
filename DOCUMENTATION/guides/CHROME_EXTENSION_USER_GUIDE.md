@@ -1,5 +1,5 @@
 # TrackForcePro - Chrome Extension User Guide
-### Version 1.1.0
+### Version 1.1.1
 
 ---
 
@@ -614,9 +614,15 @@ We welcome suggestions for new features! When submitting:
 
 | Item | Value |
 |------|-------|
-| Version | 1.1.0 |
+| Version | 1.1.1 |
 | Release Date | February 2026 |
 | Platform | Chrome Extension (Manifest V3) |
+
+### What's New in 1.1.1
+
+- **Improved Help System**: All documentation now links to hosted HTML pages instead of GitHub markdown
+- **Streamlined Documentation**: Removed direct GitHub links (except for issue reporting)
+- **Better User Experience**: Cleaner help tab with organized resources
 
 ### What's New in 1.1.0
 
@@ -816,6 +822,6 @@ TrackForcePro works with:
 
 ---
 
-*Document Version: 1.1.0*
+*Document Version: 1.1.1*
 *Last Updated: February 8, 2026*
 
