@@ -55,16 +55,33 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         let pane = document.querySelector(`.tab-pane[data-tab="${SETTINGS_TAB}"]`);
         if (!pane) {
             pane = document.createElement('section');
-            pane.className = 'tab-pane';
+            pane.className = 'tab-pane settings-pane';
             pane.dataset.tab = SETTINGS_TAB;
             pane.setAttribute('hidden', '');
+            panesContainer.appendChild(pane);
+        }
+
+        // Always ensure the pane has the settings-pane class
+        pane.classList.add('settings-pane');
+
+        // Check if accordion already exists, if not add the structure
+        if (!pane.querySelector('#tab-accordion')) {
             pane.innerHTML = `
-                <div class="settings-group">
-                    <h4>Tab visibility</h4>
-                    <div class="settings-list" id="tab-settings-list"></div>
+                <div class="settings-scroll">
+                    <div class="settings-container">
+                        <div class="settings-section settings-card">
+                            <div class="settings-card-header">
+                                <span class="settings-icon">🧩</span>
+                                <h4>Tab Order & Visibility</h4>
+                                <span class="settings-hint">Drag to reorder</span>
+                            </div>
+                            <div class="settings-card-body">
+                                <div class="tab-accordion" id="tab-accordion"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
-            panesContainer.appendChild(pane);
         }
     }
 
@@ -113,8 +130,8 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
     }
 
     async function buildSettingsPanel(onVisibilityChanged) {
-        const list = document.getElementById('tab-settings-list');
-        if (!list) return;
+        const accordion = document.getElementById('tab-accordion');
+        if (!accordion) return;
 
         const buttons = Array.from(document.querySelectorAll('.tab-button'));
         const names = buttons.map(b => b.dataset.tab);
@@ -123,133 +140,224 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             return [n, (b?.textContent || n).trim()];
         }));
 
+        const tabIcons = {
+            sf: '🔍', soql: '📊', graphql: '🔗', platform: '📡',
+            data: '💾', help: '❓', settings: '⚙️', lms: '📢'
+        };
+
         const vis = await getTabVisibility(names);
 
-        list.innerHTML = '';
+        // Get editor settings from storage
+        const editorSettings = await chrome.storage?.local?.get?.({
+            soqlShowObjectSelector: true,
+            soqlEnableBuilder: true,
+            graphqlShowObjectSelector: true,
+            graphqlAutoFormat: true
+        }) || {};
 
-        names
-            .filter(n => n !== SETTINGS_TAB)
-            .forEach(n => {
-                const id = `tab-vis-${n}`;
-                const row = document.createElement('label');
-                row.setAttribute('for', id);
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.id = id;
-                cb.checked = !!vis[n];
-                cb.dataset.tab = n;
-                const span = document.createElement('span');
-                span.textContent = labels.get(n);
-                row.appendChild(cb);
-                row.appendChild(span);
-                list.appendChild(row);
+        accordion.innerHTML = '';
 
-                cb.addEventListener('change', async () => {
-                    const updated = { ...(await getTabVisibility(names)), [n]: cb.checked };
+        // Track dragged element at module level for drag-and-drop
+        let draggedItem = null;
+
+        // Create accordion items for each tab (except settings)
+        names.filter(n => n !== SETTINGS_TAB).forEach(n => {
+            const item = document.createElement('div');
+            item.className = 'accordion-item';
+            item.dataset.tab = n;
+            item.draggable = true;
+
+            // Check if this tab has sub-settings
+            const hasSubSettings = (n === 'soql' || n === 'graphql');
+
+            // Build sub-settings HTML for SOQL
+            let subSettingsHtml = '';
+            if (n === 'soql') {
+                subSettingsHtml = `
+                    <div class="accordion-sub-settings">
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-soql-object-selector" ${editorSettings.soqlShowObjectSelector ? 'checked' : ''}>
+                            <span>Show Object selector</span>
+                        </label>
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-soql-enable-builder" ${editorSettings.soqlEnableBuilder ? 'checked' : ''}>
+                            <span>Enable Query Builder</span>
+                        </label>
+                    </div>
+                `;
+            } else if (n === 'graphql') {
+                subSettingsHtml = `
+                    <div class="accordion-sub-settings">
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-graphql-object-selector" ${editorSettings.graphqlShowObjectSelector ? 'checked' : ''}>
+                            <span>Show Object selector</span>
+                        </label>
+                        <label class="sub-setting-item">
+                            <input type="checkbox" id="setting-graphql-auto-format" ${editorSettings.graphqlAutoFormat ? 'checked' : ''}>
+                            <span>Auto-format queries on load</span>
+                        </label>
+                    </div>
+                `;
+            }
+
+            item.innerHTML = `
+                <div class="accordion-header">
+                    <span class="accordion-drag-handle" title="Drag to reorder">⋮⋮</span>
+                    <span class="accordion-icon">${tabIcons[n] || '📋'}</span>
+                    <span class="accordion-label">${labels.get(n)}</span>
+                    <label class="accordion-toggle" title="Toggle visibility">
+                        <input type="checkbox" class="visibility-checkbox" data-tab="${n}" ${vis[n] ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    ${hasSubSettings ? '<span class="accordion-expand" title="Expand settings">▼</span>' : ''}
+                </div>
+                ${subSettingsHtml}
+            `;
+
+            // Mark hidden tabs
+            if (!vis[n]) {
+                item.classList.add('hidden-tab');
+            }
+
+            // Wire up visibility toggle
+            const visCheckbox = item.querySelector('.visibility-checkbox');
+            if (visCheckbox) {
+                visCheckbox.addEventListener('change', async (e) => {
+                    e.stopPropagation();
+                    const updated = { ...(await getTabVisibility(names)), [n]: visCheckbox.checked };
                     await setTabVisibility(updated);
+                    item.classList.toggle('hidden-tab', !visCheckbox.checked);
                     if (typeof onVisibilityChanged === 'function') onVisibilityChanged(updated);
                 });
+            }
+
+            // Wire up sub-settings if present
+            if (n === 'soql') {
+                const objSelector = item.querySelector('#setting-soql-object-selector');
+                const builderToggle = item.querySelector('#setting-soql-enable-builder');
+                if (objSelector) {
+                    objSelector.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ soqlShowObjectSelector: objSelector.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('soql-settings-changed')); } catch {}
+                    });
+                }
+                if (builderToggle) {
+                    builderToggle.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ soqlEnableBuilder: builderToggle.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('soql-settings-changed')); } catch {}
+                    });
+                }
+            } else if (n === 'graphql') {
+                const objSelector = item.querySelector('#setting-graphql-object-selector');
+                const autoFormat = item.querySelector('#setting-graphql-auto-format');
+                if (objSelector) {
+                    objSelector.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ graphqlShowObjectSelector: objSelector.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
+                    });
+                }
+                if (autoFormat) {
+                    autoFormat.addEventListener('change', async () => {
+                        try { await chrome.storage?.local?.set?.({ graphqlAutoFormat: autoFormat.checked }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
+                    });
+                }
+            }
+
+            // Wire up accordion expand/collapse
+            const expandBtn = item.querySelector('.accordion-expand');
+            const subSettings = item.querySelector('.accordion-sub-settings');
+            if (expandBtn && subSettings) {
+                expandBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isExpanded = item.classList.toggle('expanded');
+                    expandBtn.textContent = isExpanded ? '▲' : '▼';
+                });
+            }
+
+            // Drag and drop handlers
+            item.addEventListener('dragstart', (e) => {
+                draggedItem = item;
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', n);
+                // Allow drag to initiate
+                setTimeout(() => item.style.opacity = '0.4', 0);
             });
 
-        try {
-            const settingsPane = document.querySelector('.tab-pane[data-tab="settings"]');
-            if (!settingsPane) return;
+            item.addEventListener('dragend', () => {
+                item.classList.remove('dragging');
+                item.style.opacity = '';
+                draggedItem = null;
+                accordion.querySelectorAll('.accordion-item').forEach(i => {
+                    i.classList.remove('drop-above', 'drop-below');
+                });
+                saveTabOrder();
+            });
 
-            function ensureEditorGroup(id, title) {
-                let group = settingsPane.querySelector(`#${id}`);
-                if (!group) {
-                    group = document.createElement('div');
-                    group.className = 'settings-group';
-                    group.id = id;
-                    group.innerHTML = `
-                        <h4>${title}</h4>
-                        <div class="settings-list" role="group" aria-labelledby="${id}-label"></div>
-                    `;
-                    settingsPane.appendChild(group);
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (!draggedItem || draggedItem === item) return;
+
+                const rect = item.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+
+                accordion.querySelectorAll('.accordion-item').forEach(i => {
+                    i.classList.remove('drop-above', 'drop-below');
+                });
+
+                if (e.clientY < midY) {
+                    item.classList.add('drop-above');
+                } else {
+                    item.classList.add('drop-below');
                 }
-                const listEl = group.querySelector('.settings-list');
-                listEl.innerHTML = '';
-                return group;
-            }
+            });
 
-            const { soqlShowObjectSelector = true, graphqlShowObjectSelector = true, graphqlAutoFormat = true } = await chrome.storage?.local?.get?.({ soqlShowObjectSelector: true, graphqlShowObjectSelector: true, graphqlAutoFormat: true }) || {};
+            item.addEventListener('dragleave', (e) => {
+                // Only remove if actually leaving the element
+                if (!item.contains(e.relatedTarget)) {
+                    item.classList.remove('drop-above', 'drop-below');
+                }
+            });
 
-            // SOQL editor group: "Show Object selector" and "Enable Builder"
-            const soqlGroup = ensureEditorGroup('soql-editor-settings', 'SOQL Query Editor');
-            const soqlListEl = soqlGroup.querySelector('.settings-list');
-            if (soqlListEl) {
-                // 1. Show Object Selector
-                const selLabel = document.createElement('label');
-                const selCb = document.createElement('input');
-                selCb.type = 'checkbox';
-                selCb.id = 'setting-soql-object-selector';
-                selCb.checked = !!soqlShowObjectSelector;
-                const selSpan = document.createElement('span');
-                selSpan.textContent = 'Show Object selector';
-                selLabel.appendChild(selCb);
-                selLabel.appendChild(selSpan);
-                soqlListEl.appendChild(selLabel);
-                selCb.addEventListener('change', async () => {
-                    try { await chrome.storage?.local?.set?.({ soqlShowObjectSelector: !!selCb.checked }); } catch {}
-                    try { document.dispatchEvent(new CustomEvent('soql-settings-changed')); } catch {}
-                });
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (!draggedItem || draggedItem === item) return;
 
-                // 2. Enable Query Builder
-                const { soqlEnableBuilder = true } = await chrome.storage?.local?.get?.({ soqlEnableBuilder: true }) || {};
-                const bldLabel = document.createElement('label');
-                const bldCb = document.createElement('input');
-                bldCb.type = 'checkbox';
-                bldCb.id = 'setting-soql-enable-builder';
-                bldCb.checked = !!soqlEnableBuilder;
-                const bldSpan = document.createElement('span');
-                bldSpan.textContent = 'Enable Query Builder';
-                bldLabel.appendChild(bldCb);
-                bldLabel.appendChild(bldSpan);
-                soqlListEl.appendChild(bldLabel);
-                bldCb.addEventListener('change', async () => {
-                    try { await chrome.storage?.local?.set?.({ soqlEnableBuilder: !!bldCb.checked }); } catch {}
-                    try { document.dispatchEvent(new CustomEvent('soql-settings-changed')); } catch {}
-                });
-            }
+                const rect = item.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                const insertBefore = e.clientY < midY;
 
-            // GraphQL editor group: Show Object selector and Auto-format checkboxes
-            const gqlGroup = ensureEditorGroup('graphql-editor-settings', 'GraphQL Query Editor');
-            const gqlListEl = gqlGroup.querySelector('.settings-list');
-            if (gqlListEl) {
-                // Object selector checkbox
-                const cbLabel = document.createElement('label');
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.id = 'setting-graphql-object-selector';
-                cb.checked = !!graphqlShowObjectSelector;
-                const span = document.createElement('span');
-                span.textContent = 'Show Object selector';
-                cbLabel.appendChild(cb);
-                cbLabel.appendChild(span);
-                gqlListEl.appendChild(cbLabel);
-                cb.addEventListener('change', async () => {
-                    try { await chrome.storage?.local?.set?.({ graphqlShowObjectSelector: !!cb.checked }); } catch {}
-                    try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
-                });
+                if (insertBefore) {
+                    accordion.insertBefore(draggedItem, item);
+                } else {
+                    accordion.insertBefore(draggedItem, item.nextSibling);
+                }
 
-                // Auto-format checkbox
-                const autoFormatLabel = document.createElement('label');
-                const autoFormatCb = document.createElement('input');
-                autoFormatCb.type = 'checkbox';
-                autoFormatCb.id = 'setting-graphql-auto-format';
-                autoFormatCb.checked = !!graphqlAutoFormat;
-                const autoFormatSpan = document.createElement('span');
-                autoFormatSpan.textContent = 'Auto-format queries on load';
-                autoFormatLabel.appendChild(autoFormatCb);
-                autoFormatLabel.appendChild(autoFormatSpan);
-                gqlListEl.appendChild(autoFormatLabel);
-                autoFormatCb.addEventListener('change', async () => {
-                    try { await chrome.storage?.local?.set?.({ graphqlAutoFormat: !!autoFormatCb.checked }); } catch {}
-                    try { document.dispatchEvent(new CustomEvent('graphql-settings-changed')); } catch {}
+                item.classList.remove('drop-above', 'drop-below');
+            });
+
+            accordion.appendChild(item);
+        });
+
+        function saveTabOrder() {
+            const order = Array.from(accordion.querySelectorAll('.accordion-item'))
+                .map(i => i.dataset.tab);
+            // Add settings at the end
+            order.push(SETTINGS_TAB);
+            try { chrome.storage?.local?.set?.({ tabOrder: order }); } catch {}
+            // Reorder actual tab buttons
+            const tabsContainer = document.querySelector('.tabs');
+            if (tabsContainer) {
+                order.forEach(name => {
+                    const btn = tabsContainer.querySelector(`.tab-button[data-tab="${name}"]`);
+                    if (btn) tabsContainer.appendChild(btn);
                 });
             }
-        } catch {}
+        }
     }
+
 
     function firstVisibleTabName() {
         const order = Array.from(document.querySelectorAll('.tab-button'))

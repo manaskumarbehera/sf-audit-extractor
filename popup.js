@@ -48,16 +48,9 @@
     }
 
     function ensureSettingsPanelMarkupExists() {
-        const pane = document.querySelector('.tab-pane[data-tab="settings"]');
-        if (!pane) return;
-        if (!pane.querySelector('#tab-settings-list')) {
-            pane.innerHTML = `
-                <div class="settings-group">
-                    <h4>Tab visibility</h4>
-                    <div class="settings-list" id="tab-settings-list"></div>
-                </div>
-            `;
-        }
+        // This function is now handled by SettingsHelper.ensureSettingsTabExists()
+        // which creates the accordion-based settings UI
+        // Keep this as a no-op for backwards compatibility
     }
 
     // init() is called at the end of this IIFE to ensure all functions are defined first

@@ -4338,3 +4338,274 @@ textarea.valid:focus {
     margin: 0;
 }
 
+/* ============================================
+   Modern Settings Panel - Accordion Style
+   ============================================ */
+
+.settings-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+}
+
+.settings-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 100%;
+}
+
+/* Settings Card */
+.settings-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.settings-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-card-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+    flex: 1;
+}
+
+.settings-icon {
+    font-size: 18px;
+}
+
+.settings-hint {
+    font-size: 11px;
+    color: #6c757d;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 3px 8px;
+    border-radius: 10px;
+}
+
+.settings-card-body {
+    padding: 8px;
+}
+
+/* Accordion Items */
+.tab-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.accordion-item {
+    background: #fff;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+    cursor: grab;
+    user-select: none;
+}
+
+.accordion-item:hover {
+    border-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(1, 118, 211, 0.1);
+}
+
+.accordion-item.dragging {
+    opacity: 0.4;
+    border-style: dashed;
+    cursor: grabbing;
+}
+
+.accordion-item.drop-above {
+    border-top: 3px solid var(--primary);
+    margin-top: -1px;
+    padding-top: 1px;
+}
+
+.accordion-item.drop-below {
+    border-bottom: 3px solid var(--primary);
+    margin-bottom: -1px;
+    padding-bottom: 1px;
+}
+
+.accordion-item.hidden-tab {
+    opacity: 0.5;
+    background: #f8f9fa;
+}
+
+.accordion-item.hidden-tab .accordion-label {
+    text-decoration: line-through;
+    color: #868e96;
+}
+
+/* Accordion Header */
+.accordion-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    min-height: 44px;
+}
+
+.accordion-drag-handle {
+    font-size: 14px;
+    color: #adb5bd;
+    cursor: grab;
+    padding: 4px;
+    letter-spacing: -3px;
+    transition: color 0.2s;
+}
+
+.accordion-item:hover .accordion-drag-handle {
+    color: #495057;
+}
+
+.accordion-icon {
+    font-size: 18px;
+    width: 24px;
+    text-align: center;
+}
+
+.accordion-label {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    color: #212529;
+}
+
+/* Toggle Switch in Accordion */
+.accordion-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.accordion-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.accordion-toggle .toggle-slider {
+    width: 40px;
+    height: 22px;
+    background: #dee2e6;
+    border-radius: 22px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.accordion-toggle .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 3px;
+    top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.accordion-toggle input:checked + .toggle-slider {
+    background: var(--primary);
+}
+
+.accordion-toggle input:checked + .toggle-slider::before {
+    transform: translateX(18px);
+}
+
+.accordion-expand {
+    font-size: 10px;
+    color: #868e96;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.accordion-expand:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+/* Accordion Sub-Settings */
+.accordion-sub-settings {
+    display: none;
+    padding: 0 12px 12px 46px;
+    border-top: 1px solid #e9ecef;
+    margin-top: 0;
+    background: #f8f9fa;
+    border-radius: 0 0 8px 8px;
+}
+
+.accordion-item.expanded .accordion-sub-settings {
+    display: block;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.sub-setting-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #495057;
+    transition: all 0.2s;
+}
+
+.sub-setting-item:hover {
+    background: #e7f5ff;
+}
+
+.sub-setting-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.sub-setting-item span {
+    flex: 1;
+}
+
+/* Legacy support - keep old classes working */
+#tab-settings-list,
+#tab-reorder-grid {
+    display: none;
+}
+
+
