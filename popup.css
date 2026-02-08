@@ -677,6 +677,31 @@ h1 {
 /* Prevent grid column overflow so 1fr/1fr split stays equal */
 .platform-events, .platform-log { min-width: 0; }
 
+/* LMS Channels left panel */
+.lms-channels { display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 12px; }
+.lms-channels .list { flex: 1; overflow-y: auto; }
+.lms-channels .list-item { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #e9ecef; border-radius: 8px; background: #fff; }
+.lms-channels .item-actions.leading { display: flex; align-items: center; gap: 6px; }
+.lms-channels .lms-publish-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid #dee2e6; border-radius: 4px; background: #fff; color: #495057; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.lms-channels .lms-publish-btn:hover:not(:disabled) { background: #e7f5ff; border-color: #74c0fc; color: #1971c2; }
+.lms-channels .lms-publish-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lms-channels .lms-publish-btn svg { width: 12px; height: 12px; }
+
+/* LMS Publish Modal specific styles */
+.lms-publish-modal { max-width: 480px; }
+.lms-publish-modal .modal-header { padding: 14px 18px; }
+.lms-publish-modal .modal-header h3 { font-size: 16px; font-weight: 600; color: #212529; margin: 0; }
+.lms-publish-modal .modal-close-btn { font-size: 22px; line-height: 1; color: #6c757d; background: transparent; border: none; cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: background 0.15s, color 0.15s; }
+.lms-publish-modal .modal-close-btn:hover { background: #f8f9fa; color: #212529; }
+.lms-publish-modal .modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.lms-publish-modal .modal-field { display: flex; flex-direction: column; gap: 6px; }
+.lms-publish-modal .modal-label { font-size: 13px; font-weight: 500; color: #495057; }
+.lms-publish-modal .modal-value { font-size: 13px; font-weight: 500; color: #0176d3; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; background: #e8f4fd; padding: 4px 10px; border-radius: 6px; display: inline-block; }
+.lms-publish-modal .sample-payload-wrap { position: relative; }
+.lms-publish-modal .sample-payload-wrap textarea { width: 100%; padding: 12px; padding-right: 44px; border: 1px solid #ced4da; border-radius: 8px; font-size: 13px; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; line-height: 1.5; resize: vertical; min-height: 160px; }
+.lms-publish-modal .sample-payload-wrap textarea:focus { outline: none; border-color: #0176d3; box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.1); }
+.lms-publish-modal .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid #e9ecef; }
+
 .platform-log .logs-container { /* kept for specificity override */ }
 .log-line { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; padding: 6px 8px; margin: 0; border-bottom: 1px dashed #e9ecef; white-space: pre-wrap; word-break: break-word; }
 

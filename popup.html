@@ -169,40 +169,76 @@ File: `popup.html` (replace body content with this)
         </div>
 
         <div id="tab-lms" class="tab-pane" data-tab="lms" hidden>
-            <div class="audit-header">
-                <div class="audit-left">
-                    <div class="audit-controls">
+            <div class="platform-header">
+                <div class="platform-left">
+                    <div class="platform-controls">
                         <button id="lms-refresh" class="icon-btn" aria-label="Fetch LMS Channels" title="Fetch LMS Channels">
                             <span aria-hidden="true">⟲</span>
                         </button>
-                        <button id="lms-publish" class="icon-btn" aria-label="Publish message" title="Publish message to LMS channel" disabled>
-                            <span aria-hidden="true">📤</span>
-                        </button>
-                        <button id="lms-clear-log" class="icon-btn" aria-label="Clear log" title="Clear activity log">
-                            <span aria-hidden="true">🗑️</span>
-                        </button>
                     </div>
                 </div>
-                <div class="audit-right"></div>
+                <div class="platform-right"></div>
             </div>
 
-            <div class="filters" style="gap: 8px;">
-                <label class="filter-label" for="lms-channel">Channel:</label>
-                <select id="lms-channel" disabled>
-                    <option value="">Select a message channel</option>
-                </select>
-            </div>
-
-            <!-- Sample payload view (no publish) -->
-            <div class="search-box">
-                <div class="sample-payload-wrap">
-                    <textarea id="lms-payload" rows="6" placeholder='Sample payload will appear here after selecting a channel' aria-label="Sample LMS payload"></textarea>
-                    <button id="lms-payload-copy" class="icon-btn copy-overlay-btn" aria-label="Copy sample payload" title="Copy sample payload">📋</button>
+            <div class="platform-content lms-content">
+                <div class="lms-channels">
+                    <h2 class="section-title">LMS Channels</h2>
+                    <div id="lms-channels-list" class="list">
+                        <div class="placeholder">
+                            <p>No channels loaded</p>
+                            <p class="placeholder-note">Click the refresh icon to load LMS Channels</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="platform-log">
+                    <h2 class="section-title">Event Messages</h2>
+                    <div class="log-toolbar">
+                        <div class="toolbar-left">
+                            <button id="lms-log-clear" class="icon-btn btn-sm" aria-label="Clear log" title="Clear log"><span aria-hidden="true">🗑</span></button>
+                            <button id="lms-log-pause" class="icon-btn btn-sm" aria-pressed="false" aria-label="Pause logging" title="Pause logging"><span aria-hidden="true">⏸</span></button>
+                        </div>
+                        <div class="toolbar-right">
+                            <button id="lms-log-autoscroll-btn" class="icon-btn btn-sm" aria-pressed="true" aria-label="Toggle auto-scroll" title="Auto-scroll: on"><span aria-hidden="true">⤓</span></button>
+                            <select id="lms-log-filter" class="log-filter compact" aria-label="Filter">
+                                <option value="all" selected>All</option>
+                                <option value="info">Info</option>
+                                <option value="system">System</option>
+                                <option value="success">Success</option>
+                                <option value="error">Errors</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="lms-log" class="logs-container">
+                        <div class="placeholder-note">No LMS activity yet</div>
+                    </div>
                 </div>
             </div>
 
-            <div id="lms-log" class="logs-container">
-                <div class="placeholder-note">No LMS activity yet</div>
+            <!-- LMS Publish Modal -->
+            <div id="lms-publish-modal" class="modal-overlay" hidden>
+                <div class="modal-content lms-publish-modal">
+                    <div class="modal-header">
+                        <h3>Publish to LMS Channel</h3>
+                        <button id="lms-modal-close" class="modal-close-btn" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="modal-field">
+                            <label class="modal-label">Channel:</label>
+                            <span id="lms-modal-channel-name" class="modal-value"></span>
+                        </div>
+                        <div class="modal-field">
+                            <label class="modal-label" for="lms-modal-payload">Payload (JSON):</label>
+                            <div class="sample-payload-wrap">
+                                <textarea id="lms-modal-payload" rows="8" placeholder='{"key": "value"}' aria-label="LMS Payload"></textarea>
+                                <button id="lms-modal-copy" class="icon-btn copy-overlay-btn" aria-label="Copy payload" title="Copy payload">📋</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="lms-modal-cancel" class="btn btn-secondary btn-sm">Cancel</button>
+                        <button id="lms-modal-publish" class="btn btn-primary btn-sm">Publish</button>
+                    </div>
+                </div>
             </div>
         </div>
 

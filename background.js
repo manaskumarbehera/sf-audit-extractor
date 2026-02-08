@@ -467,12 +467,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 // We relay this to the content script which handles the injection
                 const channelApiName = msg?.channel || msg?.channelApiName || '';
                 const payload = msg?.payload || {};
+                const providedInstanceUrl = msg?.instanceUrl || null;
 
                 if (!channelApiName) {
                     return { success: false, error: 'Channel name is required' };
                 }
 
-                // Find the active Salesforce tab to send the publish request
+                // Find a Salesforce tab to send the publish request
                 let targetTabId = null;
 
                 // First try the sender tab if it's a Salesforce page
@@ -480,23 +481,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     targetTabId = sender.tab.id;
                 }
 
-                // Otherwise find an active Salesforce tab
-                if (!targetTabId) {
-                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-                    const activeTab = tabs[0];
-                    if (activeTab && activeTab.url && isSalesforceUrl(activeTab.url)) {
-                        targetTabId = activeTab.id;
-                    }
+                // If we have an instanceUrl from the popup session, use it to find the matching tab
+                if (!targetTabId && providedInstanceUrl) {
+                    try {
+                        const sfTabs = await chrome.tabs.query({
+                            url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.lightning.force.com/*', '*://*.salesforce-setup.com/*']
+                        });
+
+                        // Try to match by instanceUrl (normalize for comparison)
+                        const normalizedProvided = normalizeApiBase(providedInstanceUrl);
+
+                        // First, try to find a Lightning page that matches the instanceUrl
+                        for (const tab of sfTabs) {
+                            if (tab.url) {
+                                const tabOrigin = normalizeApiBase(tab.url);
+                                if (tabOrigin === normalizedProvided && tab.url.includes('/lightning/')) {
+                                    targetTabId = tab.id;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // If no Lightning match, try any tab matching the instanceUrl
+                        if (!targetTabId) {
+                            for (const tab of sfTabs) {
+                                if (tab.url) {
+                                    const tabOrigin = normalizeApiBase(tab.url);
+                                    if (tabOrigin === normalizedProvided) {
+                                        targetTabId = tab.id;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
                 }
 
-                // Last resort: any Salesforce tab
+                // Try to find an active Salesforce tab in the current window
                 if (!targetTabId) {
-                    const sfTabs = await chrome.tabs.query({
-                        url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.lightning.force.com/*']
-                    });
-                    if (sfTabs.length > 0) {
-                        targetTabId = sfTabs[0].id;
-                    }
+                    try {
+                        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                        const activeTab = tabs[0];
+                        if (activeTab && activeTab.url && isSalesforceUrl(activeTab.url)) {
+                            targetTabId = activeTab.id;
+                        }
+                    } catch {}
+                }
+
+                // Search across ALL windows for any Salesforce tab (handles standalone/popout mode)
+                if (!targetTabId) {
+                    try {
+                        const sfTabs = await chrome.tabs.query({
+                            url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.lightning.force.com/*', '*://*.salesforce-setup.com/*']
+                        });
+                        // Prefer Lightning pages over setup/classic
+                        const lightningTab = sfTabs.find(t => t.url && t.url.includes('/lightning/'));
+                        if (lightningTab) {
+                            targetTabId = lightningTab.id;
+                        } else if (sfTabs.length > 0) {
+                            targetTabId = sfTabs[0].id;
+                        }
+                    } catch {}
                 }
 
                 if (!targetTabId) {
@@ -528,17 +573,72 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             if (is('LMS_CHECK_AVAILABILITY')) {
                 // Check if LMS is available on the current page
                 let targetTabId = null;
+                const providedInstanceUrl = msg?.instanceUrl || null;
 
+                // First try sender tab
                 if (sender?.tab?.id && sender?.tab?.url && isSalesforceUrl(sender.tab.url)) {
                     targetTabId = sender.tab.id;
                 }
 
+                // If we have an instanceUrl from the popup session, use it to find the matching tab
+                if (!targetTabId && providedInstanceUrl) {
+                    try {
+                        const sfTabs = await chrome.tabs.query({
+                            url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.lightning.force.com/*', '*://*.salesforce-setup.com/*']
+                        });
+                        const normalizedProvided = normalizeApiBase(providedInstanceUrl);
+
+                        // First, try to find a Lightning page that matches the instanceUrl
+                        for (const tab of sfTabs) {
+                            if (tab.url) {
+                                const tabOrigin = normalizeApiBase(tab.url);
+                                if (tabOrigin === normalizedProvided && tab.url.includes('/lightning/')) {
+                                    targetTabId = tab.id;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // If no Lightning match, try any tab matching the instanceUrl
+                        if (!targetTabId) {
+                            for (const tab of sfTabs) {
+                                if (tab.url) {
+                                    const tabOrigin = normalizeApiBase(tab.url);
+                                    if (tabOrigin === normalizedProvided) {
+                                        targetTabId = tab.id;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
+                }
+
+                // Try active tab in current window
                 if (!targetTabId) {
-                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-                    const activeTab = tabs[0];
-                    if (activeTab && activeTab.url && isSalesforceUrl(activeTab.url)) {
-                        targetTabId = activeTab.id;
-                    }
+                    try {
+                        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                        const activeTab = tabs[0];
+                        if (activeTab && activeTab.url && isSalesforceUrl(activeTab.url)) {
+                            targetTabId = activeTab.id;
+                        }
+                    } catch {}
+                }
+
+                // Search across ALL windows for any Salesforce tab
+                if (!targetTabId) {
+                    try {
+                        const sfTabs = await chrome.tabs.query({
+                            url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.lightning.force.com/*', '*://*.salesforce-setup.com/*']
+                        });
+                        // Prefer Lightning pages
+                        const lightningTab = sfTabs.find(t => t.url && t.url.includes('/lightning/'));
+                        if (lightningTab) {
+                            targetTabId = lightningTab.id;
+                        } else if (sfTabs.length > 0) {
+                            targetTabId = sfTabs[0].id;
+                        }
+                    } catch {}
                 }
 
                 if (!targetTabId) {

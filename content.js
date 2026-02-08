@@ -646,17 +646,30 @@
             return;
         }
 
+        // Only process response messages (those with _RESPONSE suffix)
+        // Ignore outbound request messages that echo back
+        if (!data.type.includes('_RESPONSE')) {
+            return;
+        }
+
         // Handle responses to pending requests
         const requestId = data.requestId;
+        console.log('[TrackForcePro] LMS response received:', data.type, 'requestId:', requestId, 'success:', data.success);
+
         if (requestId && lmsPendingRequests.has(requestId)) {
             const { resolve, reject } = lmsPendingRequests.get(requestId);
             lmsPendingRequests.delete(requestId);
 
             if (data.success) {
+                console.log('[TrackForcePro] LMS publish succeeded:', data.data);
                 resolve(data.data || { success: true });
             } else {
-                reject(new Error(data.error || 'Unknown error'));
+                const errorMsg = data.error || 'Unknown error from bridge';
+                console.error('[TrackForcePro] LMS publish failed:', errorMsg, 'Full response:', data);
+                reject(new Error(errorMsg));
             }
+        } else {
+            console.log('[TrackForcePro] LMS response received but no pending request found for requestId:', requestId);
         }
     });
 
@@ -728,18 +741,21 @@
      */
     async function checkLmsAvailability() {
         try {
+            // Inject the bridge and ask it to check availability
+            // The bridge runs in page context and can access window.$A
             const result = await sendToLmsBridge('CHECK_AVAILABILITY', {});
             return { success: true, ...result };
         } catch (e) {
-            // Fallback: basic detection without bridge
-            const hasAura = typeof window.$A !== 'undefined';
-            const isLightning = window.location.pathname.includes('/lightning/');
+            // Fallback: basic detection based on URL only
+            // Note: We cannot check window.$A from content script (isolated world)
+            const isLightning = window.location.pathname.includes('/lightning/') ||
+                               window.location.hostname.includes('.lightning.force.com');
             return {
                 success: true,
-                isLightningPage: hasAura && isLightning,
-                hasAura: hasAura,
+                isLightningPage: isLightning, // Assume true if URL looks like Lightning
+                hasAura: isLightning, // We can't verify from content script, assume based on URL
                 pageType: isLightning ? 'lightning' : 'other',
-                note: 'Bridge check failed, using fallback detection'
+                note: 'Bridge check failed, using URL-based detection'
             };
         }
     }
@@ -753,17 +769,20 @@
         }
 
         try {
-            // First check if we're on a Lightning page
-            const availability = await checkLmsAvailability();
-            if (!availability.isLightningPage && !availability.hasAura) {
+            // Check if URL looks like a Lightning page
+            // Note: Full Aura check happens in the injected bridge script which runs in page context
+            const isLightningUrl = window.location.pathname.includes('/lightning/') ||
+                                   window.location.hostname.includes('.lightning.force.com');
+
+            if (!isLightningUrl) {
                 return {
                     success: false,
                     error: 'LMS publishing requires a Lightning Experience page. Please navigate to a Lightning page and try again.',
-                    availability: availability
+                    pageUrl: window.location.href
                 };
             }
 
-            // Attempt to publish via the bridge
+            // Attempt to publish via the bridge (runs in page context with $A access)
             const result = await sendToLmsBridge('PUBLISH', {
                 channel: channelApiName,
                 payload: payload || {}
@@ -777,11 +796,12 @@
                 response: result
             };
         } catch (e) {
+            // If bridge fails, it might be because $A is not available
             return {
                 success: false,
-                error: e.message || 'Failed to publish LMS message'
+                error: e.message || 'Failed to publish LMS message. Make sure you are on a Lightning Experience page.',
+                pageUrl: window.location.href
             };
         }
     }
 })();
-

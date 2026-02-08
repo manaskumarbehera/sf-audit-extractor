@@ -112,28 +112,35 @@
 
         // Theme application removed - keeping favicon functionality only
 
-        try {
-            const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-            if (fresh && fresh.success && fresh.isLoggedIn) {
-                sessionInfo = fresh;
-                try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(fresh.instanceUrl || null); } catch {}
-                const accessToken = getAccessToken();
-                const instanceUrl = fresh.instanceUrl;
-                if (accessToken && instanceUrl) {
-                    try {
-                        const orgName = await fetchOrgName(instanceUrl, accessToken, apiVersion);
-                        updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
-                        // Update title in standalone or tab mode
-                        const isStandaloneOrTab = window.location.hash.includes('standalone') || window.location.hash.includes('tab');
-                        if (orgName && isStandaloneOrTab) {
-                            document.title = `${orgName} - TrackForcePro`;
+        // In standalone/tab mode, if we already have a restored session, don't overwrite it
+        // by trying to query a Salesforce tab (which won't exist in standalone window)
+        const isStandaloneOrTabMode = window.location.hash.includes('standalone') || window.location.hash.includes('tab');
+        const hasRestoredSession = sessionInfo && sessionInfo.isLoggedIn && sessionInfo.instanceUrl;
+
+        if (!hasRestoredSession) {
+            // Only try to get fresh session if we don't already have a restored one
+            try {
+                const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                if (fresh && fresh.success && fresh.isLoggedIn) {
+                    sessionInfo = fresh;
+                    try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(fresh.instanceUrl || null); } catch {}
+                    const accessToken = getAccessToken();
+                    const instanceUrl = fresh.instanceUrl;
+                    if (accessToken && instanceUrl) {
+                        try {
+                            const orgName = await fetchOrgName(instanceUrl, accessToken, apiVersion);
+                            updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
+                            // Update title in standalone or tab mode
+                            if (orgName && isStandaloneOrTabMode) {
+                                document.title = `${orgName} - TrackForcePro`;
+                            }
+                        } catch {
+                            updateStatus(true, 'Connected to Salesforce');
                         }
-                    } catch {
-                        updateStatus(true, 'Connected to Salesforce');
                     }
                 }
-            }
-        } catch { /* ignore */ }
+            } catch { /* ignore */ }
+        }
 
         initLmsHelper();
         initPlatformHelper(apiVersion);

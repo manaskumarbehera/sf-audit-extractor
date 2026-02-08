@@ -4,38 +4,22 @@
     channels: [],
     loaded: false,
     lmsAvailable: null,  // null = not checked, true/false = checked
-    selectedChannelIndex: -1
+    selectedChannelIndex: -1,
+    logPaused: false,
+    logAutoScrollEnabled: true,
+    // Publish modal state
+    publishModalChannel: null
   };
   let dom = {};
   let opts = { getSession: () => null };
 
-  function updateCopyEnabled() {
-    if (!dom.payloadCopy) return;
-    const hasText = !!(dom.payloadTa && String(dom.payloadTa.value || '').trim());
-    dom.payloadCopy.disabled = !hasText;
-    dom.payloadCopy.title = hasText ? 'Copy sample payload' : 'Nothing to copy';
-  }
-
-  function updatePublishEnabled() {
-    if (!dom.publishBtn) return;
-    const hasChannel = state.selectedChannelIndex >= 0;
-    const hasPayload = !!(dom.payloadTa && String(dom.payloadTa.value || '').trim());
-    dom.publishBtn.disabled = !hasChannel || !hasPayload;
-
-    if (!hasChannel) {
-      dom.publishBtn.title = 'Select a channel first';
-    } else if (!hasPayload) {
-      dom.publishBtn.title = 'Enter a payload to publish';
-    } else {
-      dom.publishBtn.title = 'Publish message to LMS channel';
-    }
-  }
-
   function appendLog(message, type = 'info', data = null) {
     if (!dom.log) return;
+    if (state.logPaused) return;
 
     const entry = document.createElement('div');
     entry.className = `log-entry log-${type}`;
+    entry.setAttribute('data-type', type);
 
     const timestamp = new Date().toLocaleTimeString();
     const header = document.createElement('div');
@@ -74,7 +58,21 @@
     const ph = dom.log.querySelector('.placeholder, .placeholder-note');
     if (ph) ph.remove();
     dom.log.appendChild(entry);
-    dom.log.scrollTop = dom.log.scrollHeight;
+    applyLogFilter();
+    if (state.logAutoScrollEnabled) {
+      dom.log.scrollTop = dom.log.scrollHeight;
+    }
+  }
+
+  function applyLogFilter() {
+    if (!dom.log) return;
+    const filter = dom.logFilterSel ? dom.logFilterSel.value : 'all';
+    const entries = dom.log.querySelectorAll('.log-entry');
+    entries.forEach(el => {
+      const type = el.getAttribute('data-type') || 'info';
+      const visible = filter === 'all' || filter === type;
+      el.style.display = visible ? '' : 'none';
+    });
   }
 
   function generateSamplePayload(channel) {
@@ -95,26 +93,43 @@
     } catch { return { text: 'Hello from LMS' }; }
   }
 
-  function populateChannelSelect(channels) {
-    if (!dom.channelSel) return;
-    const optsHtml = ['<option value="">Select a message channel</option>'];
-    for (let i = 0; i < channels.length; i++) {
-      const c = channels[i];
-      const label = `${Utils.escapeHtml(c.masterLabel || c.fullName || c.developerName)} (${Utils.escapeHtml(c.fullName || c.developerName)})`;
-      optsHtml.push(`<option value="${i}">${label}</option>`);
+  /**
+   * Render channels as a list with inline publish buttons (similar to Platform Events)
+   */
+  function renderChannelsList(channels) {
+    if (!dom.channelsList) return;
+    if (!channels || channels.length === 0) {
+      dom.channelsList.innerHTML = '<div class="placeholder"><p>No LMS channels found</p></div>';
+      return;
     }
-    dom.channelSel.innerHTML = optsHtml.join('');
-    dom.channelSel.disabled = channels.length === 0;
-    if (dom.payloadTa) dom.payloadTa.value = '';
-    state.selectedChannelIndex = -1;
-    updateCopyEnabled();
-    updatePublishEnabled();
+
+    const html = channels.map((channel, idx) => {
+      const api = channel.fullName || channel.developerName;
+      const label = channel.masterLabel || channel.fullName || channel.developerName;
+      const publishIcon = `<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
+      return `
+        <div class="list-item" data-channel-index="${idx}" data-channel-api="${Utils.escapeHtml(api)}">
+          <div class="item-actions leading">
+            <button class="lms-publish-btn" aria-label="Publish to ${Utils.escapeHtml(label)}" title="Publish to ${Utils.escapeHtml(label)}">
+              ${publishIcon}
+            </button>
+          </div>
+          <div class="item-main">
+            <div class="item-title">${Utils.escapeHtml(label)} <span class="item-subtle">(${Utils.escapeHtml(api)})</span></div>
+          </div>
+        </div>`;
+    }).join('');
+    dom.channelsList.innerHTML = html;
   }
 
   async function checkLmsAvailability() {
     try {
+      // Get instanceUrl from session to help background find the right tab
+      const session = opts.getSession();
+      const instanceUrl = session?.instanceUrl || null;
+
       const resp = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: 'LMS_CHECK_AVAILABILITY' }, (r) => resolve(r));
+        chrome.runtime.sendMessage({ action: 'LMS_CHECK_AVAILABILITY', instanceUrl: instanceUrl }, (r) => resolve(r));
       });
       state.lmsAvailable = !!(resp && resp.isLightningPage);
       return resp;
@@ -145,7 +160,7 @@
       }
 
       state.channels = Array.isArray(resp.channels) ? resp.channels : [];
-      populateChannelSelect(state.channels);
+      renderChannelsList(state.channels);
       state.loaded = true;
       appendLog(`Loaded ${state.channels.length} LMS channel(s).`, 'success');
 
@@ -161,68 +176,92 @@
     }
   }
 
-  function handleChannelChange() {
-    if (!dom.channelSel || !dom.payloadTa) return;
-    const idx = parseInt(String(dom.channelSel.value || '-1'), 10);
-    state.selectedChannelIndex = idx;
+  /**
+   * Open the publish modal for a given channel
+   */
+  function openPublishModal(channelIndex) {
+    if (channelIndex < 0 || channelIndex >= state.channels.length) return;
+    const channel = state.channels[channelIndex];
+    state.publishModalChannel = channel;
 
-    if (!Number.isFinite(idx) || idx < 0 || idx >= state.channels.length) {
-      dom.payloadTa.value = '';
-      updateCopyEnabled();
-      updatePublishEnabled();
-      return;
+    // Set channel name in modal
+    if (dom.modalChannelName) {
+      dom.modalChannelName.textContent = channel.fullName || channel.developerName;
     }
 
-    const channel = state.channels[idx];
-    const sample = generateSamplePayload(channel);
-    try {
-      dom.payloadTa.value = JSON.stringify(sample, null, 2);
-      appendLog(`Sample payload generated for ${channel.fullName || channel.developerName}`, 'info');
+    // Generate and set sample payload
+    if (dom.modalPayload) {
+      const sample = generateSamplePayload(channel);
+      try {
+        dom.modalPayload.value = JSON.stringify(sample, null, 2);
+        dom.modalPayload.classList.remove('error');
+      } catch {
+        dom.modalPayload.value = '{ "text": "Hello from LMS" }';
+      }
     }
-    catch {
-      dom.payloadTa.value = '{ "text": "Hello from LMS" }';
+
+    // Show modal
+    if (dom.publishModal) {
+      dom.publishModal.hidden = false;
     }
-    updateCopyEnabled();
-    updatePublishEnabled();
   }
 
-  async function handlePublish() {
-    const idx = state.selectedChannelIndex;
-    if (idx < 0 || idx >= state.channels.length) {
-      appendLog('Please select a channel first', 'error');
+  /**
+   * Close the publish modal
+   */
+  function closePublishModal() {
+    if (dom.publishModal) {
+      dom.publishModal.hidden = true;
+    }
+    state.publishModalChannel = null;
+  }
+
+  /**
+   * Handle publish from modal
+   */
+  async function handleModalPublish() {
+    const channel = state.publishModalChannel;
+    if (!channel) {
+      appendLog('No channel selected', 'error');
       return;
     }
 
-    const channel = state.channels[idx];
     const channelApiName = channel.fullName || channel.developerName;
 
     // Parse and validate payload
     let payload;
     try {
-      const payloadText = dom.payloadTa?.value?.trim() || '{}';
+      const payloadText = dom.modalPayload?.value?.trim() || '{}';
       payload = JSON.parse(payloadText);
       if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
         throw new Error('Payload must be a JSON object');
       }
+      dom.modalPayload?.classList.remove('error');
     } catch (e) {
+      dom.modalPayload?.classList.add('error');
       appendLog('Invalid JSON payload: ' + e.message, 'error');
       return;
     }
 
     // Disable button and show loading state
-    if (dom.publishBtn) {
-      dom.publishBtn.disabled = true;
-      dom.publishBtn.innerHTML = '<span aria-hidden="true">⏳</span>';
+    if (dom.modalPublishBtn) {
+      dom.modalPublishBtn.disabled = true;
+      dom.modalPublishBtn.textContent = 'Publishing...';
     }
 
     appendLog(`Publishing to ${channelApiName}...`, 'system', payload);
 
     try {
+      // Get instanceUrl from session to help background find the right tab
+      const session = opts.getSession();
+      const instanceUrl = session?.instanceUrl || null;
+
       const resp = await new Promise((resolve) => {
         chrome.runtime.sendMessage({
           action: 'LMS_PUBLISH',
           channel: channelApiName,
-          payload: payload
+          payload: payload,
+          instanceUrl: instanceUrl  // Pass instanceUrl to help find the correct SF tab
         }, (r) => resolve(r));
       });
 
@@ -239,28 +278,16 @@
         if (resp.note) {
           appendLog(resp.note, 'system');
         }
+        closePublishModal();
       }
     } catch (e) {
       appendLog('Publish error: ' + String(e), 'error');
     } finally {
       // Restore button state
-      if (dom.publishBtn) {
-        dom.publishBtn.disabled = false;
-        dom.publishBtn.innerHTML = '<span aria-hidden="true">📤</span>';
-        updatePublishEnabled();
+      if (dom.modalPublishBtn) {
+        dom.modalPublishBtn.disabled = false;
+        dom.modalPublishBtn.textContent = 'Publish';
       }
-    }
-  }
-
-  function formatPayload() {
-    if (!dom.payloadTa) return;
-    try {
-      const obj = JSON.parse(dom.payloadTa.value);
-      dom.payloadTa.value = JSON.stringify(obj, null, 2);
-      dom.payloadTa.classList.remove('error');
-    } catch (e) {
-      dom.payloadTa.classList.add('error');
-      appendLog('Invalid JSON: ' + e.message, 'error');
     }
   }
 
@@ -269,46 +296,27 @@
     dom.log.innerHTML = '<div class="placeholder-note">No LMS activity yet</div>';
   }
 
+  function togglePause() {
+    state.logPaused = !state.logPaused;
+    if (dom.logPauseBtn) {
+      dom.logPauseBtn.setAttribute('aria-pressed', String(state.logPaused));
+      dom.logPauseBtn.title = state.logPaused ? 'Resume logging' : 'Pause logging';
+      dom.logPauseBtn.innerHTML = state.logPaused
+        ? '<span aria-hidden="true">▶</span>'
+        : '<span aria-hidden="true">⏸</span>';
+    }
+  }
+
+  function toggleAutoScroll() {
+    state.logAutoScrollEnabled = !state.logAutoScrollEnabled;
+    if (dom.logAutoscrollBtn) {
+      dom.logAutoscrollBtn.setAttribute('aria-pressed', String(state.logAutoScrollEnabled));
+      dom.logAutoscrollBtn.title = state.logAutoScrollEnabled ? 'Auto-scroll: on' : 'Auto-scroll: off';
+    }
+  }
+
   function attachHandlers(){
-    if (dom.payloadCopy) {
-      dom.payloadCopy.addEventListener('click', async () => {
-        if (!dom.payloadTa) return;
-        const text = String(dom.payloadTa.value || '');
-        if (!text.trim()) return;
-        try {
-          await navigator.clipboard.writeText(text);
-          const prevTitle = dom.payloadCopy.title;
-          dom.payloadCopy.title = 'Copied!';
-          dom.payloadCopy.classList.add('copied');
-          setTimeout(() => {
-            dom.payloadCopy.classList.remove('copied');
-            dom.payloadCopy.title = prevTitle || 'Copy sample payload';
-          }, 900);
-        } catch {
-          try {
-            dom.payloadTa.select();
-            document.execCommand('copy');
-            const prevTitle = dom.payloadCopy.title;
-            dom.payloadCopy.title = 'Copied!';
-            dom.payloadCopy.classList.add('copied');
-            setTimeout(() => {
-              dom.payloadCopy.classList.remove('copied');
-              dom.payloadCopy.title = prevTitle || 'Copy sample payload';
-            }, 900);
-          } catch {}
-        }
-      });
-    }
-
-    if (dom.payloadTa) {
-      dom.payloadTa.addEventListener('input', () => {
-        updateCopyEnabled();
-        updatePublishEnabled();
-      });
-      // Format on blur
-      dom.payloadTa.addEventListener('blur', formatPayload);
-    }
-
+    // Refresh button
     if (dom.refreshBtn) {
       dom.refreshBtn.addEventListener('click', async () => {
         if (dom.refreshBtn.disabled) return;
@@ -324,16 +332,92 @@
       });
     }
 
-    if (dom.publishBtn) {
-      dom.publishBtn.addEventListener('click', handlePublish);
+    // Channel list click delegation for publish buttons
+    if (dom.channelsList) {
+      dom.channelsList.addEventListener('click', (e) => {
+        const publishBtn = e.target.closest('.lms-publish-btn');
+        if (publishBtn) {
+          const listItem = publishBtn.closest('.list-item');
+          if (listItem) {
+            const idx = parseInt(listItem.dataset.channelIndex, 10);
+            if (Number.isFinite(idx)) {
+              openPublishModal(idx);
+            }
+          }
+        }
+      });
     }
 
+    // Modal close button
+    if (dom.modalCloseBtn) {
+      dom.modalCloseBtn.addEventListener('click', closePublishModal);
+    }
+
+    // Modal cancel button
+    if (dom.modalCancelBtn) {
+      dom.modalCancelBtn.addEventListener('click', closePublishModal);
+    }
+
+    // Modal publish button
+    if (dom.modalPublishBtn) {
+      dom.modalPublishBtn.addEventListener('click', handleModalPublish);
+    }
+
+    // Modal copy button
+    if (dom.modalCopyBtn) {
+      dom.modalCopyBtn.addEventListener('click', async () => {
+        if (!dom.modalPayload) return;
+        const text = String(dom.modalPayload.value || '');
+        if (!text.trim()) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          const prevTitle = dom.modalCopyBtn.title;
+          dom.modalCopyBtn.title = 'Copied!';
+          dom.modalCopyBtn.classList.add('copied');
+          setTimeout(() => {
+            dom.modalCopyBtn.classList.remove('copied');
+            dom.modalCopyBtn.title = prevTitle || 'Copy payload';
+          }, 900);
+        } catch {
+          try {
+            dom.modalPayload.select();
+            document.execCommand('copy');
+            const prevTitle = dom.modalCopyBtn.title;
+            dom.modalCopyBtn.title = 'Copied!';
+            dom.modalCopyBtn.classList.add('copied');
+            setTimeout(() => {
+              dom.modalCopyBtn.classList.remove('copied');
+              dom.modalCopyBtn.title = prevTitle || 'Copy payload';
+            }, 900);
+          } catch {}
+        }
+      });
+    }
+
+    // Modal overlay click to close
+    if (dom.publishModal) {
+      dom.publishModal.addEventListener('click', (e) => {
+        if (e.target === dom.publishModal) {
+          closePublishModal();
+        }
+      });
+    }
+
+    // Log toolbar buttons
     if (dom.clearLogBtn) {
       dom.clearLogBtn.addEventListener('click', clearLog);
     }
 
-    if (dom.channelSel) {
-      dom.channelSel.addEventListener('change', handleChannelChange);
+    if (dom.logPauseBtn) {
+      dom.logPauseBtn.addEventListener('click', togglePause);
+    }
+
+    if (dom.logAutoscrollBtn) {
+      dom.logAutoscrollBtn.addEventListener('click', toggleAutoScroll);
+    }
+
+    if (dom.logFilterSel) {
+      dom.logFilterSel.addEventListener('change', applyLogFilter);
     }
 
     try {
@@ -342,8 +426,6 @@
 
     const activeTab = document.querySelector('.tab-button.active')?.getAttribute('data-tab');
     if (activeTab === 'lms') loadChannels(false);
-    updateCopyEnabled();
-    updatePublishEnabled();
   }
 
   function init(options){
@@ -351,11 +433,19 @@
     dom = {
       log: document.getElementById('lms-log'),
       refreshBtn: document.getElementById('lms-refresh'),
-      publishBtn: document.getElementById('lms-publish'),
-      clearLogBtn: document.getElementById('lms-clear-log'),
-      channelSel: document.getElementById('lms-channel'),
-      payloadTa: document.getElementById('lms-payload'),
-      payloadCopy: document.getElementById('lms-payload-copy')
+      clearLogBtn: document.getElementById('lms-log-clear'),
+      logPauseBtn: document.getElementById('lms-log-pause'),
+      logAutoscrollBtn: document.getElementById('lms-log-autoscroll-btn'),
+      logFilterSel: document.getElementById('lms-log-filter'),
+      channelsList: document.getElementById('lms-channels-list'),
+      // Modal elements
+      publishModal: document.getElementById('lms-publish-modal'),
+      modalCloseBtn: document.getElementById('lms-modal-close'),
+      modalCancelBtn: document.getElementById('lms-modal-cancel'),
+      modalPublishBtn: document.getElementById('lms-modal-publish'),
+      modalChannelName: document.getElementById('lms-modal-channel-name'),
+      modalPayload: document.getElementById('lms-modal-payload'),
+      modalCopyBtn: document.getElementById('lms-modal-copy')
     };
     attachHandlers();
   }
@@ -367,10 +457,18 @@
       setState: (s) => Object.assign(state, s),
       setDomForTests: (d) => { dom = d; },
       setOpts: (o) => { opts = { ...opts, ...o }; },
-      handlePublish,
+      handleModalPublish,
       loadChannels,
       checkLmsAvailability,
-      appendLog
+      appendLog,
+      applyLogFilter,
+      togglePause,
+      toggleAutoScroll,
+      clearLog,
+      openPublishModal,
+      closePublishModal,
+      renderChannelsList,
+      generateSamplePayload
     };
   }
 
