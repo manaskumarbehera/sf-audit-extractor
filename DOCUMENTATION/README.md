@@ -2,7 +2,7 @@
 
 Welcome to the documentation for the TrackForcePro Chrome Extension. This library contains comprehensive guides for users, developers, and testers.
 
-## 🚀 Quick Start
+## ⚡ Quick Start
 
 **New to TrackForcePro?** Open the **[Quick Start Guide (HTML)](html/QUICK_START_GUIDE.html)** for a visual walkthrough with screenshot placeholders.
 
@@ -70,16 +70,16 @@ Once GitHub Pages is enabled and changes are pushed, the documentation will be a
 
 ---
 
-## 🚀 Quick Start for Users
+## ⚡ Quick Start for Users
 
 1.  **Install the Extension**: Load the unpacked extension in Chrome Developer Mode.
 2.  **Navigate to Salesforce**: Open any Salesforce tab and log in.
 3.  **Open Extension**: Click the extension icon in your browser toolbar.
 4.  **Choose Tool**:
-    - **Audit**: Extract field metadata from Object Manager
-    - **GraphQL/SOQL**: Build and execute queries
-    - **Explore**: Manage favicons, search users, identify records
-    - **Platform**: Monitor Platform Events and LMS
+    - **🔍 Audit**: Extract field metadata from Object Manager
+    - **🔗 GraphQL / 📊 SOQL**: Build and execute queries
+    - **💾 Explore**: Manage favicons, search users, identify records
+    - **📡 Platform / 📢 LMS**: Monitor Platform Events and Lightning Message Service
 
 For detailed instructions, see the **[User Guide](guides/USER_GUIDE.md)**.
 
@@ -96,8 +96,8 @@ For detailed setup, see the **[Developer Guide](guides/DEVELOPER_GUIDE.md)**.
 ## ✨ Key Features
 
 ### Query Builders
-- **GraphQL Builder**: Visual query composition with progressive disclosure UI
-- **SOQL Builder**: Field selection, filters, ordering, and execution
+- **🔗 GraphQL Builder**: Visual query composition with progressive disclosure UI
+- **📊 SOQL Builder**: Field selection, filters, ordering, and execution
 
 ### Data Explorer
 - **Sandbox & Favicon Manager**: Customize browser tab icons to identify different orgs

@@ -5,6 +5,30 @@ let platformWindowId = null;
 let appWindowId = null;
 let lastInstanceUrl = null;
 
+/**
+ * Find a Salesforce tab and return its origin URL.
+ * Prefers .my.salesforce.com tabs, falls back to any SF domain.
+ * @returns {Promise<string|null>} The Salesforce origin URL or null
+ */
+async function findSalesforceOrigin() {
+    try {
+        // Try to find any Salesforce tab
+        const sfTabs = await chrome.tabs.query({ url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.salesforce-setup.com/*'] });
+        if (sfTabs.length === 0) return null;
+
+        // Prefer .my.salesforce.com tabs
+        const myTab = sfTabs.find(t => t.url && t.url.includes('.my.salesforce.com'));
+        const tab = myTab || sfTabs[0];
+
+        if (tab && tab.url) {
+            return originFromUrl(tab.url);
+        }
+    } catch (_e) {
+        // Ignore errors
+    }
+    return null;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
     if (!chrome.declarativeContent?.onPageChanged) return;
     chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {

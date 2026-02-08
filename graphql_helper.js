@@ -510,7 +510,7 @@
         ];
         break;
 
-      case 'object':
+      case 'object': {
         // Get all objects from cache
         const { names } = await getDescribeCached();
         suggestions = names
@@ -524,6 +524,7 @@
             description: 'Salesforce object'
           }));
         break;
+      }
 
       case 'field':
         // Get fields for the parent object

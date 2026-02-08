@@ -687,7 +687,7 @@ describe('LmsHelper publish functionality', () => {
     // The click event handler is async but the mock is set up after the event listener
     // was attached. These tests pass in real browser but flaky in jest.
     test.skip('copy button copies payload to clipboard', async () => {
-      payloadTa.value = '{"test": "data"}';
+      modalPayload.value = '{"test": "data"}';
 
       const mockWriteText = jest.fn().mockResolvedValue(undefined);
       Object.assign(navigator, {
@@ -695,7 +695,7 @@ describe('LmsHelper publish functionality', () => {
       });
 
       // Trigger click
-      copyBtn.click();
+      modalCopyBtn.click();
       await flush();
       await flush(); // Wait for async clipboard operation
 
@@ -703,7 +703,7 @@ describe('LmsHelper publish functionality', () => {
     });
 
     test.skip('copy button handles clipboard failure with fallback', async () => {
-      payloadTa.value = '{"test": "data"}';
+      modalPayload.value = '{"test": "data"}';
 
       Object.assign(navigator, {
         clipboard: { writeText: jest.fn().mockRejectedValue(new Error('Denied')) }
