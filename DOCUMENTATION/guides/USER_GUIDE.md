@@ -216,10 +216,28 @@ This section includes advanced tools for event-driven architecture and messaging
 ### Popout Window (Standalone Mode)
 *Usage Context: Multi-monitor setups or dedicated workspace*
 
-Click the "Pop out window" icon in the header to open the extension in a separate, full-screen window.
+The extension offers flexible modes for opening TrackForcePro outside the popup:
+
+#### Open as Browser Tab (Default - Single Click)
+Click the pop button in the header to open TrackForcePro as a new browser tab.
+- **Tab Position**: Opens adjacent to the current tab for easy access
+- **Session Transfer**: Your authentication session is automatically transferred
+- **Full Features**: All extension features work identically in tab mode
+- **Easy Close**: Click the pop-in button to close the tab
+
+#### Open as Standalone Window (Shift+Click)
+Hold Shift and click the pop button to open in a separate popup window.
 - **Dynamic Title**: The window title updates to `[Org Name] - TrackForcePro`, making it easy to identify which Salesforce org you are working with when using Alt-Tab or checking the taskbar.
 - **Session Transfer**: Your authentication session is automatically transferred to the new window.
-- **Maximized View**: The window opens in maximized mode for a better view of large data sets or query results.
+- **Resizable Window**: The window opens with a default size but can be resized as needed.
+- **Pop-in to Tab**: When you click pop-in from the standalone window, it opens as a tab instead of just closing.
+
+#### Button Tooltips by Mode
+| Current Mode | Tooltip |
+|--------------|---------|
+| Popup | "Open as tab (Shift+click for window)" |
+| Tab | "Close tab" |
+| Standalone Window | "Pop in (open as tab)" |
 
 ---
 

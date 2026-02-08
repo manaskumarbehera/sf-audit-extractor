@@ -259,6 +259,7 @@
         if (!appPopBtn) return;
 
         const isStandalone = window.location.hash.includes('standalone');
+        const isTab = window.location.hash.includes('tab');
 
         appPopBtn.disabled = true;
         // Track current popped state locally so we can include session when popping out
@@ -266,25 +267,59 @@
 
         chrome.runtime.sendMessage({ action: 'APP_POP_GET' }, (resp) => {
             if (chrome.runtime.lastError) {
-                updateAppPopButton(false, isStandalone);
+                updateAppPopButton(false, isStandalone, isTab);
                 appPopBtn.disabled = false;
                 return;
             }
             appPoppedState = resp && resp.success ? !!resp.popped : false;
-            updateAppPopButton(appPoppedState, isStandalone);
+            updateAppPopButton(appPoppedState, isStandalone, isTab);
             appPopBtn.disabled = false;
         });
 
-        appPopBtn.addEventListener('click', async () => {
+        appPopBtn.addEventListener('click', async (event) => {
             if (appPopBtn.disabled) return;
             appPopBtn.disabled = true;
 
-            // If we're in standalone window, clicking "pop in" should close this window
+            // Shift+click = pop out to window (existing behavior)
+            const useWindow = event.shiftKey;
+
+            // If we're in standalone window, clicking "pop in" should open as tab and close this window
             if (isStandalone) {
                 // Add blinking effect while processing
                 appPopBtn.classList.add('popout-blinking');
 
-                // Save current state before popping in for restoration in popup
+                // Capture current state before popping in
+                let builderState = null;
+                try {
+                    builderState = window.GraphqlHelper?.getBuilderState?.() ||
+                                   (window.__GraphqlTestHooks?.getBuilderState?.()) || null;
+                } catch {}
+
+                const payload = { action: 'APP_TAB_OPEN' };
+                if (sessionInfo) payload.session = { ...sessionInfo };
+                if (builderState) payload.builderState = builderState;
+
+                // Open as a new tab
+                chrome.runtime.sendMessage(payload, (resp) => {
+                    if (!chrome.runtime.lastError && resp && resp.success) {
+                        // Reset popped state and close standalone window
+                        chrome.runtime.sendMessage({ action: 'APP_POP_SET', popped: false }, () => {
+                            appPopBtn.classList.remove('popout-blinking');
+                            window.close();
+                        });
+                    } else {
+                        appPopBtn.classList.remove('popout-blinking');
+                        appPopBtn.disabled = false;
+                    }
+                });
+                return;
+            }
+
+            // If we're in a tab, clicking should close the tab (pop in behavior)
+            if (isTab) {
+                appPopBtn.classList.add('popout-blinking');
+
+                // Save current state before closing for restoration in popup
                 try {
                     const builderState = window.GraphqlHelper?.getBuilderState?.() ||
                                          (window.__GraphqlTestHooks?.getBuilderState?.()) || null;
@@ -296,70 +331,75 @@
                     }
                 } catch {}
 
-                // Pop in: close standalone window and reset state
-                chrome.runtime.sendMessage({ action: 'APP_POP_SET', popped: false }, (resp) => {
-                    appPopBtn.classList.remove('popout-blinking');
-                    if (!chrome.runtime.lastError && resp && resp.success) {
-                        // Close the standalone window
-                        window.close();
+                appPopBtn.classList.remove('popout-blinking');
+                // Close the tab
+                try {
+                    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (currentTab && currentTab.id) {
+                        chrome.tabs.remove(currentTab.id);
                     }
-                    appPopBtn.disabled = false;
-                });
+                } catch {
+                    window.close();
+                }
                 return;
             }
 
-            // If we're in popup, clicking "pop out" should open standalone and close popup
-            const next = !appPoppedState;
-            const payload = { action: 'APP_POP_SET', popped: next };
+            // We're in the popup - decide between tab (default) or window (shift+click)
+            // Capture session and builder state BEFORE opening
+            let builderState = null;
+            try {
+                if (!sessionInfo || !sessionInfo.instanceUrl) {
+                    const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                    if (fresh && fresh.success && fresh.isLoggedIn) {
+                        sessionInfo = fresh;
+                    }
+                }
+            } catch {}
 
-            // IMPORTANT: Capture session and builder state BEFORE sending APP_POP_SET
-            // This ensures the popped window receives complete state
-            if (next) {
-                // Ensure we have fresh session info
-                try {
-                    if (!sessionInfo || !sessionInfo.instanceUrl) {
-                        const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
-                        if (fresh && fresh.success && fresh.isLoggedIn) {
-                            sessionInfo = fresh;
+            try {
+                builderState = window.GraphqlHelper?.getBuilderState?.() ||
+                               (window.__GraphqlTestHooks?.getBuilderState?.()) || null;
+            } catch {}
+
+            // Add blinking effect
+            appPopBtn.classList.add('popout-blinking');
+
+            if (useWindow) {
+                // Shift+click: Pop out to window (existing behavior)
+                const next = !appPoppedState;
+                const payload = { action: 'APP_POP_SET', popped: next };
+                if (next && sessionInfo) payload.session = { ...sessionInfo };
+                if (next && builderState) payload.builderState = builderState;
+
+                chrome.runtime.sendMessage(payload, (resp) => {
+                    appPopBtn.classList.remove('popout-blinking');
+                    if (!chrome.runtime.lastError && resp && resp.success) {
+                        appPoppedState = !!resp.popped;
+                        updateAppPopButton(appPoppedState, isStandalone, isTab);
+                        if (next && appPoppedState) {
+                            setTimeout(() => {
+                                try { window.close(); } catch (e) { /* ignore */ }
+                            }, 100);
                         }
                     }
-                } catch {}
+                    appPopBtn.disabled = false;
+                });
+            } else {
+                // Default single-click: Open as a new tab
+                const payload = { action: 'APP_TAB_OPEN' };
+                if (sessionInfo) payload.session = { ...sessionInfo };
+                if (builderState) payload.builderState = builderState;
 
-                // Include session if available
-                if (sessionInfo) {
-                    payload.session = { ...sessionInfo };
-                }
-
-                // Capture and include GraphQL builder state for full state transfer
-                try {
-                    const builderState = window.GraphqlHelper?.getBuilderState?.() ||
-                                         (window.__GraphqlTestHooks?.getBuilderState?.()) || null;
-                    if (builderState) {
-                        payload.builderState = builderState;
-                    }
-                } catch {}
-
-                // Add blinking hand pointer effect while waiting for popout
-                appPopBtn.classList.add('popout-blinking');
-            }
-
-            chrome.runtime.sendMessage(payload, (resp) => {
-                // Remove blinking effect
-                appPopBtn.classList.remove('popout-blinking');
-
-                if (!chrome.runtime.lastError && resp && resp.success) {
-                    appPoppedState = !!resp.popped;
-                    updateAppPopButton(appPoppedState, isStandalone);
-                    // Close the popup window when successfully popping out
-                    if (next && appPoppedState) {
-                        // Use a small timeout to ensure the message completes
+                chrome.runtime.sendMessage(payload, (resp) => {
+                    appPopBtn.classList.remove('popout-blinking');
+                    if (!chrome.runtime.lastError && resp && resp.success) {
                         setTimeout(() => {
                             try { window.close(); } catch (e) { /* ignore */ }
                         }, 100);
                     }
-                }
-                appPopBtn.disabled = false;
-            });
+                    appPopBtn.disabled = false;
+                });
+            }
         });
     }
 
@@ -405,15 +445,28 @@
         return svg.outerHTML;
     }
 
-    function updateAppPopButton(popped, isStandalone = false) {
+    function updateAppPopButton(popped, isStandalone = false, isTab = false) {
         if (!appPopBtn) return;
-        // In standalone mode, always show "pop in" button
-        const showPopIn = isStandalone || popped;
+        // In standalone or tab mode, show "pop in" button (close/return)
+        const showPopIn = isStandalone || isTab || popped;
         appPopBtn.classList.toggle('active', showPopIn);
         appPopBtn.setAttribute('aria-pressed', showPopIn ? 'true' : 'false');
-        appPopBtn.title = showPopIn ? 'Pop in (return to popup)' : 'Pop out to window';
+
+        // Update tooltip based on mode
+        if (isTab) {
+            appPopBtn.title = 'Close tab';
+            appPopBtn.innerHTML = svgPopIn();
+        } else if (isStandalone) {
+            appPopBtn.title = 'Pop in (open as tab)';
+            appPopBtn.innerHTML = svgPopIn();
+        } else if (popped) {
+            appPopBtn.title = 'Pop in (return to popup)';
+            appPopBtn.innerHTML = svgPopIn();
+        } else {
+            appPopBtn.title = 'Open as tab (Shift+click for window)';
+            appPopBtn.innerHTML = svgPopOut();
+        }
         appPopBtn.setAttribute('aria-label', appPopBtn.title);
-        appPopBtn.innerHTML = showPopIn ? svgPopIn() : svgPopOut();
     }
 
     async function findSalesforceTab() {

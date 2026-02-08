@@ -35,6 +35,8 @@ sf-audit-extractor/
 │   ├── data_explorer.test.js  # Tests for Favicon, User Manager, Record tools
 │   ├── graphql_builder.test.js
 │   ├── soql_builder.test.js
+│   ├── popup_popout.test.js   # Tests for popup/window modes
+│   ├── popup_tab_mode.test.js # Tests for tab mode feature
 │   └── ...
 └── DOCUMENTATION/         # This documentation
 ```

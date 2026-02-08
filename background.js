@@ -351,6 +351,49 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return { success: true, popped: next, windowId: appWindowId };
             }
 
+            // Open TrackForcePro as a browser tab (single-click behavior)
+            if (is('APP_TAB_OPEN')) {
+                try {
+                    // Store session and builder state if provided
+                    if (msg && msg.session) {
+                        const instanceUrl = msg.session.instanceUrl || '';
+                        const sessionKey = instanceUrl ? `appSession_${btoa(instanceUrl).replace(/=/g, '')}` : 'appSession';
+                        const storagePayload = { appSession: msg.session };
+                        if (instanceUrl) {
+                            storagePayload[sessionKey] = msg.session;
+                        }
+                        if (msg.builderState) {
+                            storagePayload.appBuilderState = msg.builderState;
+                            if (instanceUrl) {
+                                storagePayload[`appBuilderState_${btoa(instanceUrl).replace(/=/g, '')}`] = msg.builderState;
+                            }
+                        }
+                        await chrome.storage.local.set(storagePayload);
+                    }
+
+                    // Get the current active tab to determine where to insert the new tab
+                    let insertIndex = undefined;
+                    try {
+                        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                        if (activeTab && typeof activeTab.index === 'number') {
+                            insertIndex = activeTab.index + 1;
+                        }
+                    } catch {}
+
+                    // Create the new tab with #tab hash
+                    const url = chrome.runtime.getURL('popup.html#tab');
+                    const createOptions = { url, active: true };
+                    if (typeof insertIndex === 'number') {
+                        createOptions.index = insertIndex;
+                    }
+                    const newTab = await chrome.tabs.create(createOptions);
+                    return { success: true, tabId: newTab?.id || null };
+                } catch (e) {
+                    console.warn('Failed to open App tab', e);
+                    return { success: false, error: String(e) };
+                }
+            }
+
             if (is('CONTENT_PING') || is('CONTENT_READY') || upper === 'CONTENTREADY') {
                 try {
                     const url = sanitizeUrl(msg?.url) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null);

@@ -1,5 +1,5 @@
 # TrackForcePro - Chrome Extension User Guide
-### Version 1.0.1
+### Version 1.1.0
 
 ---
 
@@ -23,11 +23,12 @@ TrackForcePro is a powerful Chrome extension designed specifically for Salesforc
    - [SOQL Builder](#3-soql-builder)
    - [Data Explorer](#4-data-explorer)
    - [Platform Tools](#5-platform-tools)
-3. [Settings](#settings)
-4. [Help & Support](#help--support)
-5. [About TrackForcePro](#about-trackforcepro)
-6. [Troubleshooting](#troubleshooting)
-7. [Keyboard Shortcuts](#keyboard-shortcuts)
+3. [Window & Tab Modes](#6-window--tab-modes)
+4. [Settings](#settings)
+5. [Help & Support](#help--support)
+6. [About TrackForcePro](#about-trackforcepro)
+7. [Troubleshooting](#troubleshooting)
+8. [Keyboard Shortcuts](#keyboard-shortcuts)
 
 ---
 
@@ -466,6 +467,79 @@ Monitor and interact with Lightning Message Channels.
 
 ---
 
+## 6. Window & Tab Modes
+
+**Purpose:** Open TrackForcePro in a larger workspace—either as a browser tab or a standalone window.
+
+**[Screenshot: Pop Button in Header]**
+
+### Opening as a Browser Tab (Default)
+
+The easiest way to get more screen space is to open TrackForcePro as a browser tab.
+
+**How to Open:**
+1. Click the extension icon to open the popup
+2. **Single-click** the pop button (⧉) in the top-right header
+3. TrackForcePro opens in a new tab adjacent to your current tab
+4. The popup closes automatically
+
+**[Screenshot: TrackForcePro in Browser Tab]**
+
+**Benefits:**
+- Integrates naturally with your browser workflow
+- Uses standard browser tab navigation (Ctrl+Tab, Ctrl+W)
+- Full screen space for query results and data
+- Easy to find in your tab bar
+
+### Opening as a Standalone Window
+
+For multi-monitor setups or dedicated workspaces, open as a separate window.
+
+**How to Open:**
+1. Click the extension icon to open the popup
+2. **Shift+click** the pop button (⧉) in the header
+3. TrackForcePro opens in a new standalone window
+4. The popup closes automatically
+
+**[Screenshot: TrackForcePro Standalone Window]**
+
+**Benefits:**
+- Separate window you can move to another monitor
+- Dynamic title shows org name: `[My Org] - TrackForcePro`
+- Resizable and can be maximized
+- Doesn't interfere with browser tab navigation
+
+### Closing / Pop-In
+
+**From a Tab:**
+- Click the pop-in button (closes the tab)
+- Or simply close the tab normally (Ctrl+W or click X)
+
+**From Standalone Window:**
+- Click the pop-in button → Opens as a tab and closes window
+- Or close the window normally (closes without opening tab)
+
+### Quick Reference
+
+| From Mode | Action | Result |
+|-----------|--------|--------|
+| Popup | Single-click pop button | Opens as browser tab |
+| Popup | Shift+click pop button | Opens as standalone window |
+| Tab | Click pop button | Closes tab |
+| Window | Click pop button | Opens as tab, closes window |
+
+### Session & State Transfer
+
+When opening in a new tab or window:
+- ✅ Your Salesforce session is preserved
+- ✅ Current query builder state is transferred
+- ✅ Selected object and fields are maintained
+- ✅ GraphQL/SOQL results stay available
+
+**[Screenshot: State Transfer Example]**
+
+---
+
 ## Settings
 
 Customize TrackForcePro to match your workflow.
@@ -540,9 +614,16 @@ We welcome suggestions for new features! When submitting:
 
 | Item | Value |
 |------|-------|
-| Version | 1.0.1 |
+| Version | 1.1.0 |
 | Release Date | February 2026 |
 | Platform | Chrome Extension (Manifest V3) |
+
+### What's New in 1.1.0
+
+- **Tab Mode**: Single-click pop button to open as browser tab (adjacent to current tab)
+- **Window Mode**: Shift+click to open as standalone window (existing behavior)
+- **Pop-in to Tab**: From standalone window, pop-in now opens as a tab instead of just closing
+- **Improved State Transfer**: Session and builder state preserved when switching modes
 
 ### What's New in 1.0.1
 
@@ -672,6 +753,13 @@ TrackForcePro works with:
 | Tab | Move to next field |
 | Shift+Tab | Move to previous field |
 
+### Window & Tab Actions
+
+| Action | Description |
+|--------|-------------|
+| Click pop button | Open as browser tab |
+| Shift+click pop button | Open as standalone window |
+
 ---
 
 ## Quick Reference Card
@@ -728,6 +816,6 @@ TrackForcePro works with:
 
 ---
 
-*Document Version: 1.0.1*
-*Last Updated: February 7, 2026*
+*Document Version: 1.1.0*
+*Last Updated: February 8, 2026*
 
