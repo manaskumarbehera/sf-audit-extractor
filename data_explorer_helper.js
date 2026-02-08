@@ -158,6 +158,12 @@ const DataExplorerHelper = {
         container.innerHTML = '<div class="spinner">Loading organization info...</div>';
 
         try {
+            // IMPORTANT: Always refresh session from current window's tab to ensure correct org context
+            // This prevents showing data from other browser windows
+            if (PlatformHelper.refreshSessionFromTab) {
+                try { await PlatformHelper.refreshSessionFromTab(); } catch {}
+            }
+
             // Check if we have a valid session first
             const session = await PlatformHelper.getSession();
             if (!session || !session.isLoggedIn) {
@@ -570,10 +576,7 @@ const DataExplorerHelper = {
                     this.showFaviconStatus('Favicon saved! Will apply when you visit this org.', 'success');
                 }
 
-                // Apply theme to the popup UI immediately
-                if (window.ThemeManager && window.ThemeManager.applyThemeColor) {
-                    window.ThemeManager.applyThemeColor(color, label);
-                }
+                // Theme application removed - favicon only
             } catch (tabError) {
                 console.warn('Tab query error:', tabError);
                 this.showFaviconStatus('Favicon saved! Will apply on next page load.', 'success');
@@ -740,10 +743,7 @@ const DataExplorerHelper = {
 
             this.showFaviconStatus('Favicon removed for this org.', 'success');
 
-            // Reset theme to default
-            if (window.ThemeManager && window.ThemeManager.resetTheme) {
-                window.ThemeManager.resetTheme();
-            }
+            // Theme reset removed - favicon only
         } catch (error) {
             console.error('Error resetting favicon:', error);
         }
@@ -864,6 +864,11 @@ const DataExplorerHelper = {
         container.innerHTML = '<div class="spinner">Loading user details...</div>';
 
         try {
+            // IMPORTANT: Always refresh session from current window's tab to ensure correct org context
+            if (PlatformHelper.refreshSessionFromTab) {
+                try { await PlatformHelper.refreshSessionFromTab(); } catch {}
+            }
+
             const session = await PlatformHelper.getSession();
 
             // Check if connected first

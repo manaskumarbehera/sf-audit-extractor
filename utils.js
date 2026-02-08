@@ -59,10 +59,29 @@
     try {
       const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*'] });
       if (!Array.isArray(matches) || matches.length === 0) return null;
+
       let currentWindowId = null;
-      try { const current = await chrome.windows.getCurrent({ populate: true }); currentWindowId = current?.id ?? null; } catch {}
-      const activeInCurrent = matches.find(t => t.active && (currentWindowId == null || t.windowId === currentWindowId));
-      return activeInCurrent || matches[0] || null;
+      try {
+        const current = await chrome.windows.getCurrent({ populate: false });
+        currentWindowId = current?.id ?? null;
+      } catch {}
+
+      // If we know current window, strictly filter to that window first
+      if (currentWindowId != null) {
+        const currentWindowTabs = matches.filter(t => t.windowId === currentWindowId);
+        if (currentWindowTabs.length > 0) {
+          // Prefer active tab in current window
+          const activeInCurrent = currentWindowTabs.find(t => t.active);
+          return activeInCurrent || currentWindowTabs[0];
+        }
+      }
+
+      // Fallback: try to find any active SF tab (for standalone windows)
+      const anyActive = matches.find(t => t.active);
+      if (anyActive) return anyActive;
+
+      // Last resort: first SF tab found (least preferred)
+      return matches[0] || null;
     } catch { return null; }
   }
 
