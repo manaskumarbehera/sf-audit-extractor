@@ -216,6 +216,7 @@ h1 {
 
 /* New: small and tertiary buttons for Platform Events */
 .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 4px; }
+.btn-xs { padding: 4px 8px; font-size: 10px; border-radius: 3px; }
 .btn-tertiary { background: transparent; color: #495057; border: 1px solid #dee2e6; }
 .btn-tertiary:hover:not(:disabled) { background: #f8f9fa; }
 
@@ -3159,6 +3160,217 @@ textarea.valid:focus {
   }
 }
 
+/* ===== User Manager - NEW Optimized Grid Layout ===== */
+.user-manager-grid-new {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+    height: 100%;
+    min-height: 360px;
+}
+
+@media (max-width: 900px) {
+    .user-manager-grid-new {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+}
+
+/* User Panels Container - Find & Update side by side */
+.user-panels-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 1100px) {
+    .user-panels-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* User Cards - Unified Style */
+.user-find-card,
+.user-update-card {
+    background: #fff;
+    border: 1px solid var(--border-color, #e9ecef);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.user-card-body {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Compact Search */
+.user-search-compact {
+    display: flex;
+    gap: 6px;
+}
+
+.user-search-compact input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.user-search-compact input:focus {
+    outline: none;
+    border-color: #0176d3;
+    box-shadow: 0 0 0 2px rgba(1, 118, 211, 0.1);
+}
+
+/* Compact Results */
+.user-results-compact {
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    background: #f8f9fa;
+}
+
+.user-results-compact .placeholder-note {
+    padding: 16px;
+    text-align: center;
+    color: #6c757d;
+    font-size: 11px;
+}
+
+.user-results-compact .user-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.user-results-compact .user-result-item:last-child {
+    border-bottom: none;
+}
+
+.user-results-compact .user-result-item:hover {
+    background: #f0f7ff;
+}
+
+.user-results-compact .user-result-item.selected {
+    background: rgba(1, 118, 211, 0.1);
+    border-left: 3px solid #0176d3;
+}
+
+.user-results-compact .user-result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.user-results-compact .user-result-name {
+    font-weight: 600;
+    font-size: 11px;
+    color: #212529;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-results-compact .user-result-email {
+    font-size: 10px;
+    color: #6c757d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-results-compact .user-result-select-btn {
+    padding: 3px 8px;
+    font-size: 9px;
+    background: #0176d3;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.user-results-compact .user-result-select-btn:hover {
+    background: #015ba1;
+}
+
+/* Compact Selected User */
+.user-selected-compact {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.user-selected-compact input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 11px;
+    background: #f8f9fa;
+}
+
+.user-selected-compact .icon-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+}
+
+/* Compact Fields */
+.user-fields-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.user-field-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-field-row label {
+    min-width: 55px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.user-field-row select {
+    flex: 1;
+    padding: 5px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 11px;
+    background: #fff;
+}
+
+.user-field-row select:disabled {
+    background: #f8f9fa;
+    color: #6c757d;
+}
+
+/* Button Row */
+.user-btn-row {
+    margin-top: 4px;
+}
+
+.user-btn-row .btn {
+    width: 100%;
+    font-size: 11px;
+}
+
+/* Keep old styles for backward compatibility */
 /* User Manager - Improved Grid Layout */
 .user-manager-grid {
     display: grid;
@@ -3563,7 +3775,344 @@ textarea.valid:focus {
     line-height: 1.5;
 }
 
-/* Side-by-side layout for Sandbox Manager */
+/* Side-by-side layout for Sandbox Manager - NEW OPTIMIZED GRID */
+.sandbox-favicon-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+    height: 100%;
+    min-height: 360px;
+}
+
+@media (max-width: 900px) {
+    .sandbox-favicon-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+}
+
+/* Organization Info Card - Matches User Manager Current User Style */
+.org-info-card {
+    background: #fff;
+    border: 1px solid var(--border-color, #e9ecef);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: fit-content;
+}
+
+.org-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid var(--border-color, #e9ecef);
+}
+
+.org-card-icon {
+    font-size: 18px;
+}
+
+.org-card-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+    margin: 0;
+}
+
+.org-details-grid {
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    font-size: 12px;
+}
+
+.org-details-grid .detail-label {
+    color: #6c757d;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.org-details-grid .detail-value {
+    color: #212529;
+    word-break: break-word;
+    text-align: right;
+}
+
+.org-details-grid .detail-value a {
+    color: #0176d3;
+    text-decoration: none;
+}
+
+.org-details-grid .detail-value a:hover {
+    text-decoration: underline;
+}
+
+/* Right Column: Favicon Panels Container - Side by Side */
+.favicon-panels-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 1100px) {
+    .favicon-panels-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Favicon Cards - Unified Style */
+.favicon-customize-card,
+.favicon-saved-card {
+    background: #fff;
+    border: 1px solid var(--border-color, #e9ecef);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.favicon-card-body {
+    padding: 12px 14px;
+}
+
+/* Compact Favicon Controls */
+.favicon-controls-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.favicon-preview-compact {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 4px;
+}
+
+.favicon-edit-indicator {
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background: #d3f9d8;
+    border-radius: 4px;
+    font-size: 11px;
+    text-align: center;
+}
+
+.filter-label-sm {
+    font-size: 11px;
+    font-weight: 500;
+    color: #495057;
+    white-space: nowrap;
+}
+
+/* ===== OPTIMIZED Favicon Customization Layout ===== */
+
+/* Org Selector Dropdown */
+.favicon-org-selector {
+    margin-bottom: 10px;
+}
+
+.favicon-org-selector select {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.favicon-org-selector select:focus {
+    outline: none;
+    border-color: #0176d3;
+    box-shadow: 0 0 0 2px rgba(1, 118, 211, 0.1);
+}
+
+/* Editor Layout - Preview + Controls side by side */
+.favicon-editor-layout {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+/* Preview Box */
+.favicon-preview-box {
+    width: 52px;
+    height: 52px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    flex-shrink: 0;
+}
+
+.favicon-preview-box canvas {
+    width: 36px;
+    height: 36px;
+}
+
+/* Editor Controls */
+.favicon-editor-controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+/* Shapes Grid - 2 rows of 3 */
+.favicon-shapes-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+}
+
+.shape-opt {
+    display: inline-flex;
+    cursor: pointer;
+}
+
+.shape-opt input[type="radio"] {
+    display: none;
+}
+
+.shape-opt span {
+    width: 100%;
+    aspect-ratio: 1;
+    min-width: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    background: #fff;
+    transition: all 0.15s ease;
+    color: #6c757d;
+}
+
+.shape-opt:hover span {
+    border-color: #0176d3;
+    color: #0176d3;
+}
+
+.shape-opt input[type="radio"]:checked + span {
+    border-color: #0176d3;
+    background: rgba(1, 118, 211, 0.1);
+    color: #0176d3;
+}
+
+/* Inputs Grid - Color + Label side by side */
+.favicon-inputs-grid {
+    display: flex;
+    gap: 8px;
+}
+
+.favicon-inputs-grid input[type="color"] {
+    width: 36px;
+    height: 28px;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 2px;
+    flex-shrink: 0;
+}
+
+.favicon-inputs-grid input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Button Row */
+.favicon-btn-row {
+    display: flex;
+    gap: 8px;
+}
+
+.favicon-btn-row .btn {
+    flex: 1;
+    font-size: 11px;
+    padding: 6px 10px;
+}
+
+/* Edit indicator */
+.favicon-edit-indicator {
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background: #d3f9d8;
+    border-radius: 4px;
+    font-size: 11px;
+    text-align: center;
+    color: #2b8a3e;
+}
+
+/* Compact Saved Favicons List */
+.section-description-sm {
+    font-size: 11px;
+    color: #6c757d;
+    margin: 0 0 10px 0;
+    line-height: 1.4;
+}
+
+.saved-favicons-list-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.saved-favicons-list-compact .favicon-list-item {
+    padding: 8px 10px;
+    gap: 8px;
+}
+
+.saved-favicons-list-compact .favicon-list-preview {
+    width: 26px;
+    height: 26px;
+}
+
+.saved-favicons-list-compact .favicon-list-preview canvas {
+    width: 20px;
+    height: 20px;
+}
+
+.saved-favicons-list-compact .favicon-list-org-name {
+    font-size: 11px;
+}
+
+.saved-favicons-list-compact .favicon-list-org-id {
+    font-size: 10px;
+}
+
+.saved-favicons-list-compact .favicon-list-label {
+    padding: 2px 6px;
+    font-size: 9px;
+}
+
+.saved-favicons-list-compact .favicon-list-actions .btn-edit,
+.saved-favicons-list-compact .favicon-list-actions .btn-delete {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+}
+
+/* Keep old class for backward compatibility */
 .sandbox-manager-container.side-by-side {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -3889,33 +4438,49 @@ textarea.valid:focus {
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    gap: 4px;
 }
 
+.favicon-list-actions .btn-edit,
 .favicon-list-actions .btn-delete {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    font-size: 14px;
+    font-size: 12px;
     background: #fff;
     border: 1px solid #dee2e6;
     cursor: pointer;
     opacity: 0.6;
     transition: all 0.15s ease;
-    border-radius: 6px;
+    border-radius: 4px;
     line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+.favicon-list-item:hover .btn-edit,
 .favicon-list-item:hover .btn-delete {
     opacity: 1;
+}
+
+.favicon-list-actions .btn-edit:hover {
+    background: #e7f5ff;
+    border-color: #0176d3;
+    color: #0176d3;
 }
 
 .favicon-list-actions .btn-delete:hover {
     background: #fee;
     border-color: #dc3545;
     color: #dc3545;
+}
+
+/* Current badge in org name */
+.current-badge {
+    color: #0176d3;
+    font-size: 8px;
+    vertical-align: middle;
 }
 
 /* Saved Favicons Empty State */
@@ -4169,6 +4734,12 @@ textarea.valid:focus {
     width: 28px;
     height: 28px;
     font-size: 12px;
+}
+
+.icon-btn.btn-xs {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
 }
 
 /* ===== About Tab Styles ===== */

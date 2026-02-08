@@ -1458,7 +1458,184 @@
     function renderByMode(resp){
       const mode = (viewAdvSwitch && viewAdvSwitch.checked) ? 'advanced' : 'raw';
       if (mode === 'advanced') renderAdvanced(resp); else renderRaw(resp);
+      // Show/hide export buttons based on whether we have data
+      updateExportButtonsVisibility(resp);
     }
+
+    // ===== EXPORT FUNCTIONALITY =====
+    const exportBtnsWrap = document.getElementById('soql-export-buttons');
+    const expJsonBtn = document.getElementById('soql-exp-json');
+    const expCsvBtn = document.getElementById('soql-exp-csv');
+    const expTsvBtn = document.getElementById('soql-exp-tsv');
+    const expDownloadBtn = document.getElementById('soql-exp-download');
+
+    function updateExportButtonsVisibility(resp) {
+      if (!exportBtnsWrap) return;
+      const hasData = resp && Array.isArray(resp.records) && resp.records.length > 0;
+      exportBtnsWrap.style.display = hasData ? 'flex' : 'none';
+    }
+
+    function getExportRecords() {
+      if (!lastSoqlResp || !Array.isArray(lastSoqlResp.records)) return [];
+      return lastSoqlResp.records;
+    }
+
+    function getExportHeaders(records) {
+      if (!records || records.length === 0) return [];
+      const headers = new Set();
+      records.forEach(rec => {
+        Object.keys(rec).forEach(key => {
+          if (key !== 'attributes') headers.add(key);
+        });
+      });
+      return Array.from(headers);
+    }
+
+    function flattenRecord(rec, prefix = '') {
+      const flat = {};
+      Object.keys(rec).forEach(key => {
+        if (key === 'attributes') return;
+        const val = rec[key];
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (val && typeof val === 'object' && !Array.isArray(val) && val.attributes) {
+          // Nested related object - flatten it
+          Object.assign(flat, flattenRecord(val, fullKey));
+        } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+          // Regular nested object
+          Object.assign(flat, flattenRecord(val, fullKey));
+        } else {
+          flat[fullKey] = val;
+        }
+      });
+      return flat;
+    }
+
+    function recordsToJson(records) {
+      // Clean records by removing attributes
+      const cleaned = records.map(rec => {
+        const flat = flattenRecord(rec);
+        return flat;
+      });
+      return JSON.stringify(cleaned, null, 2);
+    }
+
+    function escapeCSVField(val) {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      // Escape quotes by doubling them, wrap in quotes if contains comma, newline, or quote
+      if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    }
+
+    function recordsToCsv(records, delimiter = ',') {
+      if (!records || records.length === 0) return '';
+      const flatRecords = records.map(rec => flattenRecord(rec));
+      const headers = getExportHeaders(flatRecords);
+      const headerRow = headers.map(h => escapeCSVField(h)).join(delimiter);
+      const dataRows = flatRecords.map(rec => {
+        return headers.map(h => escapeCSVField(rec[h])).join(delimiter);
+      });
+      return [headerRow, ...dataRows].join('\n');
+    }
+
+    function copyToClipboard(text, format) {
+      navigator.clipboard.writeText(text).then(() => {
+        showExportStatus(`${format} copied to clipboard!`, 'success');
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        showExportStatus(`Failed to copy ${format}`, 'error');
+      });
+    }
+
+    function downloadFile(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showExportStatus(`Downloaded ${filename}`, 'success');
+    }
+
+    function showExportStatus(message, type) {
+      const statusEl = document.getElementById('soql-status');
+      if (!statusEl) return;
+      const originalText = statusEl.textContent;
+      statusEl.textContent = message;
+      statusEl.style.color = type === 'success' ? '#2b8a3e' : '#c92a2a';
+      setTimeout(() => {
+        statusEl.textContent = originalText;
+        statusEl.style.color = '#555';
+      }, 2500);
+    }
+
+    function getExportFilename() {
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      return `soql_export_${timestamp}`;
+    }
+
+    // Wire export buttons
+    if (expJsonBtn) {
+      on(expJsonBtn, 'click', () => {
+        const records = getExportRecords();
+        if (records.length === 0) return;
+        const json = recordsToJson(records);
+        copyToClipboard(json, 'JSON');
+      });
+    }
+
+    if (expCsvBtn) {
+      on(expCsvBtn, 'click', () => {
+        const records = getExportRecords();
+        if (records.length === 0) return;
+        const csv = recordsToCsv(records, ',');
+        copyToClipboard(csv, 'CSV');
+      });
+    }
+
+    if (expTsvBtn) {
+      on(expTsvBtn, 'click', () => {
+        const records = getExportRecords();
+        if (records.length === 0) return;
+        const tsv = recordsToCsv(records, '\t');
+        copyToClipboard(tsv, 'Excel (TSV)');
+      });
+    }
+
+    if (expDownloadBtn) {
+      on(expDownloadBtn, 'click', () => {
+        const records = getExportRecords();
+        if (records.length === 0) return;
+        const csv = recordsToCsv(records, ',');
+        const filename = getExportFilename() + '.csv';
+        downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+      });
+    }
+
+    const expDownloadJsonBtn = document.getElementById('soql-exp-download-json');
+    if (expDownloadJsonBtn) {
+      on(expDownloadJsonBtn, 'click', () => {
+        const records = getExportRecords();
+        if (records.length === 0) return;
+        const json = recordsToJson(records);
+        const filename = getExportFilename() + '.json';
+        downloadFile(json, filename, 'application/json;charset=utf-8;');
+      });
+    }
+
+    // Expose export functions for testing
+    window.SoqlExport = {
+      recordsToJson,
+      recordsToCsv,
+      escapeCSVField,
+      flattenRecord,
+      getExportHeaders
+    };
 
     function rerenderCurrent(){
       if (!lastSoqlResp) { renderPlaceholder(); return; }

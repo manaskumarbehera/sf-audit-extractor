@@ -392,7 +392,8 @@ File: `popup.html` (replace body content with this)
                           <button class="btn-chip" id="soql-exp-json" title="Copy JSON to clipboard"><span class="ico">📋</span><span class="lbl">JSON</span></button>
                           <button class="btn-chip" id="soql-exp-csv" title="Copy CSV to clipboard"><span class="ico">📋</span><span class="lbl">CSV</span></button>
                           <button class="btn-chip" id="soql-exp-tsv" title="Copy TSV (Excel) to clipboard"><span class="ico">📋</span><span class="lbl">Excel</span></button>
-                          <button class="btn-chip" id="soql-exp-download" title="Download CSV file"><span class="ico">⬇️</span><span class="lbl">Download CSV</span></button>
+                          <button class="btn-chip" id="soql-exp-download" title="Download CSV file"><span class="ico">⬇️</span><span class="lbl">CSV</span></button>
+                          <button class="btn-chip" id="soql-exp-download-json" title="Download JSON file"><span class="ico">⬇️</span><span class="lbl">JSON</span></button>
                         </div>
                     </div>
 
@@ -732,96 +733,87 @@ File: `popup.html` (replace body content with this)
 
             <!-- Sub-tab: Sandbox & Favicon Manager -->
             <div id="subtab-sandbox-manager" class="sub-tab-content active" aria-labelledby="sandbox-manager">
-                <div class="sandbox-manager-container side-by-side">
-                    <div class="section-card">
-                        <h3 class="section-card-title">🏢 Organization Info</h3>
-                        <div id="org-info-container" class="details-list">
+                <div class="sandbox-favicon-grid">
+                    <!-- Left Column: Organization Info -->
+                    <div class="org-info-card">
+                        <div class="org-card-header">
+                            <span class="org-card-icon">🏢</span>
+                            <h3 class="org-card-title">Organization Info</h3>
+                            <button id="refresh-org-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
+                        </div>
+                        <div id="org-info-container" class="org-details-grid">
                             <div class="spinner">Loading organization info...</div>
                         </div>
                     </div>
-                    <div class="section-card">
-                        <h3 class="section-card-title">🎨 Favicon Customization</h3>
-                        <p class="section-description">Customize the browser tab favicon to easily identify this Salesforce org/sandbox.</p>
-                        <div id="favicon-edit-indicator" style="display:none;margin-bottom:8px;padding:4px 8px;background:#d3f9d8;border-radius:4px;"></div>
-                        <div class="favicon-controls">
-                            <div class="favicon-preview-row">
-                                <label class="filter-label">Preview:</label>
-                                <div id="favicon-preview" class="favicon-preview">
-                                    <!-- Rendered dynamically by JavaScript -->
+
+                    <!-- Right Column: Saved Favicons (LEFT) & Favicon Customization (RIGHT) -->
+                    <div class="favicon-panels-container">
+                        <!-- Saved Org Favicons - NOW ON LEFT -->
+                        <div class="favicon-saved-card">
+                            <div class="org-card-header">
+                                <span class="org-card-icon">📋</span>
+                                <h3 class="org-card-title">Saved Favicons</h3>
+                            </div>
+                            <div class="favicon-card-body">
+                                <div id="saved-favicons-list" class="saved-favicons-list-compact">
+                                    <div class="placeholder-note">No saved favicons yet</div>
                                 </div>
                             </div>
-                            <div class="favicon-shape-row">
-                                <label class="filter-label">Shape:</label>
-                                <div class="favicon-shape-options" id="favicon-shape-options">
-                                    <label class="shape-option" title="Cloud">
-                                        <input type="radio" name="favicon-shape" value="cloud" checked />
-                                        <span class="shape-preview shape-cloud">☁</span>
-                                    </label>
-                                    <label class="shape-option" title="Circle">
-                                        <input type="radio" name="favicon-shape" value="circle" />
-                                        <span class="shape-preview shape-circle">●</span>
-                                    </label>
-                                    <label class="shape-option" title="Square">
-                                        <input type="radio" name="favicon-shape" value="square" />
-                                        <span class="shape-preview shape-square">■</span>
-                                    </label>
-                                    <label class="shape-option" title="Rounded Square">
-                                        <input type="radio" name="favicon-shape" value="rounded" />
-                                        <span class="shape-preview shape-rounded">▢</span>
-                                    </label>
-                                    <label class="shape-option" title="Diamond">
-                                        <input type="radio" name="favicon-shape" value="diamond" />
-                                        <span class="shape-preview shape-diamond">◆</span>
-                                    </label>
-                                    <label class="shape-option" title="Hexagon">
-                                        <input type="radio" name="favicon-shape" value="hexagon" />
-                                        <span class="shape-preview shape-hexagon">⬡</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="favicon-color-row">
-                                <label class="filter-label" for="favicon-color">Badge Color:</label>
-                                <input type="color" id="favicon-color" value="#ff6b6b" aria-label="Favicon badge color" />
-                                <select id="favicon-preset-colors" aria-label="Preset colors">
-                                    <option value="">Presets...</option>
-                                    <option value="#ff6b6b">🔴 Red (Production)</option>
-                                    <option value="#51cf66">🟢 Green (Dev)</option>
-                                    <option value="#339af0">🔵 Blue (UAT)</option>
-                                    <option value="#fcc419">🟡 Yellow (QA)</option>
-                                    <option value="#9775fa">🟣 Purple (Staging)</option>
-                                    <option value="#ff922b">🟠 Orange (Hotfix)</option>
-                                </select>
-                            </div>
-                            <div class="favicon-label-row">
-                                <label class="filter-label" for="favicon-label">Badge Label:</label>
-                                <input type="text" id="favicon-label" maxlength="3" placeholder="DEV" aria-label="Favicon badge label" />
-                            </div>
-                            <div class="favicon-actions">
-                                <button id="favicon-apply" class="btn btn-primary btn-sm">Save & Apply</button>
-                                <button id="favicon-reset" class="btn btn-secondary btn-sm">Reset to Default</button>
-                            </div>
-                            <div id="favicon-status" class="update-status" hidden></div>
                         </div>
-                    </div>
-                </div>
-                <!-- Saved Favicons List -->
-                <div class="section-card" style="margin-top: 16px;">
-                    <h3 class="section-card-title">📋 Saved Org Favicons</h3>
-                    <p class="section-description">Favicons are automatically applied when you visit a saved org.</p>
-                    <div id="saved-favicons-list" class="saved-favicons-list">
-                        <div class="placeholder-note">No saved favicons yet</div>
+
+                        <!-- Favicon Customization - NOW ON RIGHT -->
+                        <div class="favicon-customize-card">
+                            <div class="org-card-header">
+                                <span class="org-card-icon">🎨</span>
+                                <h3 class="org-card-title">Customize Favicon</h3>
+                            </div>
+                            <div class="favicon-card-body">
+                                <!-- Org Selector for editing -->
+                                <div class="favicon-org-selector">
+                                    <select id="favicon-org-select" aria-label="Select org to edit">
+                                        <option value="">Current Org</option>
+                                    </select>
+                                </div>
+                                <div id="favicon-edit-indicator" class="favicon-edit-indicator" style="display:none;"></div>
+                                <!-- Preview & Controls in horizontal layout -->
+                                <div class="favicon-editor-layout">
+                                    <div id="favicon-preview" class="favicon-preview-box">
+                                        <!-- Rendered dynamically -->
+                                    </div>
+                                    <div class="favicon-editor-controls">
+                                        <div class="favicon-shapes-grid" id="favicon-shape-options">
+                                            <label class="shape-opt" title="Cloud"><input type="radio" name="favicon-shape" value="cloud" checked /><span>☁</span></label>
+                                            <label class="shape-opt" title="Circle"><input type="radio" name="favicon-shape" value="circle" /><span>●</span></label>
+                                            <label class="shape-opt" title="Square"><input type="radio" name="favicon-shape" value="square" /><span>■</span></label>
+                                            <label class="shape-opt" title="Rounded"><input type="radio" name="favicon-shape" value="rounded" /><span>▢</span></label>
+                                            <label class="shape-opt" title="Diamond"><input type="radio" name="favicon-shape" value="diamond" /><span>◆</span></label>
+                                            <label class="shape-opt" title="Hexagon"><input type="radio" name="favicon-shape" value="hexagon" /><span>⬡</span></label>
+                                        </div>
+                                        <div class="favicon-inputs-grid">
+                                            <input type="color" id="favicon-color" value="#ff6b6b" aria-label="Color" title="Badge Color" />
+                                            <input type="text" id="favicon-label" maxlength="3" placeholder="LBL" aria-label="Label" title="Badge Label (max 3 chars)" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="favicon-btn-row">
+                                    <button id="favicon-apply" class="btn btn-primary btn-sm">💾 Save</button>
+                                    <button id="favicon-reset" class="btn btn-secondary btn-sm">↺ Reset</button>
+                                </div>
+                                <div id="favicon-status" class="update-status" hidden></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Sub-tab: User Manager -->
             <div id="subtab-user-manager" class="sub-tab-content" hidden aria-labelledby="user-manager">
-                <div class="user-manager-grid">
-                    <!-- Current User Section - Compact Header Card -->
+                <div class="user-manager-grid-new">
+                    <!-- Left Column: Current User -->
                     <div class="user-current-card">
-                        <div class="user-card-header">
-                            <span class="user-card-icon">👤</span>
-                            <h3 class="user-card-title">Current User</h3>
+                        <div class="org-card-header">
+                            <span class="org-card-icon">👤</span>
+                            <h3 class="org-card-title">Current User</h3>
                             <button id="refresh-user-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
                         </div>
                         <div id="user-details-container" class="user-details-grid">
@@ -829,67 +821,62 @@ File: `popup.html` (replace body content with this)
                         </div>
                     </div>
 
-                    <!-- Search & Update Section - Combined for efficiency -->
-                    <div class="user-action-card">
-                        <div class="user-card-header">
-                            <span class="user-card-icon">🔍</span>
-                            <h3 class="user-card-title">Find & Update User</h3>
+                    <!-- Right Column: Find User & Update User side by side -->
+                    <div class="user-panels-container">
+                        <!-- Find User Panel - LEFT -->
+                        <div class="user-find-card">
+                            <div class="org-card-header">
+                                <span class="org-card-icon">🔍</span>
+                                <h3 class="org-card-title">Find User</h3>
+                            </div>
+                            <div class="user-card-body">
+                                <div class="user-search-compact">
+                                    <input type="text" id="user-search-input" placeholder="Name, email or username..." aria-label="Search users" />
+                                    <button id="user-search-btn" class="btn btn-primary btn-xs" title="Search">🔍</button>
+                                </div>
+                                <div id="user-search-results" class="user-results-compact">
+                                    <div class="placeholder-note">Search for a user</div>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Search Row -->
-                        <div class="user-search-bar">
-                            <input type="text" id="user-search-input" placeholder="Search by name, email, or username..." aria-label="Search users" />
-                            <button id="user-search-btn" class="btn btn-primary btn-sm" title="Search">🔍</button>
-                        </div>
-
-                        <!-- Search Results (scrollable) -->
-                        <div id="user-search-results" class="user-search-results-grid">
-                            <div class="placeholder-note">Enter a search term above</div>
-                        </div>
-
-                        <!-- Divider -->
-                        <div class="user-section-divider">
-                            <span>Selected User Settings</span>
-                        </div>
-
-                        <!-- Update Form - Grid Layout -->
-                        <div class="user-update-grid">
-                            <div class="user-selected-row">
-                                <label>User:</label>
-                                <div class="user-selected-display">
-                                    <input type="text" id="selected-user-display" readonly placeholder="← Select a user from search results" />
+                        <!-- Update User Panel - RIGHT -->
+                        <div class="user-update-card">
+                            <div class="org-card-header">
+                                <span class="org-card-icon">✏️</span>
+                                <h3 class="org-card-title">Update User</h3>
+                            </div>
+                            <div class="user-card-body">
+                                <div class="user-selected-compact">
+                                    <input type="text" id="selected-user-display" readonly placeholder="← Select user" aria-label="Selected user" />
                                     <input type="hidden" id="selected-user-id" />
-                                    <button id="user-clear-selection" class="icon-btn btn-sm" disabled title="Clear selection">✕</button>
+                                    <button id="user-clear-selection" class="icon-btn btn-xs" disabled title="Clear">✕</button>
                                 </div>
+                                <div class="user-fields-compact">
+                                    <div class="user-field-row">
+                                        <label for="user-profile-select">Profile</label>
+                                        <select id="user-profile-select" disabled>
+                                            <option value="">-- Select --</option>
+                                        </select>
+                                    </div>
+                                    <div class="user-field-row">
+                                        <label for="user-role-select">Role</label>
+                                        <select id="user-role-select" disabled>
+                                            <option value="">-- None --</option>
+                                        </select>
+                                    </div>
+                                    <div class="user-field-row">
+                                        <label for="user-language-select">Language</label>
+                                        <select id="user-language-select" disabled>
+                                            <option value="">-- Select --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="user-btn-row">
+                                    <button id="user-update-btn" class="btn btn-primary btn-sm" disabled>💾 Update</button>
+                                </div>
+                                <div id="user-update-status" class="update-status" hidden></div>
                             </div>
-
-                            <div class="user-fields-grid">
-                                <div class="user-field">
-                                    <label for="user-profile-select">Profile</label>
-                                    <select id="user-profile-select" disabled aria-label="Select profile">
-                                        <option value="">-- Select Profile --</option>
-                                    </select>
-                                </div>
-                                <div class="user-field">
-                                    <label for="user-role-select">Role</label>
-                                    <select id="user-role-select" disabled aria-label="Select role">
-                                        <option value="">-- No Role --</option>
-                                    </select>
-                                </div>
-                                <div class="user-field">
-                                    <label for="user-language-select">Language</label>
-                                    <select id="user-language-select" disabled aria-label="Select language">
-                                        <option value="">-- Select Language --</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="user-update-actions">
-                                <button id="user-update-btn" class="btn btn-primary" disabled>
-                                    <span>💾</span> Update User
-                                </button>
-                            </div>
-                            <div id="user-update-status" class="update-status" hidden></div>
                         </div>
                     </div>
                 </div>
