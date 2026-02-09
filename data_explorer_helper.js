@@ -976,8 +976,18 @@ const DataExplorerHelper = {
             const verifyResult = await chrome.storage.local.get('orgFavicons');
             console.log('Verified saved favicons:', Object.keys(verifyResult.orgFavicons || {}));
 
-            // Refresh the saved list
-            this.loadSavedFavicons();
+            // Refresh the saved list immediately - wait for completion
+            await this.loadSavedFavicons();
+
+            // Update preview to show saved favicon
+            const suffixes = ['', '-data'];
+            for (const suffix of suffixes) {
+                if (suffix === '-data') {
+                    this.updateFaviconPreviewRadio(suffix);
+                } else {
+                    this.updateFaviconPreview(suffix);
+                }
+            }
 
             // Try to send message to Salesforce tab (not the popup itself)
             try {
@@ -1050,12 +1060,24 @@ const DataExplorerHelper = {
     },
 
     showFaviconStatus: function(message, type) {
-        const status = document.getElementById('favicon-status');
-        if (!status) return;
-        status.textContent = message;
-        status.className = `update-status ${type}`;
-        status.hidden = false;
-        setTimeout(() => { status.hidden = true; }, 4000);
+        // Support both Settings and Data Explorer status elements
+        const statusElements = [
+            document.getElementById('favicon-status'),
+            document.getElementById('favicon-status-data')
+        ].filter(Boolean);
+
+        statusElements.forEach(status => {
+            status.textContent = message;
+            status.className = `favicon-status ${type}`;
+            status.hidden = false;
+            status.style.display = 'block';
+
+            // Auto-hide after 4 seconds
+            setTimeout(() => {
+                status.hidden = true;
+                status.style.display = 'none';
+            }, 4000);
+        });
     },
 
     // Function to be injected into the page - supports all shapes

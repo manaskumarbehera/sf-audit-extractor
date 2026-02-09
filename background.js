@@ -30,18 +30,29 @@ async function findSalesforceOrigin() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-    if (!chrome.declarativeContent?.onPageChanged) return;
-    chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {
-        const conditions = SALESFORCE_SUFFIXES.map(
-            (suffix) =>
-                new chrome.declarativeContent.PageStateMatcher({
-                    pageUrl: { hostSuffix: suffix, schemes: ['https'] }
-                })
-        );
-        chrome.declarativeContent.onPageChanged.addRules([
-            { conditions, actions: [new chrome.declarativeContent.ShowAction()] }
-        ]);
-    });
+    // Edge browser has limited support for declarativeContent API
+    // Use try-catch to gracefully handle when API is not available
+    try {
+        if (!chrome.declarativeContent?.onPageChanged) {
+            console.log('[TrackForcePro] declarativeContent API not available, using fallback');
+            return;
+        }
+        chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {
+            const conditions = SALESFORCE_SUFFIXES.map(
+                (suffix) =>
+                    new chrome.declarativeContent.PageStateMatcher({
+                        pageUrl: { hostSuffix: suffix, schemes: ['https'] }
+                    })
+            );
+            chrome.declarativeContent.onPageChanged.addRules([
+                { conditions, actions: [new chrome.declarativeContent.ShowAction()] }
+            ]);
+        });
+    } catch (err) {
+        // Fallback for Edge browser: declarativeContent may fail
+        // The extension will still work via content_scripts and manual icon updates
+        console.log('[TrackForcePro] declarativeContent setup failed (Edge browser):', err.message);
+    }
 });
 
 chrome.runtime.onStartup.addListener(async () => {
@@ -79,9 +90,49 @@ chrome.windows.onRemoved.addListener((winId) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.status !== 'complete' || !tab?.url) return;
     const isSF = isSalesforceUrl(tab.url);
-    chrome.action.setBadgeText({ tabId, text: isSF ? 'SF' : '' });
-    if (isSF) chrome.action.setBadgeBackgroundColor({ tabId, color: '#00A1E0' });
+
+    // Update badge for all browsers (especially important for Edge where declarativeContent may not work)
+    try {
+        chrome.action.setBadgeText({ tabId, text: isSF ? 'SF' : '' });
+        if (isSF) {
+            chrome.action.setBadgeBackgroundColor({ tabId, color: '#00A1E0' });
+            // Ensure icon is enabled for Edge browser
+            chrome.action.enable(tabId);
+        }
+    } catch (err) {
+        console.warn('[TrackForcePro] Failed to update badge:', err);
+    }
 });
+
+// Add listener for tab activation (switching tabs) to update icon state
+// This is especially important for Edge browser
+try {
+    if (chrome.tabs?.onActivated) {
+        chrome.tabs.onActivated.addListener((activeInfo) => {
+            try {
+                chrome.tabs.get(activeInfo.tabId, (tab) => {
+                    if (!tab || chrome.runtime.lastError) return;
+                    const isSF = isSalesforceUrl(tab.url);
+                    try {
+                        chrome.action.setBadgeText({ tabId: activeInfo.tabId, text: isSF ? 'SF' : '' });
+                        if (isSF) {
+                            chrome.action.setBadgeBackgroundColor({ tabId: activeInfo.tabId, color: '#00A1E0' });
+                            chrome.action.enable(activeInfo.tabId);
+                        } else {
+                            chrome.action.disable(activeInfo.tabId);
+                        }
+                    } catch (err) {
+                        console.warn('[TrackForcePro] Failed to update icon on tab activation:', err);
+                    }
+                });
+            } catch (err) {
+                console.warn('[TrackForcePro] Tab activation listener error:', err);
+            }
+        });
+    }
+} catch (err) {
+    console.warn('[TrackForcePro] onActivated listener not available:', err);
+}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.action === 'FETCH_ORG_NAME') {

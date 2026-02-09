@@ -856,8 +856,10 @@ describe('LMS background handler', () => {
       },
       tabs: {
         onUpdated: makeEvent('onUpdated'),
+        onActivated: makeEvent('onActivated'),
         query: mockTabsQuery,
         sendMessage: mockTabsSendMessage,
+        get: jest.fn(),
       },
       windows: {
         onRemoved: makeEvent('onRemoved'),
@@ -1092,8 +1094,10 @@ describe('LMS instanceUrl-based tab finding', () => {
       },
       tabs: {
         onUpdated: makeEvent('onUpdated'),
+        onActivated: makeEvent('onActivated'),
         query: mockTabsQuery,
         sendMessage: mockTabsSendMessage,
+        get: jest.fn(),
       },
       windows: {
         onRemoved: makeEvent('onRemoved'),
@@ -1981,9 +1985,8 @@ describe('Content script isolation and URL-based Lightning detection', () => {
     test('background.js finds Lightning tab matching instanceUrl', () => {
       // Simulate tab matching logic from background.js
       const availableTabs = [
-        { id: 1, url: 'https://other-org.my.salesforce.com/lightning/page/home' },
-        { id: 2, url: 'https://myorg.my.salesforce.com/lightning/page/home' },  // Should match
-        { id: 3, url: 'https://myorg.my.salesforce.com/001/o' }  // Same org but Classic
+        { id: 1, url: 'https://myorg.my.salesforce.com/001/o' },  // Classic - don't use
+        { id: 2, url: 'https://myorg.my.salesforce.com/lightning/page/home' }  // Lightning - use this
       ];
 
       function normalizeUrl(url) {

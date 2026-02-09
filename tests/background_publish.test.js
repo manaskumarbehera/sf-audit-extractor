@@ -33,6 +33,8 @@ global.chrome = {
   },
   tabs: {
     onUpdated: makeEvent('onUpdated'),
+    onActivated: makeEvent('onActivated'),
+    get: jest.fn(),
   },
   windows: {
     onRemoved: makeEvent('onRemoved'),
