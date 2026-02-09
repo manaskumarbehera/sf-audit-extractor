@@ -500,6 +500,47 @@
     // Cache for org ID detection - declare before use
     let cachedOrgId = null;
     let faviconApplied = false;
+    let lastAppliedUrl = null;
+    let lastAppliedOrgId = null;  // NEW: Track which org the favicon was applied for
+
+    // CRITICAL: Reset favicon when URL changes (org switch or page navigation)
+    if (onSF && isTop) {
+        // Watch for URL changes (navigation within Salesforce)
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+
+        history.pushState = function(...args) {
+            const newUrl = args[2];
+            if (lastAppliedUrl !== newUrl) {
+                console.log('[TrackForcePro] URL changed, resetting favicon flag');
+                faviconApplied = false;
+                lastAppliedUrl = newUrl;
+                lastAppliedOrgId = null;  // Clear org tracking
+                cachedOrgId = null;  // Clear cached org ID
+            }
+            return originalPushState.apply(history, args);
+        };
+
+        history.replaceState = function(...args) {
+            const newUrl = args[2];
+            if (lastAppliedUrl !== newUrl) {
+                console.log('[TrackForcePro] URL changed via replaceState, resetting favicon flag');
+                faviconApplied = false;
+                lastAppliedUrl = newUrl;
+                lastAppliedOrgId = null;  // Clear org tracking
+                cachedOrgId = null;  // Clear cached org ID
+            }
+            return originalReplaceState.apply(history, args);
+        };
+
+        // Also watch for popstate (back/forward navigation)
+        window.addEventListener('popstate', () => {
+            console.log('[TrackForcePro] Page navigation detected (popstate), resetting favicon flag');
+            faviconApplied = false;
+            lastAppliedOrgId = null;  // Clear org tracking
+            cachedOrgId = null;
+        });
+    }
 
     // Check for saved favicon settings on load - look up by org ID
     if (onSF && isTop) {
@@ -564,18 +605,24 @@
     async function applyFaviconOnLoad() {
         console.log('[TrackForcePro] applyFaviconOnLoad() starting for', location.hostname);
 
-        // Skip if already applied
-        if (faviconApplied) {
-            console.log('[TrackForcePro] Already applied, skipping');
+        // Skip if already applied FOR THIS EXACT URL
+        if (faviconApplied && lastAppliedUrl === location.href) {
+            console.log('[TrackForcePro] Already applied for this URL, skipping');
             return;
         }
+
+        console.log('[TrackForcePro] Favicon status - Applied:', faviconApplied, 'Last URL:', lastAppliedUrl, 'Current URL:', location.href);
 
         // First, try an immediate attempt (0ms) in case we have cached data or quick detection
         // Then use increasing delays for subsequent attempts
         const attempts = [0, 500, 1500, 3000, 6000, 10000];
 
         for (let i = 0; i < attempts.length; i++) {
-            if (faviconApplied) return; // Exit if applied by another call
+            // Check if already applied FOR THIS EXACT URL
+            if (faviconApplied && lastAppliedUrl === location.href) {
+                console.log('[TrackForcePro] Favicon already applied for this URL, exiting');
+                return;
+            }
 
             if (attempts[i] > 0) {
                 await new Promise(resolve => setTimeout(resolve, attempts[i]));
@@ -588,6 +635,14 @@
                 if (applied) {
                     console.log('[TrackForcePro] Favicon applied successfully');
                     faviconApplied = true;
+                    lastAppliedUrl = location.href;
+                    // Get org ID for tracking
+                    try {
+                        const orgId = await getOrgIdFromPageFresh();
+                        lastAppliedOrgId = orgId;
+                    } catch (e) {
+                        console.warn('[TrackForcePro] Could not track org ID:', e.message);
+                    }
                     return;
                 }
             } catch (e) {
@@ -602,22 +657,19 @@
     }
 
     async function tryApplyFavicon() {
-        console.log('[TrackForcePro] tryApplyFavicon() called');
+        console.log('[TrackForcePro] tryApplyFavicon() called for URL:', location.href);
 
         // First check if we have any saved favicons
-        // Don't check isExtensionContextValid() upfront - let storage call fail naturally
         let result;
         try {
             result = await chrome.storage.local.get('orgFavicons');
             console.log('[TrackForcePro] Storage access OK');
         } catch (e) {
-            // Storage access failed - likely context invalidated
             console.log('[TrackForcePro] Storage access FAILED:', e.message);
             return false;
         }
 
         let orgFavicons = {};
-
         if (result && result.orgFavicons && typeof result.orgFavicons === 'object') {
             orgFavicons = result.orgFavicons;
         }
@@ -627,30 +679,34 @@
 
         if (faviconCount === 0) {
             console.log('[TrackForcePro] No saved favicons found');
-            return false; // No saved favicons
+            return false;
         }
 
-        // Log all saved favicons for debugging
+        // Log all saved favicons
         for (const [id, settings] of Object.entries(orgFavicons)) {
             console.log(`[TrackForcePro] Saved favicon: orgId=${id}, hostname=${settings.hostname}, color=${settings.color}`);
         }
 
-        // Try to get org ID from the page
-        const orgId = await getOrgIdFromPage();
-        console.log('[TrackForcePro] Detected org ID:', orgId);
+        // Try to get org ID from the page (may fail, that's OK - we have fallbacks)
+        let currentOrgId = null;
+        try {
+            currentOrgId = await getOrgIdFromPageFresh();
+            console.log('[TrackForcePro] Fresh org ID detection:', currentOrgId);
+        } catch (e) {
+            console.warn('[TrackForcePro] Error detecting org ID:', e.message);
+        }
 
         // Strategy 1: Direct org ID match
-        if (orgId && orgFavicons[orgId]) {
-            const { color, label, shape } = orgFavicons[orgId];
+        if (currentOrgId && orgFavicons[currentOrgId]) {
+            const { color, label, shape } = orgFavicons[currentOrgId];
             if (color || label) {
-                console.log('[TrackForcePro] Strategy 1: Org ID match found');
+                console.log('[TrackForcePro] Strategy 1: Org ID match found for:', currentOrgId);
                 updateFavicon(color, label, shape);
                 return true;
             }
         }
 
         // Strategy 2: Hostname-based fallback lookup
-        // This handles cases where org ID detection fails
         const currentHostname = location.hostname;
         console.log('[TrackForcePro] Current hostname:', currentHostname);
 
@@ -697,14 +753,65 @@
     }
 
     // Try to extract org ID from various sources on the page
-    async function getOrgIdFromPage() {
-        // Return cached value if available
-        if (cachedOrgId) {
-            return cachedOrgId;
-        }
-
+    /**
+     * Get org ID from the current page WITHOUT using cache
+     * This is critical for multi-org scenarios where cached org ID might be stale
+     */
+    async function getOrgIdFromPageFresh() {
+        console.log('[TrackForcePro] getOrgIdFromPageFresh() - Fresh detection for URL:', location.href);
 
         // Method 1: Check for oid cookie value directly (most reliable method)
+        try {
+            const cookies = document.cookie.split(';');
+            for (const cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'oid' && value && (value.length === 15 || value.length === 18)) {
+                    console.log('[TrackForcePro] Fresh: Got org ID from oid cookie:', value);
+                    return value;
+                }
+            }
+        } catch (e) {}
+
+        // Method 2: Check URL for oid parameter
+        try {
+            const urlParams = new URLSearchParams(location.search);
+            const oidFromUrl = urlParams.get('oid') || urlParams.get('organizationId');
+            if (oidFromUrl && (oidFromUrl.length === 15 || oidFromUrl.length === 18)) {
+                console.log('[TrackForcePro] Fresh: Got org ID from URL parameter:', oidFromUrl);
+                return oidFromUrl;
+            }
+        } catch (e) {}
+
+        // Method 3: Look for org ID in page metadata
+        try {
+            const metaOrg = document.querySelector('meta[name="org-id"]');
+            if (metaOrg && metaOrg.content) {
+                console.log('[TrackForcePro] Fresh: Got org ID from meta tag:', metaOrg.content);
+                return metaOrg.content;
+            }
+        } catch (e) {}
+
+        // Method 4: Try to extract org ID from page HTML
+        try {
+            const scripts = document.querySelectorAll('script');
+            for (const script of scripts) {
+                if (script.textContent) {
+                    const match = script.textContent.match(/(?:organizationId|orgId)['":\s]+(['"]?)([0-9a-zA-Z]{15,18})\1/i);
+                    if (match && match[2] && match[2].startsWith('00D')) {
+                        console.log('[TrackForcePro] Fresh: Got org ID from script content:', match[2]);
+                        return match[2];
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // No org ID found
+        console.log('[TrackForcePro] Fresh: Could not detect org ID from any method');
+        return null;
+    }
+
+    async function getOrgIdFromPage() {
+        // ...existing code...
         try {
             const cookies = document.cookie.split(';');
             for (const cookie of cookies) {

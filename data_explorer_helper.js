@@ -18,10 +18,39 @@ const DataExplorerHelper = {
     _recordHistory: [],
     _maxHistoryItems: 5,
 
+    /**
+     * CRITICAL: Reset all in-memory data
+     * Called on every app startup to clear leftover org data
+     * This is essential for org switching to work properly
+     */
+    resetAllData: function() {
+        console.log('🔥 DataExplorerHelper: Resetting all in-memory data');
+        this._currentUserId = null;
+        this._selectedUserId = null;
+        this._currentOrgId = null;
+        this._currentOrgName = null;
+        this._profiles = [];
+        this._roles = [];
+        this._languages = [];
+        this._recordHistory = [];
+        console.log('✅ DataExplorerHelper: All data reset complete');
+    },
+
     init: function() {
         if (this._initialized) return;
         this._initialized = true;
         console.log("Initializing Data Explorer...");
+
+        // CRITICAL: Reset all in-memory data on every startup
+        // This ensures old org data is NOT carried forward
+        this.resetAllData();
+
+        // CRITICAL: Load org info immediately to set up CacheManager properly
+        // This ensures we clear caches if switching orgs
+        this.loadOrgInfo().catch(e => {
+            console.warn('Error loading org info on init:', e);
+        });
+
         this.wireEvents();
 
         // Load the default active sub-tab for Data Explorer (Record Scanner)
@@ -508,6 +537,12 @@ const DataExplorerHelper = {
                 // Store current org info
                 this._currentOrgId = org.Id;
                 this._currentOrgName = org.Name;
+
+                // CRITICAL: Update CacheManager with current org ID to enable org-scoped caching
+                if (window.CacheManager) {
+                    window.CacheManager.setCurrentOrgId(org.Id);
+                }
+
                 containers.forEach(c => this.renderOrgInfo(org, c));
                 // Load saved favicons list
                 this.loadSavedFavicons();
@@ -2172,7 +2207,7 @@ const DataExplorerHelper = {
                         response = {
                             _objectName: objectName,
                             _fields: { Id: recordId },
-                            _error: uiApiErrorMsg || soqlFallbackError?.message || 'Unable to fetch record details. Please check your Salesforce connection.'
+                            _note: `Unable to fetch record details. Please check your Salesforce connection. (${soqlFallbackError.message})`
                         };
                     }
                 } else {
@@ -2671,8 +2706,14 @@ const DataExplorerHelper = {
 
     loadRecordHistory: async function() {
         try {
-            const result = await chrome.storage.local.get('recordHistory');
-            this._recordHistory = result.recordHistory || [];
+            // Use CacheManager for organization-scoped history
+            if (window.CacheManager) {
+                this._recordHistory = window.CacheManager.getCache('recordHistory') || [];
+            } else {
+                // Fallback to chrome storage if CacheManager not available
+                const result = await chrome.storage.local.get('recordHistory');
+                this._recordHistory = result.recordHistory || [];
+            }
             this.renderRecordHistory();
         } catch (e) {
             console.warn('Error loading record history:', e);
@@ -2691,9 +2732,14 @@ const DataExplorerHelper = {
             this._recordHistory = this._recordHistory.slice(0, this._maxHistoryItems);
         }
 
-        // Save to storage
+        // Save to storage - use CacheManager for org-scoped caching
         try {
-            await chrome.storage.local.set({ recordHistory: this._recordHistory });
+            if (window.CacheManager) {
+                window.CacheManager.setCache('recordHistory', this._recordHistory);
+            } else {
+                // Fallback to chrome storage
+                await chrome.storage.local.set({ recordHistory: this._recordHistory });
+            }
         } catch (e) {
             console.warn('Error saving record history:', e);
         }
@@ -2779,7 +2825,12 @@ const DataExplorerHelper = {
     clearRecordHistory: async function() {
         this._recordHistory = [];
         try {
-            await chrome.storage.local.remove('recordHistory');
+            if (window.CacheManager) {
+                window.CacheManager.removeCache('recordHistory');
+            } else {
+                // Fallback to chrome storage
+                await chrome.storage.local.remove('recordHistory');
+            }
         } catch (e) {
             console.warn('Error clearing record history:', e);
         }

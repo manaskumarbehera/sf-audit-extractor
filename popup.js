@@ -53,9 +53,111 @@
         // Keep this as a no-op for backwards compatibility
     }
 
+    /**
+     * Detect the current Salesforce organization ID from the active SF tab
+     * This is critical for cache management - we need to know which org we're in
+     * @returns {Promise<string|null>} The organization ID, or null if not found
+     */
+    async function getCurrentOrgIdFromSalesforceTab() {
+        try {
+            // Get session info from the Salesforce tab
+            const sessionInfo = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+            if (sessionInfo && sessionInfo.success && sessionInfo.isLoggedIn) {
+                // Best: Use orgId if available
+                if (sessionInfo.orgId) {
+                    console.log('✅ Using orgId from session:', sessionInfo.orgId);
+                    return sessionInfo.orgId;
+                }
+
+                // Good: Use instanceUrl as unique identifier (includes subdomain for different orgs)
+                if (sessionInfo.instanceUrl) {
+                    console.log('✅ Using instanceUrl as org identifier:', sessionInfo.instanceUrl);
+                    // instanceUrl is a good identifier because:
+                    // - Different orgs have different subdomains (myorg--dev, myorg, etc.)
+                    // - Same org always has same URL
+                    return sessionInfo.instanceUrl;
+                }
+            }
+        } catch (e) {
+            console.warn('Error detecting current org ID:', e);
+        }
+        return null;
+    }
+
+    // Helper function to fetch org ID from Salesforce using SOQL
+    async function getOrgIdFromSalesforce(accessToken, instanceUrl, apiVersion) {
+        try {
+            if (!accessToken || !instanceUrl) return null;
+
+            const query = encodeURIComponent('SELECT Id FROM Organization LIMIT 1');
+            const url = `${instanceUrl}/services/data/v${apiVersion}/query?q=${query}`;
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                console.warn(`Failed to fetch org ID: ${response.status}`);
+                return null;
+            }
+
+            const data = await response.json();
+            const orgId = data?.records?.[0]?.Id;
+            if (orgId) {
+                console.log('✅ Fetched orgId from Salesforce:', orgId);
+                return orgId;
+            }
+        } catch (e) {
+            console.warn('Error fetching org ID from Salesforce:', e);
+        }
+        return null;
+    }
+
     // init() is called at the end of this IIFE to ensure all functions are defined first
 
     async function init() {
+        // CRITICAL: FORCE CLEAR CACHE on every app launch
+        // This is the MOST IMPORTANT step - must happen before anything else
+        console.log('🔥 FORCING CACHE CLEAR on app startup');
+        try {
+            if (window.CacheManager) {
+                window.CacheManager.clearAllCaches();
+                console.log('🧹 ALL CACHES CLEARED - Starting fresh');
+            }
+            // Also clear localStorage caches
+            try {
+                const keysToDelete = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('cache_')) {
+                        keysToDelete.push(key);
+                    }
+                }
+                keysToDelete.forEach(k => localStorage.removeItem(k));
+                console.log(`🧹 Cleared ${keysToDelete.length} localStorage cache items`);
+            } catch (e) {
+                console.warn('Could not clear localStorage caches:', e);
+            }
+        } catch (e) {
+            console.warn('Error in aggressive cache clearing:', e);
+        }
+
+        // CRITICAL: Reset DataExplorerHelper initialization so it re-initializes fresh
+        // This ensures in-memory data from previous org is cleared
+        try {
+            if (window.DataExplorerHelper) {
+                console.log('🔥 Resetting DataExplorerHelper for fresh initialization');
+                window.DataExplorerHelper._initialized = false;
+                window.DataExplorerHelper.resetAllData();
+            }
+        } catch (e) {
+            console.warn('Error resetting DataExplorerHelper:', e);
+        }
+
         // Load Settings helper and inject flex CSS early to enable stretchable layout
         await loadSettingsHelper();
         try { window.SettingsHelper && window.SettingsHelper.injectFlexCss && window.SettingsHelper.injectFlexCss(); } catch {}
@@ -63,6 +165,48 @@
         // IMPORTANT: Clear instance URL cache to ensure we get fresh data for THIS window's SF tab
         // This prevents stale data from other browser windows being displayed
         try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+
+        // CRITICAL: Detect and track current org
+        try {
+            if (window.CacheManager) {
+                // Get the current Salesforce org from active tab
+                let currentOrgId = await getCurrentOrgIdFromSalesforceTab();
+
+                // If we still don't have a good org ID, try to fetch it from Salesforce
+                if (!currentOrgId) {
+                    console.log('⚠️ Could not get org ID from session, attempting SOQL query...');
+                    try {
+                        const sessionInfo = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
+                        if (sessionInfo && sessionInfo.isLoggedIn) {
+                            const accessToken = getAccessToken();
+                            const apiVersion = await loadAndBindApiVersion();
+                            if (accessToken && sessionInfo.instanceUrl) {
+                                currentOrgId = await getOrgIdFromSalesforce(accessToken, sessionInfo.instanceUrl, apiVersion);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch org ID via SOQL:', e);
+                    }
+                }
+
+                if (currentOrgId) {
+                    // Set the current org for this session
+                    window.CacheManager.setCurrentOrgId(currentOrgId);
+
+                    // Store in localStorage
+                    try {
+                        localStorage.setItem('lastDetectedOrgId', currentOrgId);
+                        console.log(`✅ Current org: ${currentOrgId}`);
+                    } catch (e) {
+                        console.warn('Could not save org to localStorage:', e);
+                    }
+                } else {
+                    console.warn('⚠️ Could not detect current org ID');
+                }
+            }
+        } catch (e) {
+            console.warn('Error detecting org:', e);
+        }
 
         const apiVersion = await loadAndBindApiVersion();
 

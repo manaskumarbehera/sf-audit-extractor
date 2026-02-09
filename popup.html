@@ -14,26 +14,8 @@ File: `popup.html` (replace body content with this)
     <link rel="icon" type="image/png" sizes="16x16" href="icons/Icon-16.png" id="favicon-16" />
     <link rel="shortcut icon" type="image/png" href="icons/Icon-32.png" id="favicon-shortcut" />
     <link rel="apple-touch-icon" sizes="128x128" href="icons/Icon-128.png" id="favicon-apple" />
-    <script>
-        // Fix favicon for Chrome extension context
-        (function() {
-            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-                const icons = {
-                    'favicon-128': 'icons/Icon-128.png',
-                    'favicon-64': 'icons/Icon-64.png',
-                    'favicon-32': 'icons/Icon-32.png',
-                    'favicon-16': 'icons/Icon-16.png',
-                    'favicon-shortcut': 'icons/Icon-32.png',
-                    'favicon-apple': 'icons/Icon-128.png'
-                };
-                for (const [id, path] of Object.entries(icons)) {
-                    const link = document.getElementById(id);
-                    if (link) link.href = chrome.runtime.getURL(path);
-                }
-            }
-        })();
-    </script>
     <link rel="stylesheet" href="popup.css" />
+    <script src="favicon-init.js"></script>
 </head>
 <body>
 <div class="container">
