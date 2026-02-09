@@ -234,14 +234,14 @@
 
   async function getApiVersionNumber(){
     try {
-      const { apiVersion } = await chrome.storage?.local?.get?.({ apiVersion: '66.0' });
-      const normalized = normalizeApiVersion(apiVersion || '66.0') || '66.0';
+      const { apiVersion } = await chrome.storage?.local?.get?.({ apiVersion: '63.0' });
+      const normalized = normalizeApiVersion(apiVersion || '63.0') || '63.0';
       // Persist normalized (no leading v)
       if (normalized !== apiVersion) {
         try { await chrome.storage?.local?.set?.({ apiVersion: normalized }); } catch {}
       }
       return String(normalized);
-    } catch { return '66.0'; }
+    } catch { return '63.0'; }
   }
 
   async function getApiVersionPath(){

@@ -13,8 +13,7 @@ TrackForcePro is a powerful Chrome extension designed for Salesforce Administrat
    - [Data Explorer](#data-explorer)
      - [Sandbox & Favicon Manager](#sandbox--favicon-manager)
      - [User Manager](#user-manager)
-     - [Current Record](#current-record)
-     - [Record Search](#record-search)
+     - [Record Scanner](#record-scanner)
    - [Platform Tools](#platform-tools)
 4. [Settings & Customization](#settings--customization)
 5. [Tips & Tricks](#tips--tricks)
@@ -37,7 +36,7 @@ The extension popup has a tabbed interface with several main modes:
 1.  **Audit**: For extracting field details from Setup (Object Manager) pages.
 2.  **GraphQL**: A visual builder for crafting GraphQL queries against the UI API.
 3.  **SOQL**: A visual builder for SOQL queries with field selection and filtering.
-4.  **Explore**: Multi-purpose data exploration with Sandbox Manager, User Manager, Current Record, and Record Search tools.
+4.  **Explore**: Multi-purpose data exploration with Sandbox Manager, User Manager, and Record Scanner tools.
 5.  **Platform**: Tools for Platform Events and Lightning Message Channels.
 
 ### Connection Status
@@ -159,44 +158,45 @@ After selecting a user, you can update:
 
 *Note: Requires appropriate admin permissions to update users.*
 
-#### Current Record
-Automatically detects and displays information about the Salesforce record you're viewing.
+#### Record Scanner
+A unified interface for discovering and exploring Salesforce records, combining auto-detection, manual search, field history tracking, and related records exploration.
+
+**Three-Column Layout:**
+1. **Recent Records**: Quick access to your last 5 viewed/searched records
+2. **Record Details + Field History + Related Records**: Central panel with:
+   - Record details (object type, ID, name, metadata)
+   - Field History panel showing tracked field changes
+   - Related Records panel showing child relationships
+3. **Dev Tools**: Quick links to Setup, Console, Object Manager, and record-specific tools
 
 **How it works:**
 - Extracts Record ID from Lightning URLs (e.g., `/lightning/r/Account/001xxx/view`)
 - Extracts Record ID from query parameters (e.g., `?id=001xxx`)
 - Validates 15 or 18 character Salesforce IDs
+- Queries field history objects (e.g., `AccountHistory`)
+- Discovers child relationships via object describe
 
 **Information displayed:**
-- Object type (Account, Contact, Opportunity, etc.)
-- Record ID
+- Object type badge (Account, Contact, Opportunity, etc.)
+- Record ID with copy button
 - Name/Subject/Title field (when available)
-- Created By
-- Last Modified Date
+- Created By, Last Modified Date, Owner ID
+- **Field History**: Old value → New value changes with user and timestamp
+- **Related Records**: Child objects with counts, expandable to see individual records
+
+**Actions available:**
+- **🔗 Open Record**: Opens the record in a new Salesforce tab
+- **📋 Copy Link**: Copies the direct record URL to clipboard
+- **⟲ Refresh History**: Reload field history
+- **📥 Export History**: Export field history to CSV
 
 **Usage:**
 1. Navigate to any record page in Salesforce
 2. Open the extension
-3. Go to Explore > Current Record
-4. Record details load automatically
-
-#### Record Search
-Quickly identify any Salesforce Record ID and retrieve its details.
-
-**Usage:**
-1. Enter a 15 or 18 character Salesforce Record ID
-2. Click "Search" or press Enter
-3. View the record details:
-   - Object type
-   - Record ID
-   - Name/identifier field
-   - Created By
-   - Last Modified Date
-
-**ID Validation:**
-- Accepts both 15-character and 18-character IDs
-- Validates ID format before searching
-- Shows helpful error messages for invalid IDs
+3. Go to Explore > Record Scanner
+4. Record details, field history, and related records load automatically
+5. Or enter an ID in Search panel to scan any record
+6. Click items in Recent Records to quickly re-scan
 
 ### Platform Tools
 *Usage Context: Development and Debugging*

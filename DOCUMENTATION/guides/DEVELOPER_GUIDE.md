@@ -63,8 +63,7 @@ To avoid a massive `popup.js`, logic is separated:
 - **`data_explorer_helper.js`**: Manages Data Explorer sub-tabs:
   - Sandbox & Favicon Manager (org info, custom favicons)
   - User Manager (current user, search, profile/role/language updates)
-  - Current Record (auto-detection from URL)
-  - Record Search (ID lookup)
+  - Record Lookup (auto-detect from URL, search by ID, recent history)
 - **`lms_helper.js`**: Lightning Message Service monitoring and publishing.
 - **`url_helper.js`**: URL parsing and Salesforce URL detection utilities.
 

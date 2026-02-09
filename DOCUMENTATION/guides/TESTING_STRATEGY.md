@@ -68,7 +68,7 @@ Since the extension relies heavily on the Salesforce UI context (e.g., authentic
     - Select a user and verify form enables.
 8.  **Data Explorer - Record Tools**:
     - Navigate to a record page (e.g., Account).
-    - Open Current Record tab - verify auto-detection.
+    - Open Record Lookup tab - verify auto-detection, search, and history.
     - Copy a Record ID and use Record Search - verify lookup works.
 
 *For a detailed step-by-step walkthrough, see [Testing Walkthrough](TESTING_WALKTHROUGH.md).*

@@ -115,7 +115,7 @@ Variables (JSON)
 ────────────────────────────────
 Endpoint & Details
 
-Endpoint:     /services/data/v66.0/graphql
+Endpoint:     /services/data/v63.0/graphql
 Method:       POST
 Content-Type: application/json
 Body Size:    245 bytes
@@ -126,7 +126,7 @@ Object:       Account
 
 | Item | Details | Example |
 |------|---------|---------|
-| **Endpoint** | GraphQL API path | `/services/data/v66.0/graphql` |
+| **Endpoint** | GraphQL API path | `/services/data/v63.0/graphql` |
 | **Method** | HTTP method | `POST` |
 | **Content-Type** | Request content type | `application/json` |
 | **Body Size** | Calculated request size | `245 bytes` |
@@ -289,7 +289,7 @@ query {
 
 **Tab: Endpoint**
 ```
-Endpoint:     /services/data/v66.0/graphql
+Endpoint:     /services/data/v63.0/graphql
 Method:       POST
 Content-Type: application/json
 Body Size:    189 bytes
@@ -331,7 +331,7 @@ query {
 
 **Tab: Endpoint**
 ```
-Endpoint:     /services/data/v66.0/graphql
+Endpoint:     /services/data/v63.0/graphql
 Method:       POST
 Content-Type: application/json
 Body Size:    328 bytes

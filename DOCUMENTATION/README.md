@@ -102,8 +102,7 @@ For detailed setup, see the **[Developer Guide](guides/DEVELOPER_GUIDE.md)**.
 ### Data Explorer
 - **Sandbox & Favicon Manager**: Customize browser tab icons to identify different orgs
 - **User Manager**: View current user, search users, update profiles/roles/languages
-- **Current Record**: Auto-detect and display record details from URL
-- **Record Search**: Look up any Salesforce ID to identify object type and details
+- **Record Scanner**: Scan records with field history, related records explorer, and recent history
 
 ### Platform Tools
 - **Platform Events**: Monitor and subscribe to Platform Events

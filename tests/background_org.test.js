@@ -14,7 +14,7 @@ global.chrome = {
     },
     storage: {
         local: {
-            get: jest.fn(() => Promise.resolve({ apiVersion: '66.0' })),
+            get: jest.fn(() => Promise.resolve({ apiVersion: '63.0' })),
             set: jest.fn(() => Promise.resolve())
         }
     },
@@ -73,7 +73,7 @@ describe('GET_ORG_ID Message Handler', () => {
         // Simulate the handler logic
         const hostname = 'myorg.my.salesforce.com';
         const instanceUrl = `https://${hostname}`;
-        const apiVersion = 'v66.0';
+        const apiVersion = 'v63.0';
         const soql = 'SELECT+Id+FROM+Organization+LIMIT+1';
 
         const response = await fetch(`${instanceUrl}/services/data/${apiVersion}/query?q=${soql}`, {
@@ -107,7 +107,7 @@ describe('GET_ORG_ID Message Handler', () => {
             statusText: 'Unauthorized'
         });
 
-        const response = await fetch('https://myorg.my.salesforce.com/services/data/v66.0/query');
+        const response = await fetch('https://myorg.my.salesforce.com/services/data/v63.0/query');
 
         expect(response.ok).toBe(false);
         expect(response.status).toBe(401);
@@ -117,7 +117,7 @@ describe('GET_ORG_ID Message Handler', () => {
         global.fetch.mockRejectedValueOnce(new Error('Network error'));
 
         try {
-            await fetch('https://myorg.my.salesforce.com/services/data/v66.0/query');
+            await fetch('https://myorg.my.salesforce.com/services/data/v63.0/query');
         } catch (e) {
             expect(e.message).toBe('Network error');
         }
@@ -170,16 +170,16 @@ describe('API Version Handling', () => {
 
     test('should normalize version format', () => {
         const normalizeVersion = (v) => {
-            let version = String(v || '65.0').replace(/^v/i, '');
+            let version = String(v || '63.0').replace(/^v/i, '');
             const match = version.match(/^(\d{1,3})(?:\.(\d{1,2}))?$/);
-            if (!match) version = '65.0';
+            if (!match) version = '63.0';
             return 'v' + version;
         };
 
-        expect(normalizeVersion('66.0')).toBe('v66.0');
-        expect(normalizeVersion('v66.0')).toBe('v66.0');
-        expect(normalizeVersion('invalid')).toBe('v65.0');
-        expect(normalizeVersion(null)).toBe('v65.0');
+        expect(normalizeVersion('63.0')).toBe('v63.0');
+        expect(normalizeVersion('v63.0')).toBe('v63.0');
+        expect(normalizeVersion('invalid')).toBe('v63.0');
+        expect(normalizeVersion(null)).toBe('v63.0');
     });
 });
 
@@ -363,13 +363,13 @@ describe('GET_ORG_ID Edge Cases', () => {
 
     test('should construct correct API URL for org query', () => {
         const hostname = 'myorg.my.salesforce.com';
-        const apiVersion = 'v66.0';
+        const apiVersion = 'v63.0';
         const soql = 'SELECT+Id+FROM+Organization+LIMIT+1';
 
         const instanceUrl = `https://${hostname}`;
         const apiUrl = `${instanceUrl}/services/data/${apiVersion}/query?q=${soql}`;
 
-        expect(apiUrl).toBe('https://myorg.my.salesforce.com/services/data/v66.0/query?q=SELECT+Id+FROM+Organization+LIMIT+1');
+        expect(apiUrl).toBe('https://myorg.my.salesforce.com/services/data/v63.0/query?q=SELECT+Id+FROM+Organization+LIMIT+1');
     });
 });
 

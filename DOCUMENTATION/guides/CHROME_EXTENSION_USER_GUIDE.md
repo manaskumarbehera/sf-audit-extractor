@@ -350,35 +350,32 @@ Displays your logged-in user information:
 
 **[Screenshot: User Search and Update]**
 
-#### 4.3 Current Record
+#### 4.3 Record Lookup
 
-Automatically detects and displays the Salesforce record you're currently viewing.
+A unified interface combining auto-detection and manual search with recent history.
 
-**[Screenshot: Current Record View]**
+**[Screenshot: Record Lookup Interface]**
 
-**How It Works:**
+**Three-Panel Layout:**
+1. **Current Page**: Auto-detects record from your current Salesforce URL
+2. **Search by ID**: Manually look up any Salesforce Record ID
+3. **Recent Records**: Quick access to last 5 viewed records
+
+**How To Use:**
 1. Navigate to any record page in Salesforce
 2. Open the extension
-3. Go to Explore → Current Record
-4. Record details load automatically
+3. Go to Explore → Record Lookup
+4. View auto-detected record in Current Page panel
+5. Or enter any ID in Search panel
+6. Click Recent Records items to quickly re-search
 
-**Information Displayed:**
-- Object Type (Account, Contact, etc.)
-- Record ID
+**Features:**
+- Object type badge (Account, Contact, etc.)
+- Record ID with copy button
 - Name/Title field
-- Created By
-- Last Modified Date
-
-#### 4.4 Record Search
-
-Look up any Salesforce Record ID to identify its object type and details.
-
-**[Screenshot: Record Search Interface]**
-
-**How to Use:**
-1. Enter a 15 or 18 character Salesforce ID
-2. Click "Search" or press Enter
-3. View record details
+- Created By, Last Modified, Owner ID
+- 🔗 Open Record button
+- 📋 Copy Link button
 
 **ID Validation:**
 - Accepts 15-character IDs
@@ -787,8 +784,7 @@ TrackForcePro works with:
 |---------|---------|
 | Sandbox Manager | Org info & favicon customization |
 | User Manager | View/search/update users |
-| Current Record | Auto-detect current record |
-| Record Search | Look up any Record ID |
+| Record Lookup | Auto-detect, search, & history |
 
 ### Status Indicators
 

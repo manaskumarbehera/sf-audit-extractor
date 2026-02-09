@@ -85,7 +85,7 @@ global.document = {
             'current-record-info': { innerHTML: '' },
             'record-search-input': { value: '' },
             'search-results-container': { innerHTML: '' },
-            'api-version': { value: '66.0' }
+            'api-version': { value: '63.0' }
         };
         return elements[id] || null;
     }),
@@ -372,6 +372,189 @@ describe('Favicon Color Presets', () => {
         const values = presets.map(p => p.value.toLowerCase());
         const uniqueValues = [...new Set(values)];
         expect(uniqueValues.length).toBe(presets.length);
+    });
+
+    test('should have exactly 6 preset colors', () => {
+        expect(presets.length).toBe(6);
+    });
+
+    test('should have descriptive names for each preset', () => {
+        presets.forEach(preset => {
+            expect(preset.name).toBeTruthy();
+            expect(preset.name.length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('Preset Color Selection', () => {
+
+        const isPresetColor = (color) => {
+            if (!color) return false;
+            const normalizedColor = color.toLowerCase();
+            return presets.some(p => p.value.toLowerCase() === normalizedColor);
+        };
+
+        const getPresetNameByColor = (color) => {
+            if (!color) return null;
+            const normalizedColor = color.toLowerCase();
+            const preset = presets.find(p => p.value.toLowerCase() === normalizedColor);
+            return preset ? preset.name : null;
+        };
+
+        test('should identify preset colors correctly', () => {
+            expect(isPresetColor('#ff6b6b')).toBe(true);
+            expect(isPresetColor('#51cf66')).toBe(true);
+            expect(isPresetColor('#339af0')).toBe(true);
+            expect(isPresetColor('#fcc419')).toBe(true);
+            expect(isPresetColor('#9775fa')).toBe(true);
+            expect(isPresetColor('#ff922b')).toBe(true);
+        });
+
+        test('should be case-insensitive for preset matching', () => {
+            expect(isPresetColor('#FF6B6B')).toBe(true);
+            expect(isPresetColor('#Ff6b6B')).toBe(true);
+            expect(isPresetColor('#ff6b6b')).toBe(true);
+        });
+
+        test('should return false for non-preset colors', () => {
+            expect(isPresetColor('#000000')).toBe(false);
+            expect(isPresetColor('#ffffff')).toBe(false);
+            expect(isPresetColor('#123456')).toBe(false);
+            expect(isPresetColor('')).toBe(false);
+            expect(isPresetColor(null)).toBe(false);
+        });
+
+        test('should get preset name by color', () => {
+            expect(getPresetNameByColor('#ff6b6b')).toBe('Red (Production)');
+            expect(getPresetNameByColor('#51cf66')).toBe('Green (Dev)');
+            expect(getPresetNameByColor('#339af0')).toBe('Blue (UAT)');
+            expect(getPresetNameByColor('#fcc419')).toBe('Yellow (QA)');
+            expect(getPresetNameByColor('#9775fa')).toBe('Purple (Staging)');
+            expect(getPresetNameByColor('#ff922b')).toBe('Orange (Hotfix)');
+        });
+
+        test('should return null for unknown color names', () => {
+            expect(getPresetNameByColor('#000000')).toBeNull();
+            expect(getPresetNameByColor('#ffffff')).toBeNull();
+            expect(getPresetNameByColor('')).toBeNull();
+            expect(getPresetNameByColor(null)).toBeNull();
+        });
+
+        test('should handle case-insensitive color name lookup', () => {
+            expect(getPresetNameByColor('#FF6B6B')).toBe('Red (Production)');
+            expect(getPresetNameByColor('#51CF66')).toBe('Green (Dev)');
+        });
+    });
+
+    describe('Preset Color UI', () => {
+
+        test('preset buttons should have correct data attributes', () => {
+            presets.forEach(preset => {
+                const mockButton = {
+                    dataset: { color: preset.value },
+                    title: preset.name,
+                    style: { backgroundColor: preset.value }
+                };
+                expect(mockButton.dataset.color).toBe(preset.value);
+                expect(mockButton.title).toBe(preset.name);
+            });
+        });
+
+        test('selecting preset should update color input value', () => {
+            const mockColorInput = { value: '#ff6b6b' };
+            const selectColorPreset = (color) => {
+                if (mockColorInput && color) {
+                    mockColorInput.value = color;
+                }
+            };
+
+            selectColorPreset('#51cf66');
+            expect(mockColorInput.value).toBe('#51cf66');
+
+            selectColorPreset('#339af0');
+            expect(mockColorInput.value).toBe('#339af0');
+        });
+
+        test('color input change should update preset selection', () => {
+            const mockColorInput = { value: '#ff6b6b' };
+            const mockPresets = presets.map(p => ({
+                color: p.value,
+                selected: false
+            }));
+
+            const updatePresetSelection = () => {
+                const currentColor = mockColorInput.value.toLowerCase();
+                mockPresets.forEach(preset => {
+                    preset.selected = preset.color.toLowerCase() === currentColor;
+                });
+            };
+
+            // Initial state - red selected
+            updatePresetSelection();
+            expect(mockPresets.find(p => p.color === '#ff6b6b').selected).toBe(true);
+            expect(mockPresets.filter(p => p.selected).length).toBe(1);
+
+            // Change to green
+            mockColorInput.value = '#51cf66';
+            updatePresetSelection();
+            expect(mockPresets.find(p => p.color === '#51cf66').selected).toBe(true);
+            expect(mockPresets.find(p => p.color === '#ff6b6b').selected).toBe(false);
+
+            // Change to non-preset color
+            mockColorInput.value = '#123456';
+            updatePresetSelection();
+            expect(mockPresets.filter(p => p.selected).length).toBe(0);
+        });
+    });
+
+    describe('Preset Color Suggestions', () => {
+
+        test('Production orgs should suggest red color', () => {
+            const suggestColorForOrgType = (isSandbox) => {
+                return isSandbox ? '#51cf66' : '#ff6b6b';
+            };
+            expect(suggestColorForOrgType(false)).toBe('#ff6b6b');
+        });
+
+        test('Sandbox orgs should suggest green color', () => {
+            const suggestColorForOrgType = (isSandbox) => {
+                return isSandbox ? '#51cf66' : '#ff6b6b';
+            };
+            expect(suggestColorForOrgType(true)).toBe('#51cf66');
+        });
+    });
+
+    describe('Preset Storage Integration', () => {
+
+        test('should store preset color in favicon data', async () => {
+            const faviconData = {
+                color: '#339af0',
+                label: 'UAT',
+                shape: 'cloud'
+            };
+
+            await chrome.storage.local.set({
+                orgFavicons: { '00D123': faviconData }
+            });
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            expect(result.orgFavicons['00D123'].color).toBe('#339af0');
+        });
+
+        test('should preserve preset color when loading saved favicon', async () => {
+            mockStorage.orgFavicons = {
+                '00D456': {
+                    color: '#9775fa',
+                    label: 'STG',
+                    shape: 'circle'
+                }
+            };
+
+            const result = await chrome.storage.local.get('orgFavicons');
+            const loadedColor = result.orgFavicons['00D456'].color;
+
+            expect(loadedColor).toBe('#9775fa');
+            expect(presets.some(p => p.value === loadedColor)).toBe(true);
+        });
     });
 });
 
@@ -1300,54 +1483,6 @@ describe('Favicon Shape Tests', () => {
         });
     });
 
-    describe('Shape Selection UI', () => {
-
-        test('should have 6 shape options', () => {
-            const shapeOptions = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
-            expect(shapeOptions.length).toBe(6);
-        });
-
-        test('should set default shape to cloud', () => {
-            const defaultShape = 'cloud';
-            expect(defaultShape).toBe('cloud');
-        });
-
-        test('should return selected shape from radio button', () => {
-            // Simulate radio button selection
-            const selectedValue = 'hexagon';
-            const getSelectedShape = () => selectedValue;
-            expect(getSelectedShape()).toBe('hexagon');
-        });
-
-        test('should update shape selection programmatically', () => {
-            let currentShape = 'cloud';
-            const setSelectedShape = (shape) => { currentShape = shape; };
-
-            setSelectedShape('diamond');
-            expect(currentShape).toBe('diamond');
-        });
-
-        test('should cycle through all shapes', () => {
-            const shapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
-            let currentIndex = 0;
-
-            shapes.forEach((shape, index) => {
-                currentIndex = index;
-                expect(shapes[currentIndex]).toBe(shape);
-            });
-        });
-
-        test('should validate shape value before applying', () => {
-            const validShapes = ['cloud', 'circle', 'square', 'rounded', 'diamond', 'hexagon'];
-            const isValidShape = (shape) => validShapes.includes(shape);
-
-            expect(isValidShape('circle')).toBe(true);
-            expect(isValidShape('triangle')).toBe(false);
-            expect(isValidShape('')).toBe(false);
-            expect(isValidShape(null)).toBe(false);
-        });
-    });
-
     describe('Shape Migration/Backwards Compatibility', () => {
 
         test('should handle favicon data without shape field', async () => {
@@ -1786,31 +1921,127 @@ describe('Record Search Extended Tests', () => {
         });
     });
 
-    describe('Record ID Extraction from URL', () => {
+    describe('URL Record ID Extraction', () => {
+
+        const extractRecordIdFromUrl = (url) => {
+            try {
+                // Lightning: /r/Object/{ID}/view or /r/Object/{ID}/edit
+                if (url.includes('/r/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning: /lightning/r/sObject/{ID}/view
+                if (url.includes('/lightning/r/sObject/')) {
+                    const match = url.match(/\/lightning\/r\/sObject\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning related list: /lightning/r/Object/{ID}/related/...
+                if (url.includes('/related/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})\/related/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Classic URL: /{ID} at the end of path
+                const classicMatch = url.match(/salesforce\.com\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
+                if (classicMatch && classicMatch[1]) {
+                    return classicMatch[1];
+                }
+
+                // Query param ?id=
+                const urlObj = new URL(url);
+                const idParam = urlObj.searchParams.get('id');
+                if (idParam && (idParam.length === 15 || idParam.length === 18) && /^[a-zA-Z0-9]+$/.test(idParam)) {
+                    return idParam;
+                }
+
+                // recordId query param
+                const recordIdParam = urlObj.searchParams.get('recordId');
+                if (recordIdParam && (recordIdParam.length === 15 || recordIdParam.length === 18) && /^[a-zA-Z0-9]+$/.test(recordIdParam)) {
+                    return recordIdParam;
+                }
+
+                // Generic pattern match
+                const idPattern = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
+                const matches = url.match(idPattern);
+                if (matches) {
+                    for (const m of matches) {
+                        if (/^[0-9]{3}|^[a-zA-Z][0-9]{2}|^[a-z]{3}/.test(m)) {
+                            return m;
+                        }
+                    }
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        };
 
         test('should extract ID from Lightning record URL', () => {
-            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCd/view';
-            const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})/);
-            expect(match[1]).toBe('0015g000001ABCd');
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
         });
 
-        test('should extract ID from Classic URL', () => {
-            const url = 'https://myorg.salesforce.com/0015g000001ABCd';
-            const match = url.match(/\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
-            expect(match[1]).toBe('0015g000001ABCd');
+        test('should extract ID from Lightning with custom object', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Custom_Object__c/a0B5g000001ABCD/view';
+            expect(extractRecordIdFromUrl(url)).toBe('a0B5g000001ABCD');
+        });
+
+        test('should extract ID from Lightning edit URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/edit';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning related list URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/related/Contacts/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from sObject URL pattern', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/sObject/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
         });
 
         test('should extract ID from query parameter', () => {
-            const url = 'https://myorg.force.com/page?id=0015g000001ABCd&other=value';
-            const urlObj = new URL(url);
-            const id = urlObj.searchParams.get('id');
-            expect(id).toBe('0015g000001ABCd');
+            const url = 'https://myorg.salesforce.com/apex/page?id=0015g000001ABCdEFG&retURL=/';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
         });
 
-        test('should handle URL without record ID', () => {
+        test('should extract ID from recordId query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?recordId=0015g000001ABCdEFG&mode=view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract 15-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345');
+        });
+
+        test('should extract 18-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345AAA';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345AAA');
+        });
+
+        test('should return null for home page', () => {
             const url = 'https://myorg.lightning.force.com/lightning/page/home';
-            const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})/);
-            expect(match).toBeNull();
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should return null for setup pages', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/setup/ObjectManager/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should handle malformed URLs gracefully', () => {
+            expect(extractRecordIdFromUrl('not-a-url')).toBeNull();
+            expect(extractRecordIdFromUrl('')).toBeNull();
         });
     });
 
@@ -2007,6 +2238,1463 @@ describe('Chrome Storage Edge Cases', () => {
             const result = await chrome.storage.local.get('orgFavicons');
 
             expect(result.orgFavicons).toEqual(originalData);
+        });
+    });
+});
+
+// ==========================================
+// RECORD LOOKUP MERGED FEATURE TESTS
+// ==========================================
+
+describe('Record Lookup Merged Feature Tests', () => {
+
+    describe('Record ID Validation', () => {
+
+        const isValidRecordId = (id) => {
+            if (!id || typeof id !== 'string') return false;
+            if (id.length !== 15 && id.length !== 18) return false;
+            return /^[a-zA-Z0-9]+$/.test(id);
+        };
+
+        test('should accept valid 15-character ID', () => {
+            expect(isValidRecordId('0015g0000012345')).toBe(true);
+            expect(isValidRecordId('001ABCDEFGHIJKL')).toBe(true);
+        });
+
+        test('should accept valid 18-character ID', () => {
+            expect(isValidRecordId('0015g0000012345AAA')).toBe(true);
+            expect(isValidRecordId('001ABCDEFGHIJKLMNO')).toBe(true);
+        });
+
+        test('should reject invalid IDs', () => {
+            expect(isValidRecordId('')).toBe(false);
+            expect(isValidRecordId(null)).toBe(false);
+            expect(isValidRecordId(undefined)).toBe(false);
+            expect(isValidRecordId('12345')).toBe(false);
+            expect(isValidRecordId('0015g00000123456789012')).toBe(false);
+            expect(isValidRecordId('001-5g00-0012345')).toBe(false);
+            expect(isValidRecordId('001!@#$%^&*()abc')).toBe(false);
+        });
+    });
+
+    describe('URL Record ID Extraction', () => {
+
+        const extractRecordIdFromUrl = (url) => {
+            try {
+                // Lightning: /r/Object/{ID}/view or /r/Object/{ID}/edit
+                if (url.includes('/r/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning: /lightning/r/sObject/{ID}/view
+                if (url.includes('/lightning/r/sObject/')) {
+                    const match = url.match(/\/lightning\/r\/sObject\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning related list: /lightning/r/Object/{ID}/related/...
+                if (url.includes('/related/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})\/related/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Classic URL: /{ID} at the end of path
+                const classicMatch = url.match(/salesforce\.com\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
+                if (classicMatch && classicMatch[1]) {
+                    return classicMatch[1];
+                }
+
+                // Query param ?id=
+                const urlObj = new URL(url);
+                const idParam = urlObj.searchParams.get('id');
+                if (idParam && (idParam.length === 15 || idParam.length === 18) && /^[a-zA-Z0-9]+$/.test(idParam)) {
+                    return idParam;
+                }
+
+                // recordId query param
+                const recordIdParam = urlObj.searchParams.get('recordId');
+                if (recordIdParam && (recordIdParam.length === 15 || recordIdParam.length === 18) && /^[a-zA-Z0-9]+$/.test(recordIdParam)) {
+                    return recordIdParam;
+                }
+
+                // Generic pattern match
+                const idPattern = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
+                const matches = url.match(idPattern);
+                if (matches) {
+                    for (const m of matches) {
+                        if (/^[0-9]{3}|^[a-zA-Z][0-9]{2}|^[a-z]{3}/.test(m)) {
+                            return m;
+                        }
+                    }
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        };
+
+        test('should extract ID from Lightning record URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning with custom object', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Custom_Object__c/a0B5g000001ABCD/view';
+            expect(extractRecordIdFromUrl(url)).toBe('a0B5g000001ABCD');
+        });
+
+        test('should extract ID from Lightning edit URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/edit';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning related list URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/related/Contacts/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from sObject URL pattern', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/sObject/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?id=0015g000001ABCdEFG&retURL=/';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from recordId query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?recordId=0015g000001ABCdEFG&mode=view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract 15-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345');
+        });
+
+        test('should extract 18-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345AAA';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345AAA');
+        });
+
+        test('should return null for home page', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/page/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should return null for setup pages', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/setup/ObjectManager/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should handle malformed URLs gracefully', () => {
+            expect(extractRecordIdFromUrl('not-a-url')).toBeNull();
+            expect(extractRecordIdFromUrl('')).toBeNull();
+        });
+    });
+
+    describe('Object Type Identification', () => {
+
+        test('should identify object type from key prefix', () => {
+            const keyPrefixMap = {
+                '001': 'Account',
+                '003': 'Contact',
+                '006': 'Opportunity',
+                '00Q': 'Lead',
+                '500': 'Case',
+                '00T': 'Task',
+                '00U': 'Event'
+            };
+
+            const getObjectType = (recordId) => {
+                if (!recordId || recordId.length < 3) return 'Unknown';
+                const prefix = recordId.substring(0, 3);
+                return keyPrefixMap[prefix] || 'Custom Object';
+            };
+
+            expect(getObjectType('0015g000001ABCD')).toBe('Account');
+            expect(getObjectType('0035g000001ABCD')).toBe('Contact');
+            expect(getObjectType('a0B5g000001ABCD')).toBe('Custom Object');
+        });
+    });
+});
+
+describe('Organization Info Display Tests', () => {
+
+    describe('Org Type Detection', () => {
+
+        test('should identify sandbox org', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            expect(org.IsSandbox).toBe(true);
+        });
+
+        test('should identify production org', () => {
+            const org = { IsSandbox: false, OrganizationType: 'Enterprise Edition' };
+            expect(org.IsSandbox).toBe(false);
+        });
+
+        test('should format org type with sandbox indicator', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            const displayType = org.IsSandbox
+                ? `${org.OrganizationType} (Sandbox)`
+                : org.OrganizationType;
+            expect(displayType).toBe('Developer Edition (Sandbox)');
+        });
+    });
+
+    describe('Instance Name Display', () => {
+
+        test('should display instance name', () => {
+            const org = { InstanceName: 'NA123' };
+            expect(org.InstanceName).toBe('NA123');
+        });
+
+        test('should handle missing instance name', () => {
+            const org = { InstanceName: null };
+            const displayValue = org.InstanceName || '-';
+            expect(displayValue).toBe('-');
+        });
+    });
+
+    describe('Trial Expiration Display', () => {
+
+        test('should show trial expiration for trial orgs', () => {
+            const org = { TrialExpirationDate: '2026-03-01T00:00:00.000Z' };
+            expect(org.TrialExpirationDate).toBeDefined();
+        });
+
+        test('should not show trial expiration for non-trial orgs', () => {
+            const org = { TrialExpirationDate: null };
+            const hasTrialExpiration = !!org.TrialExpirationDate;
+            expect(hasTrialExpiration).toBe(false);
+        });
+
+        test('should format trial expiration date', () => {
+            const dateStr = '2026-03-01T00:00:00.000Z';
+            const formatted = new Date(dateStr).toLocaleDateString();
+            expect(formatted).toBeDefined();
+        });
+    });
+});
+
+describe('Favicon Status Messages', () => {
+
+    describe('Success Messages', () => {
+
+        test('should show saved & applied message', () => {
+            const message = 'Favicon saved & applied!';
+            const type = 'success';
+            expect(message).toContain('saved');
+            expect(type).toBe('success');
+        });
+
+        test('should show pending application message', () => {
+            const message = 'Favicon saved! Will apply when you visit this org.';
+            expect(message).toContain('Will apply');
+        });
+
+        test('should show removal confirmation', () => {
+            const orgName = 'Dev Sandbox';
+            const message = `Favicon removed for ${orgName}`;
+            expect(message).toContain('removed');
+            expect(message).toContain(orgName);
+        });
+    });
+
+    describe('Error Messages', () => {
+
+        test('should show org detection error', () => {
+            const message = 'Could not determine current org. Please refresh.';
+            expect(message).toContain('Could not');
+        });
+
+        test('should format error with details', () => {
+            const error = new Error('Storage quota exceeded');
+            const message = 'Error: ' + error.message;
+            expect(message).toBe('Error: Storage quota exceeded');
+        });
+    });
+
+    describe('Status Display Behavior', () => {
+
+        test('should auto-hide status after timeout', () => {
+            jest.useFakeTimers();
+            let hidden = false;
+            const hideStatus = () => { hidden = true; };
+
+            setTimeout(hideStatus, 4000);
+            expect(hidden).toBe(false);
+
+            jest.advanceTimersByTime(4000);
+            expect(hidden).toBe(true);
+
+            jest.useRealTimers();
+        });
+    });
+});
+
+describe('Chrome Storage Edge Cases', () => {
+
+    describe('Storage Quota Handling', () => {
+
+        test('should handle storage quota exceeded', async () => {
+            // Simulate storage failure
+            chrome.storage.local.set.mockImplementationOnce(() =>
+                Promise.reject(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'))
+            );
+
+            let errorCaught = false;
+            try {
+                await chrome.storage.local.set({ orgFavicons: {} });
+            } catch (e) {
+                errorCaught = true;
+                expect(e.message).toContain('quota');
+            }
+            expect(errorCaught).toBe(true);
+        });
+    });
+
+    describe('Concurrent Storage Access', () => {
+
+        test('should handle concurrent reads', async () => {
+            mockStorage.orgFavicons = { '00D1': { color: '#ff6b6b' } };
+
+            const [result1, result2] = await Promise.all([
+                chrome.storage.local.get('orgFavicons'),
+                chrome.storage.local.get('orgFavicons')
+            ]);
+
+            expect(result1.orgFavicons).toEqual(result2.orgFavicons);
+        });
+    });
+
+    describe('Storage Data Integrity', () => {
+
+        test('should preserve data structure on read/write cycle', async () => {
+            const originalData = {
+                '00D5g0000012345AAA': {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    shape: 'hexagon',
+                    orgName: 'Test Org',
+                    hostname: 'test.salesforce.com',
+                    savedAt: '2026-02-07T00:00:00.000Z'
+                }
+            };
+
+            await chrome.storage.local.set({ orgFavicons: originalData });
+            const result = await chrome.storage.local.get('orgFavicons');
+
+            expect(result.orgFavicons).toEqual(originalData);
+        });
+    });
+});
+
+// ==========================================
+// RECORD LOOKUP MERGED FEATURE TESTS
+// ==========================================
+
+describe('Record Lookup Merged Feature Tests', () => {
+
+    describe('Record ID Validation', () => {
+
+        const isValidRecordId = (id) => {
+            if (!id || typeof id !== 'string') return false;
+            if (id.length !== 15 && id.length !== 18) return false;
+            return /^[a-zA-Z0-9]+$/.test(id);
+        };
+
+        test('should accept valid 15-character ID', () => {
+            expect(isValidRecordId('0015g0000012345')).toBe(true);
+            expect(isValidRecordId('001ABCDEFGHIJKL')).toBe(true);
+        });
+
+        test('should accept valid 18-character ID', () => {
+            expect(isValidRecordId('0015g0000012345AAA')).toBe(true);
+            expect(isValidRecordId('001ABCDEFGHIJKLMNO')).toBe(true);
+        });
+
+        test('should reject invalid IDs', () => {
+            expect(isValidRecordId('')).toBe(false);
+            expect(isValidRecordId(null)).toBe(false);
+            expect(isValidRecordId(undefined)).toBe(false);
+            expect(isValidRecordId('12345')).toBe(false);
+            expect(isValidRecordId('0015g00000123456789012')).toBe(false);
+            expect(isValidRecordId('001-5g00-0012345')).toBe(false);
+            expect(isValidRecordId('001!@#$%^&*()abc')).toBe(false);
+        });
+    });
+
+    describe('URL Record ID Extraction', () => {
+
+        const extractRecordIdFromUrl = (url) => {
+            try {
+                // Lightning: /r/Object/{ID}/view or /r/Object/{ID}/edit
+                if (url.includes('/r/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning: /lightning/r/sObject/{ID}/view
+                if (url.includes('/lightning/r/sObject/')) {
+                    const match = url.match(/\/lightning\/r\/sObject\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning related list: /lightning/r/Object/{ID}/related/...
+                if (url.includes('/related/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})\/related/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Classic URL: /{ID} at the end of path
+                const classicMatch = url.match(/salesforce\.com\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
+                if (classicMatch && classicMatch[1]) {
+                    return classicMatch[1];
+                }
+
+                // Query param ?id=
+                const urlObj = new URL(url);
+                const idParam = urlObj.searchParams.get('id');
+                if (idParam && (idParam.length === 15 || idParam.length === 18) && /^[a-zA-Z0-9]+$/.test(idParam)) {
+                    return idParam;
+                }
+
+                // recordId query param
+                const recordIdParam = urlObj.searchParams.get('recordId');
+                if (recordIdParam && (recordIdParam.length === 15 || recordIdParam.length === 18) && /^[a-zA-Z0-9]+$/.test(recordIdParam)) {
+                    return recordIdParam;
+                }
+
+                // Generic pattern match
+                const idPattern = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
+                const matches = url.match(idPattern);
+                if (matches) {
+                    for (const m of matches) {
+                        if (/^[0-9]{3}|^[a-zA-Z][0-9]{2}|^[a-z]{3}/.test(m)) {
+                            return m;
+                        }
+                    }
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        };
+
+        test('should extract ID from Lightning record URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning with custom object', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Custom_Object__c/a0B5g000001ABCD/view';
+            expect(extractRecordIdFromUrl(url)).toBe('a0B5g000001ABCD');
+        });
+
+        test('should extract ID from Lightning edit URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/edit';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning related list URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/related/Contacts/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from sObject URL pattern', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/sObject/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?id=0015g000001ABCdEFG&retURL=/';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from recordId query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?recordId=0015g000001ABCdEFG&mode=view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract 15-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345');
+        });
+
+        test('should extract 18-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345AAA';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345AAA');
+        });
+
+        test('should return null for home page', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/page/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should return null for setup pages', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/setup/ObjectManager/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should handle malformed URLs gracefully', () => {
+            expect(extractRecordIdFromUrl('not-a-url')).toBeNull();
+            expect(extractRecordIdFromUrl('')).toBeNull();
+        });
+    });
+
+    describe('Object Type Identification', () => {
+
+        test('should identify object type from key prefix', () => {
+            const keyPrefixMap = {
+                '001': 'Account',
+                '003': 'Contact',
+                '006': 'Opportunity',
+                '00Q': 'Lead',
+                '500': 'Case',
+                '00T': 'Task',
+                '00U': 'Event'
+            };
+
+            const getObjectType = (recordId) => {
+                if (!recordId || recordId.length < 3) return 'Unknown';
+                const prefix = recordId.substring(0, 3);
+                return keyPrefixMap[prefix] || 'Custom Object';
+            };
+
+            expect(getObjectType('0015g000001ABCD')).toBe('Account');
+            expect(getObjectType('0035g000001ABCD')).toBe('Contact');
+            expect(getObjectType('a0B5g000001ABCD')).toBe('Custom Object');
+        });
+    });
+});
+
+describe('Organization Info Display Tests', () => {
+
+    describe('Org Type Detection', () => {
+
+        test('should identify sandbox org', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            expect(org.IsSandbox).toBe(true);
+        });
+
+        test('should identify production org', () => {
+            const org = { IsSandbox: false, OrganizationType: 'Enterprise Edition' };
+            expect(org.IsSandbox).toBe(false);
+        });
+
+        test('should format org type with sandbox indicator', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            const displayType = org.IsSandbox
+                ? `${org.OrganizationType} (Sandbox)`
+                : org.OrganizationType;
+            expect(displayType).toBe('Developer Edition (Sandbox)');
+        });
+    });
+
+    describe('Instance Name Display', () => {
+
+        test('should display instance name', () => {
+            const org = { InstanceName: 'NA123' };
+            expect(org.InstanceName).toBe('NA123');
+        });
+
+        test('should handle missing instance name', () => {
+            const org = { InstanceName: null };
+            const displayValue = org.InstanceName || '-';
+            expect(displayValue).toBe('-');
+        });
+    });
+
+    describe('Trial Expiration Display', () => {
+
+        test('should show trial expiration for trial orgs', () => {
+            const org = { TrialExpirationDate: '2026-03-01T00:00:00.000Z' };
+            expect(org.TrialExpirationDate).toBeDefined();
+        });
+
+        test('should not show trial expiration for non-trial orgs', () => {
+            const org = { TrialExpirationDate: null };
+            const hasTrialExpiration = !!org.TrialExpirationDate;
+            expect(hasTrialExpiration).toBe(false);
+        });
+
+        test('should format trial expiration date', () => {
+            const dateStr = '2026-03-01T00:00:00.000Z';
+            const formatted = new Date(dateStr).toLocaleDateString();
+            expect(formatted).toBeDefined();
+        });
+    });
+});
+
+describe('Favicon Status Messages', () => {
+
+    describe('Success Messages', () => {
+
+        test('should show saved & applied message', () => {
+            const message = 'Favicon saved & applied!';
+            const type = 'success';
+            expect(message).toContain('saved');
+            expect(type).toBe('success');
+        });
+
+        test('should show pending application message', () => {
+            const message = 'Favicon saved! Will apply when you visit this org.';
+            expect(message).toContain('Will apply');
+        });
+
+        test('should show removal confirmation', () => {
+            const orgName = 'Dev Sandbox';
+            const message = `Favicon removed for ${orgName}`;
+            expect(message).toContain('removed');
+            expect(message).toContain(orgName);
+        });
+    });
+
+    describe('Error Messages', () => {
+
+        test('should show org detection error', () => {
+            const message = 'Could not determine current org. Please refresh.';
+            expect(message).toContain('Could not');
+        });
+
+        test('should format error with details', () => {
+            const error = new Error('Storage quota exceeded');
+            const message = 'Error: ' + error.message;
+            expect(message).toBe('Error: Storage quota exceeded');
+        });
+    });
+
+    describe('Status Display Behavior', () => {
+
+        test('should auto-hide status after timeout', () => {
+            jest.useFakeTimers();
+            let hidden = false;
+            const hideStatus = () => { hidden = true; };
+
+            setTimeout(hideStatus, 4000);
+            expect(hidden).toBe(false);
+
+            jest.advanceTimersByTime(4000);
+            expect(hidden).toBe(true);
+
+            jest.useRealTimers();
+        });
+    });
+});
+
+describe('Chrome Storage Edge Cases', () => {
+
+    describe('Storage Quota Handling', () => {
+
+        test('should handle storage quota exceeded', async () => {
+            // Simulate storage failure
+            chrome.storage.local.set.mockImplementationOnce(() =>
+                Promise.reject(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'))
+            );
+
+            let errorCaught = false;
+            try {
+                await chrome.storage.local.set({ orgFavicons: {} });
+            } catch (e) {
+                errorCaught = true;
+                expect(e.message).toContain('quota');
+            }
+            expect(errorCaught).toBe(true);
+        });
+    });
+
+    describe('Concurrent Storage Access', () => {
+
+        test('should handle concurrent reads', async () => {
+            mockStorage.orgFavicons = { '00D1': { color: '#ff6b6b' } };
+
+            const [result1, result2] = await Promise.all([
+                chrome.storage.local.get('orgFavicons'),
+                chrome.storage.local.get('orgFavicons')
+            ]);
+
+            expect(result1.orgFavicons).toEqual(result2.orgFavicons);
+        });
+    });
+
+    describe('Storage Data Integrity', () => {
+
+        test('should preserve data structure on read/write cycle', async () => {
+            const originalData = {
+                '00D5g0000012345AAA': {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    shape: 'hexagon',
+                    orgName: 'Test Org',
+                    hostname: 'test.salesforce.com',
+                    savedAt: '2026-02-07T00:00:00.000Z'
+                }
+            };
+
+            await chrome.storage.local.set({ orgFavicons: originalData });
+            const result = await chrome.storage.local.get('orgFavicons');
+
+            expect(result.orgFavicons).toEqual(originalData);
+        });
+    });
+});
+
+// ==========================================
+// RECORD LOOKUP MERGED FEATURE TESTS
+// ==========================================
+
+describe('Record Lookup Merged Feature Tests', () => {
+
+    describe('Record ID Validation', () => {
+
+        const isValidRecordId = (id) => {
+            if (!id || typeof id !== 'string') return false;
+            if (id.length !== 15 && id.length !== 18) return false;
+            return /^[a-zA-Z0-9]+$/.test(id);
+        };
+
+        test('should accept valid 15-character ID', () => {
+            expect(isValidRecordId('0015g0000012345')).toBe(true);
+            expect(isValidRecordId('001ABCDEFGHIJKL')).toBe(true);
+        });
+
+        test('should accept valid 18-character ID', () => {
+            expect(isValidRecordId('0015g0000012345AAA')).toBe(true);
+            expect(isValidRecordId('001ABCDEFGHIJKLMNO')).toBe(true);
+        });
+
+        test('should reject invalid IDs', () => {
+            expect(isValidRecordId('')).toBe(false);
+            expect(isValidRecordId(null)).toBe(false);
+            expect(isValidRecordId(undefined)).toBe(false);
+            expect(isValidRecordId('12345')).toBe(false);
+            expect(isValidRecordId('0015g00000123456789012')).toBe(false);
+            expect(isValidRecordId('001-5g00-0012345')).toBe(false);
+            expect(isValidRecordId('001!@#$%^&*()abc')).toBe(false);
+        });
+    });
+
+    describe('URL Record ID Extraction', () => {
+
+        const extractRecordIdFromUrl = (url) => {
+            try {
+                // Lightning: /r/Object/{ID}/view or /r/Object/{ID}/edit
+                if (url.includes('/r/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning: /lightning/r/sObject/{ID}/view
+                if (url.includes('/lightning/r/sObject/')) {
+                    const match = url.match(/\/lightning\/r\/sObject\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Lightning related list: /lightning/r/Object/{ID}/related/...
+                if (url.includes('/related/')) {
+                    const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})\/related/);
+                    if (match && match[1]) {
+                        return match[1];
+                    }
+                }
+
+                // Classic URL: /{ID} at the end of path
+                const classicMatch = url.match(/salesforce\.com\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
+                if (classicMatch && classicMatch[1]) {
+                    return classicMatch[1];
+                }
+
+                // Query param ?id=
+                const urlObj = new URL(url);
+                const idParam = urlObj.searchParams.get('id');
+                if (idParam && (idParam.length === 15 || idParam.length === 18) && /^[a-zA-Z0-9]+$/.test(idParam)) {
+                    return idParam;
+                }
+
+                // recordId query param
+                const recordIdParam = urlObj.searchParams.get('recordId');
+                if (recordIdParam && (recordIdParam.length === 15 || recordIdParam.length === 18) && /^[a-zA-Z0-9]+$/.test(recordIdParam)) {
+                    return recordIdParam;
+                }
+
+                // Generic pattern match
+                const idPattern = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
+                const matches = url.match(idPattern);
+                if (matches) {
+                    for (const m of matches) {
+                        if (/^[0-9]{3}|^[a-zA-Z][0-9]{2}|^[a-z]{3}/.test(m)) {
+                            return m;
+                        }
+                    }
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        };
+
+        test('should extract ID from Lightning record URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning with custom object', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Custom_Object__c/a0B5g000001ABCD/view';
+            expect(extractRecordIdFromUrl(url)).toBe('a0B5g000001ABCD');
+        });
+
+        test('should extract ID from Lightning edit URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/edit';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from Lightning related list URL', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/Account/0015g000001ABCdEFG/related/Contacts/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from sObject URL pattern', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/r/sObject/0015g000001ABCdEFG/view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?id=0015g000001ABCdEFG&retURL=/';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract ID from recordId query parameter', () => {
+            const url = 'https://myorg.salesforce.com/apex/page?recordId=0015g000001ABCdEFG&mode=view';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g000001ABCdEFG');
+        });
+
+        test('should extract 15-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345');
+        });
+
+        test('should extract 18-char ID from Classic URL', () => {
+            const url = 'https://myorg.salesforce.com/0015g0000012345AAA';
+            expect(extractRecordIdFromUrl(url)).toBe('0015g0000012345AAA');
+        });
+
+        test('should return null for home page', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/page/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should return null for setup pages', () => {
+            const url = 'https://myorg.lightning.force.com/lightning/setup/ObjectManager/home';
+            expect(extractRecordIdFromUrl(url)).toBeNull();
+        });
+
+        test('should handle malformed URLs gracefully', () => {
+            expect(extractRecordIdFromUrl('not-a-url')).toBeNull();
+            expect(extractRecordIdFromUrl('')).toBeNull();
+        });
+    });
+
+    describe('Object Type Identification', () => {
+
+        test('should identify object type from key prefix', () => {
+            const keyPrefixMap = {
+                '001': 'Account',
+                '003': 'Contact',
+                '006': 'Opportunity',
+                '00Q': 'Lead',
+                '500': 'Case',
+                '00T': 'Task',
+                '00U': 'Event'
+            };
+
+            const getObjectType = (recordId) => {
+                if (!recordId || recordId.length < 3) return 'Unknown';
+                const prefix = recordId.substring(0, 3);
+                return keyPrefixMap[prefix] || 'Custom Object';
+            };
+
+            expect(getObjectType('0015g000001ABCD')).toBe('Account');
+            expect(getObjectType('0035g000001ABCD')).toBe('Contact');
+            expect(getObjectType('a0B5g000001ABCD')).toBe('Custom Object');
+        });
+    });
+});
+
+describe('Organization Info Display Tests', () => {
+
+    describe('Org Type Detection', () => {
+
+        test('should identify sandbox org', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            expect(org.IsSandbox).toBe(true);
+        });
+
+        test('should identify production org', () => {
+            const org = { IsSandbox: false, OrganizationType: 'Enterprise Edition' };
+            expect(org.IsSandbox).toBe(false);
+        });
+
+        test('should format org type with sandbox indicator', () => {
+            const org = { IsSandbox: true, OrganizationType: 'Developer Edition' };
+            const displayType = org.IsSandbox
+                ? `${org.OrganizationType} (Sandbox)`
+                : org.OrganizationType;
+            expect(displayType).toBe('Developer Edition (Sandbox)');
+        });
+    });
+
+    describe('Instance Name Display', () => {
+
+        test('should display instance name', () => {
+            const org = { InstanceName: 'NA123' };
+            expect(org.InstanceName).toBe('NA123');
+        });
+
+        test('should handle missing instance name', () => {
+            const org = { InstanceName: null };
+            const displayValue = org.InstanceName || '-';
+            expect(displayValue).toBe('-');
+        });
+    });
+
+    describe('Trial Expiration Display', () => {
+
+        test('should show trial expiration for trial orgs', () => {
+            const org = { TrialExpirationDate: '2026-03-01T00:00:00.000Z' };
+            expect(org.TrialExpirationDate).toBeDefined();
+        });
+
+        test('should not show trial expiration for non-trial orgs', () => {
+            const org = { TrialExpirationDate: null };
+            const hasTrialExpiration = !!org.TrialExpirationDate;
+            expect(hasTrialExpiration).toBe(false);
+        });
+
+        test('should format trial expiration date', () => {
+            const dateStr = '2026-03-01T00:00:00.000Z';
+            const formatted = new Date(dateStr).toLocaleDateString();
+            expect(formatted).toBeDefined();
+        });
+    });
+});
+
+describe('Favicon Status Messages', () => {
+
+    describe('Success Messages', () => {
+
+        test('should show saved & applied message', () => {
+            const message = 'Favicon saved & applied!';
+            const type = 'success';
+            expect(message).toContain('saved');
+            expect(type).toBe('success');
+        });
+
+        test('should show pending application message', () => {
+            const message = 'Favicon saved! Will apply when you visit this org.';
+            expect(message).toContain('Will apply');
+        });
+
+        test('should show removal confirmation', () => {
+            const orgName = 'Dev Sandbox';
+            const message = `Favicon removed for ${orgName}`;
+            expect(message).toContain('removed');
+            expect(message).toContain(orgName);
+        });
+    });
+
+    describe('Error Messages', () => {
+
+        test('should show org detection error', () => {
+            const message = 'Could not determine current org. Please refresh.';
+            expect(message).toContain('Could not');
+        });
+
+        test('should format error with details', () => {
+            const error = new Error('Storage quota exceeded');
+            const message = 'Error: ' + error.message;
+            expect(message).toBe('Error: Storage quota exceeded');
+        });
+    });
+
+    describe('Status Display Behavior', () => {
+
+        test('should auto-hide status after timeout', () => {
+            jest.useFakeTimers();
+            let hidden = false;
+            const hideStatus = () => { hidden = true; };
+
+            setTimeout(hideStatus, 4000);
+            expect(hidden).toBe(false);
+
+            jest.advanceTimersByTime(4000);
+            expect(hidden).toBe(true);
+
+            jest.useRealTimers();
+        });
+    });
+});
+
+describe('Chrome Storage Edge Cases', () => {
+
+    describe('Storage Quota Handling', () => {
+
+        test('should handle storage quota exceeded', async () => {
+            // Simulate storage failure
+            chrome.storage.local.set.mockImplementationOnce(() =>
+                Promise.reject(new Error('QUOTA_BYTES_PER_ITEM quota exceeded'))
+            );
+
+            let errorCaught = false;
+            try {
+                await chrome.storage.local.set({ orgFavicons: {} });
+            } catch (e) {
+                errorCaught = true;
+                expect(e.message).toContain('quota');
+            }
+            expect(errorCaught).toBe(true);
+        });
+    });
+
+    describe('Concurrent Storage Access', () => {
+
+        test('should handle concurrent reads', async () => {
+            mockStorage.orgFavicons = { '00D1': { color: '#ff6b6b' } };
+
+            const [result1, result2] = await Promise.all([
+                chrome.storage.local.get('orgFavicons'),
+                chrome.storage.local.get('orgFavicons')
+            ]);
+
+            expect(result1.orgFavicons).toEqual(result2.orgFavicons);
+        });
+    });
+
+    describe('Storage Data Integrity', () => {
+
+        test('should preserve data structure on read/write cycle', async () => {
+            const originalData = {
+                '00D5g0000012345AAA': {
+                    color: '#ff6b6b',
+                    label: 'DEV',
+                    shape: 'hexagon',
+                    orgName: 'Test Org',
+                    hostname: 'test.salesforce.com',
+                    savedAt: '2026-02-07T00:00:00.000Z'
+                }
+            };
+
+            await chrome.storage.local.set({ orgFavicons: originalData });
+            const result = await chrome.storage.local.get('orgFavicons');
+
+            expect(result.orgFavicons).toEqual(originalData);
+        });
+    });
+});
+
+// ==========================================
+// ERROR HANDLING TESTS
+// ==========================================
+
+describe('Error Handling Tests', () => {
+
+    describe('Error Message Extraction', () => {
+
+        const extractErrorMessage = (e) => {
+            let errorMessage = 'Unable to fetch record details';
+
+            try {
+                if (e) {
+                    if (typeof e === 'string') {
+                        errorMessage = e;
+                    } else if (e instanceof Error) {
+                        errorMessage = e.message || e.toString() || 'Unknown error';
+                    } else if (typeof e.message === 'string' && e.message.length > 0) {
+                        errorMessage = e.message;
+                    } else if (typeof e.error === 'string' && e.error.length > 0) {
+                        errorMessage = e.error;
+                    } else if (e.errorCode) {
+                        errorMessage = (typeof e.errorMessage === 'string' ? e.errorMessage : null) || e.errorCode;
+                    } else if (e.body && typeof e.body.message === 'string') {
+                        errorMessage = e.body.message;
+                    } else if (typeof e.statusText === 'string') {
+                        errorMessage = e.statusText;
+                    } else if (Array.isArray(e) && e[0] && typeof e[0].message === 'string') {
+                        errorMessage = e[0].message;
+                    }
+                }
+            } catch (extractErr) {
+                errorMessage = 'Unable to fetch record details';
+            }
+
+            if (typeof errorMessage !== 'string' || !errorMessage) {
+                errorMessage = 'Unable to fetch record details';
+            }
+
+            return errorMessage;
+        };
+
+        test('should handle string error', () => {
+            const result = extractErrorMessage('Simple error message');
+            expect(result).toBe('Simple error message');
+        });
+
+        test('should handle Error object', () => {
+            const result = extractErrorMessage(new Error('Error object message'));
+            expect(result).toBe('Error object message');
+        });
+
+        test('should handle Error object without message', () => {
+            const error = new Error();
+            const result = extractErrorMessage(error);
+            expect(result).toBeTruthy();
+        });
+
+        test('should handle object with message property', () => {
+            const result = extractErrorMessage({ message: 'Object message' });
+            expect(result).toBe('Object message');
+        });
+
+        test('should handle object with error property', () => {
+            const result = extractErrorMessage({ error: 'Error property value' });
+            expect(result).toBe('Error property value');
+        });
+
+        test('should handle Salesforce error format with errorCode', () => {
+            const result = extractErrorMessage({ errorCode: 'INSUFFICIENT_ACCESS', errorMessage: 'Access denied' });
+            expect(result).toBe('Access denied');
+        });
+
+        test('should handle Salesforce error format with only errorCode', () => {
+            const result = extractErrorMessage({ errorCode: 'NOT_FOUND' });
+            expect(result).toBe('NOT_FOUND');
+        });
+
+        test('should handle body.message format', () => {
+            const result = extractErrorMessage({ body: { message: 'Body message' } });
+            expect(result).toBe('Body message');
+        });
+
+        test('should handle statusText format', () => {
+            const result = extractErrorMessage({ statusText: 'Not Found' });
+            expect(result).toBe('Not Found');
+        });
+
+        test('should handle array format', () => {
+            const result = extractErrorMessage([{ message: 'Array error message' }]);
+            expect(result).toBe('Array error message');
+        });
+
+        test('should handle null', () => {
+            const result = extractErrorMessage(null);
+            expect(result).toBe('Unable to fetch record details');
+        });
+
+        test('should handle undefined', () => {
+            const result = extractErrorMessage(undefined);
+            expect(result).toBe('Unable to fetch record details');
+        });
+
+        test('should handle empty object', () => {
+            const result = extractErrorMessage({});
+            expect(result).toBe('Unable to fetch record details');
+        });
+
+        test('should handle non-string message property', () => {
+            const result = extractErrorMessage({ message: 123 });
+            expect(result).toBe('Unable to fetch record details');
+        });
+
+        test('should handle empty string message', () => {
+            const result = extractErrorMessage({ message: '' });
+            expect(result).toBe('Unable to fetch record details');
+        });
+    });
+
+    describe('User-Friendly Error Messages', () => {
+
+        const makeUserFriendly = (errorMessage) => {
+            if (typeof errorMessage !== 'string' || !errorMessage) {
+                return 'Unable to fetch record details';
+            }
+
+            const lowerMsg = errorMessage.toLowerCase();
+            if (lowerMsg.includes('not connected')) {
+                return 'Not connected to Salesforce. Please ensure you have an active Salesforce tab open and you are logged in.';
+            } else if (lowerMsg.includes('unauthorized') || lowerMsg.includes('401') || lowerMsg.includes('403')) {
+                return 'Access denied. You may not have permission to view this record.';
+            } else if (lowerMsg.includes('404') || lowerMsg.includes('not found')) {
+                return 'Record not found. The record may have been deleted or the ID is incorrect.';
+            } else if (lowerMsg.includes('invalid_session') || lowerMsg.includes('session expired')) {
+                return 'Session expired. Please refresh your Salesforce tab and try again.';
+            } else if (lowerMsg.includes('insufficient_access') || lowerMsg.includes('insufficient access')) {
+                return 'Insufficient access. You do not have permission to view this record.';
+            }
+            return errorMessage;
+        };
+
+        test('should handle "Not connected" error', () => {
+            const result = makeUserFriendly('Not connected');
+            expect(result).toContain('Not connected to Salesforce');
+        });
+
+        test('should handle 401 error', () => {
+            const result = makeUserFriendly('Error 401: Unauthorized');
+            expect(result).toContain('Access denied');
+        });
+
+        test('should handle 403 error', () => {
+            const result = makeUserFriendly('Error 403: Forbidden');
+            expect(result).toContain('Access denied');
+        });
+
+        test('should handle 404 error', () => {
+            const result = makeUserFriendly('Error 404: Not Found');
+            expect(result).toContain('Record not found');
+        });
+
+        test('should handle INVALID_SESSION error', () => {
+            const result = makeUserFriendly('INVALID_SESSION_ID');
+            expect(result).toContain('Session expired');
+        });
+
+        test('should handle insufficient access error', () => {
+            const result = makeUserFriendly('INSUFFICIENT_ACCESS_ON_CROSS_REFERENCE_ENTITY');
+            expect(result).toContain('Insufficient access');
+        });
+
+        test('should pass through unknown errors unchanged', () => {
+            const result = makeUserFriendly('Some random error');
+            expect(result).toBe('Some random error');
+        });
+
+        test('should handle non-string input', () => {
+            const result = makeUserFriendly(123);
+            expect(result).toBe('Unable to fetch record details');
+        });
+    });
+});
+
+// ==========================================
+// VERTICAL HISTORY ITEM TESTS
+// ==========================================
+
+describe('Vertical History Item Tests', () => {
+
+    describe('History Item Display', () => {
+
+        test('should format history item with display name', () => {
+            const record = {
+                recordId: '001ABC123DEF456',
+                objectName: 'Account',
+                displayName: 'Acme Corporation',
+                timestamp: Date.now()
+            };
+
+            const displayName = record.displayName || record.recordId.substring(0, 10) + '...';
+            expect(displayName).toBe('Acme Corporation');
+        });
+
+        test('should use truncated ID when no display name', () => {
+            const record = {
+                recordId: '001ABC123DEF456',
+                objectName: 'Account',
+                displayName: '',
+                timestamp: Date.now()
+            };
+
+            const displayName = record.displayName || record.recordId.substring(0, 10) + '...';
+            expect(displayName).toBe('001ABC123D...');
+        });
+
+        test('should format time ago correctly', () => {
+            const getTimeAgo = (timestamp) => {
+                const seconds = Math.floor((Date.now() - timestamp) / 1000);
+                if (seconds < 60) return 'Just now';
+                const minutes = Math.floor(seconds / 60);
+                if (minutes < 60) return `${minutes}m ago`;
+                const hours = Math.floor(minutes / 60);
+                if (hours < 24) return `${hours}h ago`;
+                const days = Math.floor(hours / 24);
+                return `${days}d ago`;
+            };
+
+            expect(getTimeAgo(Date.now())).toBe('Just now');
+            expect(getTimeAgo(Date.now() - 60000)).toBe('1m ago');
+            expect(getTimeAgo(Date.now() - 3600000)).toBe('1h ago');
+            expect(getTimeAgo(Date.now() - 86400000)).toBe('1d ago');
+        });
+    });
+
+    describe('History Selection', () => {
+
+        test('should track selected record ID', () => {
+            let selectedId = null;
+            const records = [
+                { recordId: '001ABC' },
+                { recordId: '003DEF' },
+                { recordId: '006GHI' }
+            ];
+
+            // Simulate selection
+            selectedId = records[1].recordId;
+            expect(selectedId).toBe('003DEF');
+
+            // Simulate another selection
+            selectedId = records[0].recordId;
+            expect(selectedId).toBe('001ABC');
+        });
+
+        test('should update search input on selection', () => {
+            const mockInput = { value: '' };
+            const recordId = '001ABC123';
+
+            mockInput.value = recordId;
+            expect(mockInput.value).toBe('001ABC123');
+        });
+    });
+
+    describe('SOQL Fallback for Record Lookup', () => {
+        describe('Key Prefix Mapping', () => {
+            const keyPrefixMap = {
+                '001': 'Account',
+                '003': 'Contact',
+                '006': 'Opportunity',
+                '00Q': 'Lead',
+                '500': 'Case',
+                '005': 'User',
+                '00D': 'Organization',
+                '00T': 'Task',
+                '00U': 'Event',
+                '701': 'Campaign'
+            };
+
+            test('should map 001 prefix to Account', () => {
+                expect(keyPrefixMap['001']).toBe('Account');
+            });
+
+            test('should map 003 prefix to Contact', () => {
+                expect(keyPrefixMap['003']).toBe('Contact');
+            });
+
+            test('should map 500 prefix to Case', () => {
+                expect(keyPrefixMap['500']).toBe('Case');
+            });
+
+            test('should map 00Q prefix to Lead', () => {
+                expect(keyPrefixMap['00Q']).toBe('Lead');
+            });
+
+            test('should map 005 prefix to User', () => {
+                expect(keyPrefixMap['005']).toBe('User');
+            });
+        });
+
+        describe('SOQL Fallback Response Format', () => {
+            test('should convert SOQL response to compatible format', () => {
+                const soqlRecord = {
+                    Id: '001ABC123456789',
+                    Name: 'Test Account',
+                    CreatedById: '005XYZ',
+                    LastModifiedDate: '2024-01-15T10:30:00.000Z'
+                };
+
+                // Simulated conversion
+                const convertedResponse = {
+                    _objectName: 'Account',
+                    _fields: soqlRecord,
+                    _fromSoql: true
+                };
+
+                expect(convertedResponse._objectName).toBe('Account');
+                expect(convertedResponse._fields.Name).toBe('Test Account');
+                expect(convertedResponse._fromSoql).toBe(true);
+            });
+
+            test('should handle unknown key prefix gracefully', () => {
+                const unknownPrefixResponse = {
+                    _objectName: 'Unknown Object',
+                    _fields: {},
+                    _note: "Object type for key prefix 'xyz' not found."
+                };
+
+                expect(unknownPrefixResponse._objectName).toBe('Unknown Object');
+                expect(unknownPrefixResponse._note).toContain('not found');
+            });
+        });
+
+        describe('Field Value Extraction', () => {
+            test('should extract value from UI API format', () => {
+                const uiApiField = { value: 'Test Value' };
+                const extractedValue = uiApiField.value !== undefined ? uiApiField.value : uiApiField;
+                expect(extractedValue).toBe('Test Value');
+            });
+
+            test('should extract value from SOQL format (direct value)', () => {
+                const soqlField = 'Test Value';
+                const extractedValue = typeof soqlField === 'object' && soqlField.value !== undefined
+                    ? soqlField.value
+                    : soqlField;
+                expect(extractedValue).toBe('Test Value');
+            });
+
+            test('should handle null field values', () => {
+                const nullField = null;
+                const extractedValue = nullField ? (nullField.value !== undefined ? nullField.value : nullField) : null;
+                expect(extractedValue).toBeNull();
+            });
+
+            test('should handle undefined field values', () => {
+                const undefinedField = undefined;
+                const extractedValue = undefinedField ? (undefinedField.value !== undefined ? undefinedField.value : undefinedField) : undefined;
+                expect(extractedValue).toBeUndefined();
+            });
+        });
+
+        describe('404 Error Detection', () => {
+            test('should detect "not found" error', () => {
+                const errorMsg = 'Record not found'.toLowerCase();
+                const is404 = errorMsg.includes('not found') || errorMsg.includes('404');
+                expect(is404).toBe(true);
+            });
+
+            test('should detect 404 status code in error', () => {
+                const errorMsg = 'Error 404: Resource not available'.toLowerCase();
+                const is404 = errorMsg.includes('not found') || errorMsg.includes('404');
+                expect(is404).toBe(true);
+            });
+
+            test('should detect "does not support" error for UI API', () => {
+                const errorMsg = 'Object does not support UI API'.toLowerCase();
+                const isNotSupported = errorMsg.includes('does not support');
+                expect(isNotSupported).toBe(true);
+            });
+
+            test('should not trigger fallback for other errors', () => {
+                const errorMsg = 'Network timeout'.toLowerCase();
+                const shouldFallback = errorMsg.includes('not found') ||
+                                       errorMsg.includes('404') ||
+                                       errorMsg.includes('does not support');
+                expect(shouldFallback).toBe(false);
+            });
         });
     });
 });

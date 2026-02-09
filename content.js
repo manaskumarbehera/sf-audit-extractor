@@ -176,17 +176,33 @@
             }
         }
 
-        // Create canvas for favicon
-        const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
-        const ctx = canvas.getContext('2d');
+        try {
+            // Create canvas for favicon
+            const canvas = document.createElement('canvas');
 
-        // Draw the favicon shape with the specified color
-        drawFaviconShape(ctx, color || '#ff6b6b', label, shape || 'cloud');
+            // Defensive check: ensure canvas is valid
+            if (!canvas || typeof canvas.getContext !== 'function') {
+                console.error('[TrackForcePro] Canvas creation failed or getContext not available');
+                return;
+            }
 
-        // Apply the new favicon
-        applyFavicon(canvas.toDataURL('image/png'));
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+
+            if (!ctx) {
+                console.error('[TrackForcePro] Could not get 2D context from canvas');
+                return;
+            }
+
+            // Draw the favicon shape with the specified color
+            drawFaviconShape(ctx, color || '#ff6b6b', label, shape || 'cloud');
+
+            // Apply the new favicon
+            applyFavicon(canvas.toDataURL('image/png'));
+        } catch (e) {
+            console.error('[TrackForcePro] Error in updateFavicon:', e);
+        }
     }
 
     /**

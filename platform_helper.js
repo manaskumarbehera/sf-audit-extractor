@@ -2,7 +2,7 @@
   'use strict';
 
   const state = {
-    apiVersion: '66.0',
+    apiVersion: '63.0',
     platformEventsLoaded: false,
     peSubscriptions: new Set(),
     pePendingOps: new Set(),
@@ -23,7 +23,7 @@
     getSession: () => null,
     setSession: () => {},
     refreshSessionFromTab: async () => null,
-    apiVersion: '66.0'
+    apiVersion: '63.0'
   };
 
   let dom = {};
@@ -190,7 +190,7 @@
     state.cometdState = 'handshaking';
     updateCometdStatus(false, 'Handshaking...');
     const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
-    state.apiVersion = String(norm || '66.0');
+    state.apiVersion = String(norm || '63.0');
     state.cometdBaseUrl = getCometdBase();
 
     const body = [{
@@ -986,7 +986,7 @@
   function init(options){
     opts = { ...opts, ...options };
     const norm = Utils.normalizeApiVersion ? Utils.normalizeApiVersion(opts.apiVersion || state.apiVersion) : (opts.apiVersion || state.apiVersion);
-    state.apiVersion = String(norm || '66.0');
+    state.apiVersion = String(norm || '63.0');
     dom = {
       peRefreshBtn: document.getElementById('pe-refresh'),
       peListEl: document.getElementById('platform-events-list'),
@@ -1020,7 +1020,7 @@
   async function genericExecuteQuery(soql) {
     return await withAuthRetry(async () => {
       if (!ensureSession()) throw new Error('Not connected');
-      const apiVersion = state.apiVersion || '66.0';
+      const apiVersion = state.apiVersion || '63.0';
       const s = opts.getSession();
       const baseUrl = s.instanceUrl;
       const accessToken = Utils.getAccessToken(s);

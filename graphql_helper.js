@@ -1968,7 +1968,7 @@
       const bodyObj = { query, variables: JSON.parse(vars || '{}') };
       const bodySizeBytes = JSON.stringify(bodyObj).length;
 
-      endpointUrl.textContent = '/services/data/v66.0/graphql';
+      endpointUrl.textContent = '/services/data/v63.0/graphql';
       if (bodySize) bodySize.textContent = `${bodySizeBytes} bytes`;
     }
 

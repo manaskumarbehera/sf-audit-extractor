@@ -169,9 +169,9 @@
     }
 
     async function loadAndBindApiVersion() {
-        let selected = '66.0';
+        let selected = '63.0';
         try {
-            const res = await chrome.storage?.local?.get?.({ apiVersion: '66.0' });
+            const res = await chrome.storage?.local?.get?.({ apiVersion: '63.0' });
             if (res && res.apiVersion) selected = String(res.apiVersion);
         } catch { /* default */ }
         // Normalize and persist normalized API version
@@ -184,10 +184,10 @@
         } catch {}
         if (apiVersionSel) {
             const opts = Array.from(apiVersionSel.options).map(o => o.value);
-            apiVersionSel.value = opts.includes(selected) ? selected : '66.0';
+            apiVersionSel.value = opts.includes(selected) ? selected : '63.0';
             apiVersionSel.addEventListener('change', async () => {
-                const raw = apiVersionSel.value || '66.0';
-                const v = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(raw) || '66.0') : raw;
+                const raw = apiVersionSel.value || '63.0';
+                const v = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(raw) || '63.0') : raw;
                 try { await chrome.storage?.local?.set?.({ apiVersion: v }); } catch {}
                 // reflect normalized value in UI
                 apiVersionSel.value = v;
@@ -200,7 +200,7 @@
     function initPlatformHelper(apiVersion) {
         if (!window.PlatformHelper) return;
         try {
-            const norm = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(apiVersion || (apiVersionSel?.value || '66.0')) || '66.0') : (apiVersion || '66.0');
+            const norm = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(apiVersion || (apiVersionSel?.value || '63.0')) || '63.0') : (apiVersion || '63.0');
             const getSess = () => sessionInfo;
             window.PlatformHelper.init({
                 apiVersion: norm,
@@ -494,8 +494,8 @@
 
     async function fetchOrgName(instanceUrl, accessToken, apiVersion) {
         if (!instanceUrl || !accessToken) return null;
-        const raw = String(apiVersion || apiVersionSel?.value || '66.0');
-        const v = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(raw) || '66.0') : raw;
+        const raw = String(apiVersion || apiVersionSel?.value || '63.0');
+        const v = (window.Utils && Utils.normalizeApiVersion) ? (Utils.normalizeApiVersion(raw) || '63.0') : raw;
         // Query organization name (encoded). Kept minimal and not part of any removed feature.
         const orgQuery = encodeURIComponent(['SELECT', 'Name', 'FROM', 'Organization', 'LIMIT', '1'].join(' '));
         const url = `${instanceUrl}/services/data/v${v}/query?q=${orgQuery}`;

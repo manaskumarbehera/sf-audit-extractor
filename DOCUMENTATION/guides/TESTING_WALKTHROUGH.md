@@ -445,46 +445,48 @@ document.getElementById('graphql-screen-builder').classList
 5. Verify change in Salesforce
 ```
 
-### Test 11: Current Record Detection
+### Test 11: Record Lookup - Auto Detection
 
 #### Test 11.1: Lightning Record Page
 ```
 1. Navigate to Lightning record page:
    https://[org].lightning.force.com/lightning/r/Account/001xxx/view
-2. Open Extension → Explore → Current Record
-3. Verify auto-detection shows:
-   - Object type: Account
-   - Record ID
+2. Open Extension → Explore → Record Lookup
+3. Verify Current Page panel shows:
+   - Object badge: Account
+   - Record ID with copy button
    - Name field
    - Created By, Last Modified
+   - Open Record & Copy Link buttons
 ```
 
 #### Test 11.2: Classic URL with ID Parameter
 ```
 1. Navigate to URL with ?id= parameter:
    https://[org].salesforce.com/apex/MyPage?id=001xxx
-2. Open Extension → Current Record
-3. Verify Record ID extracted correctly
+2. Open Extension → Record Lookup
+3. Verify Record ID extracted in Current Page panel
 ```
 
 #### Test 11.3: No Record Context
 ```
 1. Navigate to home page (no record ID)
-2. Open Extension → Current Record
-3. Should show: "No Record ID detected in the current URL"
+2. Open Extension → Record Lookup
+3. Current Page panel should show: "No Record ID detected in the current URL"
 ```
 
-### Test 12: Record Search
+### Test 12: Record Lookup - Manual Search
 
 #### Test 12.1: Valid 18-Character ID
 ```
-1. Open Extension → Explore → Record Search
-2. Enter valid 18-char ID: 0015g00000ABCDEFGH
-3. Click Search
+1. Open Extension → Explore → Record Lookup
+2. In Search by ID panel, enter valid 18-char ID: 0015g00000ABCDEFGH
+3. Click Search button
 4. Verify result shows:
-   - Object type
-   - Record ID
+   - Object type badge
+   - Record ID with copy button
    - Name/identifier
+   - Action buttons
 ```
 
 #### Test 12.2: Valid 15-Character ID
@@ -508,9 +510,33 @@ document.getElementById('graphql-screen-builder').classList
 3. Should show message about record not found or permissions
 ```
 
-### Test 13: Connection Handling
+### Test 13: Record Lookup - History
 
-#### Test 13.1: Not Connected State
+#### Test 13.1: History Population
+```
+1. Search for a record in Search by ID panel
+2. Verify record appears in Recent Records panel
+3. Search for another record
+4. Verify both records appear (newest first)
+```
+
+#### Test 13.2: History Click
+```
+1. Click on a record in Recent Records panel
+2. Verify ID populates Search input
+3. Verify search is executed automatically
+```
+
+#### Test 13.3: Clear History
+```
+1. Click X button on Recent Records panel header
+2. Verify history is cleared
+3. Should show "No recent records"
+```
+
+### Test 14: Connection Handling
+
+#### Test 14.1: Not Connected State
 ```
 1. Close all Salesforce tabs
 2. Open Extension → Explore → Sandbox Manager

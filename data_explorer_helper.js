@@ -3,8 +3,7 @@
  * Logic for the Data Explorer tab with sub-tabs:
  * - Sandbox & Favicon Manager
  * - User Manager (current user, search, update profile/role/language)
- * - Current Record
- * - Record Search
+ * - Record Scanner (scan records, view field history, explore related records)
  */
 
 const DataExplorerHelper = {
@@ -16,6 +15,8 @@ const DataExplorerHelper = {
     _profiles: [],
     _roles: [],
     _languages: [],
+    _recordHistory: [],
+    _maxHistoryItems: 5,
 
     init: function() {
         if (this._initialized) return;
@@ -45,9 +46,13 @@ const DataExplorerHelper = {
         const faviconReset = document.getElementById('favicon-reset');
         const faviconShapeOptions = document.querySelectorAll('input[name="favicon-shape"]');
         const faviconOrgSelect = document.getElementById('favicon-org-select');
+        const faviconColorPresets = document.querySelectorAll('#favicon-color-presets .color-preset');
 
         if (faviconColor) {
-            faviconColor.addEventListener('input', () => this.updateFaviconPreview());
+            faviconColor.addEventListener('input', () => {
+                this.updateFaviconPreview();
+                this.updateColorPresetSelection();
+            });
         }
         if (faviconLabel) {
             faviconLabel.addEventListener('input', () => this.updateFaviconPreview());
@@ -55,6 +60,10 @@ const DataExplorerHelper = {
         // Shape selection event listeners
         faviconShapeOptions.forEach(radio => {
             radio.addEventListener('change', () => this.updateFaviconPreview());
+        });
+        // Color preset click handlers
+        faviconColorPresets.forEach(preset => {
+            preset.addEventListener('click', () => this.selectColorPreset(preset.dataset.color));
         });
         if (faviconApply) {
             faviconApply.addEventListener('click', () => this.applyFavicon());
@@ -100,13 +109,12 @@ const DataExplorerHelper = {
             userClearBtn.addEventListener('click', () => this.clearUserSelection());
         }
 
-        // Current Record
+        // Record Scanner (merged: scan records + history + related)
         const refreshRecordBtn = document.getElementById('refresh-record-btn');
         if (refreshRecordBtn) {
             refreshRecordBtn.addEventListener('click', () => this.loadCurrentRecordContext());
         }
 
-        // Record Search
         const recordSearchBtn = document.getElementById('record-search-btn');
         const recordSearchInput = document.getElementById('record-search-input');
         if (recordSearchBtn) {
@@ -115,6 +123,90 @@ const DataExplorerHelper = {
         if (recordSearchInput) {
             recordSearchInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') this.searchRecord();
+            });
+        }
+
+        const clearHistoryBtn = document.getElementById('clear-record-history');
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener('click', () => this.clearRecordHistory());
+        }
+
+        // Beta banner dismiss (CSP-compliant, no inline onclick)
+        const recordLookupBannerDismiss = document.getElementById('record-lookup-banner-dismiss');
+        if (recordLookupBannerDismiss) {
+            recordLookupBannerDismiss.addEventListener('click', () => {
+                const banner = document.getElementById('record-lookup-beta-banner');
+                if (banner) banner.style.display = 'none';
+                // Optionally persist dismissed state
+                try { chrome.storage?.local?.set?.({ recordScannerBannerDismissed: true }); } catch {}
+            });
+            // Check if already dismissed (check both old and new keys for backward compatibility)
+            try {
+                chrome.storage?.local?.get?.({ recordScannerBannerDismissed: false, recordLookupBannerDismissed: false }).then(result => {
+                    if (result.recordScannerBannerDismissed || result.recordLookupBannerDismissed) {
+                        const banner = document.getElementById('record-lookup-beta-banner');
+                        if (banner) banner.style.display = 'none';
+                    }
+                });
+            } catch {}
+        }
+
+        // Collapsible panels for Field History and Related Records
+        this.wireCollapsiblePanels();
+
+        // History tools buttons
+        const btnRefreshHistory = document.getElementById('btn-refresh-history');
+        const btnExportHistory = document.getElementById('btn-export-history');
+        if (btnRefreshHistory) {
+            btnRefreshHistory.addEventListener('click', () => this.refreshFieldHistory());
+        }
+        if (btnExportHistory) {
+            btnExportHistory.addEventListener('click', () => this.exportFieldHistory());
+        }
+
+        // Developer Tools Quick Links
+        this.wireDevToolsButtons();
+
+        // Load record history on init
+        this.loadRecordHistory();
+    },
+
+    wireDevToolsButtons: function() {
+        const btnSetup = document.getElementById('btn-open-setup');
+        const btnDevConsole = document.getElementById('btn-open-dev-console');
+        const btnObjectManager = document.getElementById('btn-open-object-manager');
+        const btnDebugLogs = document.getElementById('btn-open-debug-logs');
+        const btnViewInSetup = document.getElementById('btn-view-in-setup');
+        const btnQueryRecord = document.getElementById('btn-query-record');
+        const btnCopySOQL = document.getElementById('btn-copy-soql');
+        const btnViewAPI = document.getElementById('btn-view-api');
+
+        if (btnSetup) btnSetup.addEventListener('click', () => this.openSalesforceLink('/lightning/setup/SetupOneHome/home'));
+        if (btnDevConsole) btnDevConsole.addEventListener('click', () => this.openDevConsole());
+        if (btnObjectManager) btnObjectManager.addEventListener('click', () => this.openSalesforceLink('/lightning/setup/ObjectManager/home'));
+        if (btnDebugLogs) btnDebugLogs.addEventListener('click', () => this.openSalesforceLink('/lightning/setup/ApexDebugLogs/home'));
+        if (btnViewInSetup) btnViewInSetup.addEventListener('click', () => this.openObjectSetup());
+        if (btnQueryRecord) btnQueryRecord.addEventListener('click', () => this.queryCurrentRecord());
+        if (btnCopySOQL) btnCopySOQL.addEventListener('click', () => this.copyRecordSOQL());
+        if (btnViewAPI) btnViewAPI.addEventListener('click', () => this.viewRecordAPI());
+    },
+
+    wireCollapsiblePanels: function() {
+        // Field History panel toggle
+        const fieldHistoryToggle = document.getElementById('field-history-toggle');
+        const fieldHistoryPanel = document.getElementById('field-history-panel');
+        if (fieldHistoryToggle && fieldHistoryPanel) {
+            fieldHistoryToggle.addEventListener('click', () => {
+                fieldHistoryPanel.classList.toggle('collapsed');
+            });
+        }
+
+        // Related Records panel toggle
+        const relatedRecordsToggle = document.getElementById('related-records-toggle');
+        const relatedRecordsPanel = document.getElementById('related-records-panel');
+        if (relatedRecordsToggle && relatedRecordsPanel) {
+            relatedRecordsToggle.addEventListener('click', () => {
+                relatedRecordsPanel.classList.toggle('collapsed');
             });
         }
     },
@@ -144,8 +236,9 @@ const DataExplorerHelper = {
                 this.loadCurrentUser();
                 this.loadOrgMetadata(); // profiles, roles, languages
                 break;
-            case 'current-record':
+            case 'record-lookup':
                 this.loadCurrentRecordContext();
+                this.loadRecordHistory();
                 break;
         }
     },
@@ -276,6 +369,8 @@ const DataExplorerHelper = {
 
                 // Update preview with saved settings
                 this.updateFaviconPreview();
+                // Update color preset selection highlight
+                this.updateColorPresetSelection();
                 return;
             }
         } catch (e) {
@@ -292,6 +387,8 @@ const DataExplorerHelper = {
             labelInput.value = 'SBX';
             this.updateFaviconPreview();
         }
+        // Update color preset selection for default color
+        this.updateColorPresetSelection();
     },
 
     initFaviconPreview: async function() {
@@ -300,6 +397,8 @@ const DataExplorerHelper = {
         const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
         const label = document.getElementById('favicon-label')?.value || '';
         this.renderFaviconPreview(color, label);
+        // Initialize color preset selection
+        this.updateColorPresetSelection();
     },
 
     updateFaviconPreview: function() {
@@ -353,6 +452,62 @@ const DataExplorerHelper = {
         if (shapeRadio) {
             shapeRadio.checked = true;
         }
+    },
+
+    // Color presets configuration
+    _colorPresets: [
+        { value: '#ff6b6b', name: 'Red (Production)' },
+        { value: '#51cf66', name: 'Green (Dev)' },
+        { value: '#339af0', name: 'Blue (UAT)' },
+        { value: '#fcc419', name: 'Yellow (QA)' },
+        { value: '#9775fa', name: 'Purple (Staging)' },
+        { value: '#ff922b', name: 'Orange (Hotfix)' }
+    ],
+
+    // Select a color preset
+    selectColorPreset: function(color) {
+        const colorInput = document.getElementById('favicon-color');
+        if (colorInput && color) {
+            colorInput.value = color;
+            this.updateFaviconPreview();
+            this.updateColorPresetSelection();
+        }
+    },
+
+    // Update the visual selection state of color presets
+    updateColorPresetSelection: function() {
+        const colorInput = document.getElementById('favicon-color');
+        const presets = document.querySelectorAll('#favicon-color-presets .color-preset');
+        const currentColor = colorInput?.value?.toLowerCase() || '#ff6b6b';
+
+        presets.forEach(preset => {
+            const presetColor = preset.dataset.color?.toLowerCase();
+            if (presetColor === currentColor) {
+                preset.classList.add('selected');
+            } else {
+                preset.classList.remove('selected');
+            }
+        });
+    },
+
+    // Get all color presets
+    getColorPresets: function() {
+        return this._colorPresets;
+    },
+
+    // Check if a color is a preset color
+    isPresetColor: function(color) {
+        if (!color) return false;
+        const normalizedColor = color.toLowerCase();
+        return this._colorPresets.some(p => p.value.toLowerCase() === normalizedColor);
+    },
+
+    // Get preset name by color
+    getPresetNameByColor: function(color) {
+        if (!color) return null;
+        const normalizedColor = color.toLowerCase();
+        const preset = this._colorPresets.find(p => p.value.toLowerCase() === normalizedColor);
+        return preset ? preset.name : null;
     },
 
     drawFaviconShape: function(ctx, color, label, shape = 'cloud') {
@@ -623,13 +778,26 @@ const DataExplorerHelper = {
 
     // Function to be injected into the page - supports all shapes
     injectFaviconUpdate: function(color, label, shape) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
-        const ctx = canvas.getContext('2d');
+        try {
+            const canvas = document.createElement('canvas');
 
-        ctx.clearRect(0, 0, 32, 32);
-        ctx.fillStyle = color;
+            // Defensive check: ensure canvas is valid
+            if (!canvas || typeof canvas.getContext !== 'function') {
+                console.error('[TrackForcePro] Canvas creation failed or getContext not available');
+                return;
+            }
+
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+
+            if (!ctx) {
+                console.error('[TrackForcePro] Could not get 2D context from canvas');
+                return;
+            }
+
+            ctx.clearRect(0, 0, 32, 32);
+            ctx.fillStyle = color;
 
         // Draw the shape based on the shape parameter
         switch (shape) {
@@ -712,6 +880,9 @@ const DataExplorerHelper = {
         link.type = 'image/png';
         link.href = canvas.toDataURL('image/png');
         document.head.appendChild(link);
+        } catch (e) {
+            console.error('[TrackForcePro] Error in injectFaviconUpdate:', e);
+        }
     },
 
     resetFavicon: async function() {
@@ -953,6 +1124,7 @@ const DataExplorerHelper = {
         this.setSelectedShape('cloud');
         this._editingOrgId = null;
         this.updateFaviconPreview();
+        this.updateColorPresetSelection();
     },
 
     deleteSavedFavicon: async function(orgId) {
@@ -1023,7 +1195,7 @@ const DataExplorerHelper = {
             if (!userId) {
                 try {
                     const apiSel = document.getElementById('api-version');
-                    const v = (apiSel && apiSel.value) ? apiSel.value : '66.0';
+                    const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
                     const meRes = await PlatformHelper.fetchFromSalesforce(`/services/data/v${v}/chatter/users/me`);
                     if (meRes && meRes.id) {
                         userId = meRes.id;
@@ -1346,7 +1518,7 @@ const DataExplorerHelper = {
 
         try {
             const apiSel = document.getElementById('api-version');
-            const v = (apiSel && apiSel.value) ? apiSel.value : '66.0';
+            const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
 
             await PlatformHelper.fetchFromSalesforce(
                 `/services/data/v${v}/sobjects/User/${this._selectedUserId}`,
@@ -1388,64 +1560,124 @@ const DataExplorerHelper = {
     },
 
     // ==========================================
-    // CURRENT RECORD
+    // RECORD LOOKUP (MERGED)
     // ==========================================
 
     loadCurrentRecordContext: async function() {
         const container = document.getElementById('current-record-info');
         if (!container) return;
-        container.innerHTML = '<div class="spinner">Analyzing current page...</div>';
+        container.innerHTML = '<div class="spinner">Detecting record from Salesforce tab...</div>';
 
         try {
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tabs || tabs.length === 0) {
-                container.innerHTML = '<div class="info-message">No active tab found.</div>';
+            // Use Utils.findSalesforceTab to get the correct Salesforce tab
+            // This properly handles popup, standalone window, and tab modes
+            let sfTab = null;
+            if (window.Utils && typeof window.Utils.findSalesforceTab === 'function') {
+                sfTab = await window.Utils.findSalesforceTab();
+            }
+
+            // Fallback: try direct query if Utils not available
+            if (!sfTab) {
+                const tabs = await chrome.tabs.query({
+                    url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*']
+                });
+                if (tabs && tabs.length > 0) {
+                    // Prefer active tab in current window
+                    let currentWindowId = null;
+                    try {
+                        const current = await chrome.windows.getCurrent({ populate: false });
+                        currentWindowId = current?.id ?? null;
+                    } catch {}
+
+                    if (currentWindowId != null) {
+                        const currentWindowTabs = tabs.filter(t => t.windowId === currentWindowId);
+                        if (currentWindowTabs.length > 0) {
+                            sfTab = currentWindowTabs.find(t => t.active) || currentWindowTabs[0];
+                        }
+                    }
+
+                    if (!sfTab) {
+                        sfTab = tabs.find(t => t.active) || tabs[0];
+                    }
+                }
+            }
+
+            if (!sfTab || !sfTab.url) {
+                container.innerHTML = '<div class="info-message">No Salesforce tab found. Open a Salesforce page to auto-detect records.</div>';
                 return;
             }
 
-            const currentUrl = tabs[0].url;
+            const currentUrl = sfTab.url;
             const possibleId = this.extractRecordIdFromUrl(currentUrl);
 
             if (possibleId) {
-                this.identifyRecord(possibleId, container);
+                // Show which tab we detected from
+                const tabInfo = sfTab.title ? ` from "${sfTab.title.substring(0, 30)}${sfTab.title.length > 30 ? '...' : ''}"` : '';
+                container.innerHTML = `<div class="spinner">Found record${tabInfo}...</div>`;
+                this.identifyRecord(possibleId, container, true);
             } else {
-                container.innerHTML = '<div class="info-message">No Record ID detected in the current URL. Navigate to a record page.</div>';
+                container.innerHTML = '<div class="info-message">No Record ID detected in the current Salesforce URL. Navigate to a record page (e.g., Account, Contact, Opportunity).</div>';
             }
         } catch (error) {
+            console.error('Error in loadCurrentRecordContext:', error);
             container.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
         }
     },
 
     extractRecordIdFromUrl: function(url) {
         try {
-            // Lightning: /r/Object/{ID}/view
-            if (url.includes('/r/') && url.includes('/view')) {
-                const parts = url.split('/r/');
-                if (parts.length > 1) {
-                    const segs = parts[1].split('/');
-                    if (segs.length >= 2 && (segs[1].length === 15 || segs[1].length === 18)) {
-                        return segs[1];
-                    }
+            // Lightning: /r/Object/{ID}/view or /r/Object/{ID}/edit
+            if (url.includes('/r/')) {
+                const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                if (match && match[1]) {
+                    return match[1];
                 }
+            }
+
+            // Lightning: /lightning/r/sObject/{ID}/view
+            if (url.includes('/lightning/r/sObject/')) {
+                const match = url.match(/\/lightning\/r\/sObject\/([a-zA-Z0-9]{15,18})(?:\/|$|\?)/);
+                if (match && match[1]) {
+                    return match[1];
+                }
+            }
+
+            // Lightning related list: /lightning/r/Object/{ID}/related/...
+            if (url.includes('/related/')) {
+                const match = url.match(/\/r\/[^/]+\/([a-zA-Z0-9]{15,18})\/related/);
+                if (match && match[1]) {
+                    return match[1];
+                }
+            }
+
+            // Classic URL: /{ID} at the end of path
+            const classicMatch = url.match(/salesforce\.com\/([a-zA-Z0-9]{15,18})(?:$|\/|\?)/);
+            if (classicMatch && classicMatch[1]) {
+                return classicMatch[1];
             }
 
             // Query param ?id=
             const urlObj = new URL(url);
             const idParam = urlObj.searchParams.get('id');
-            if (idParam && (idParam.length === 15 || idParam.length === 18)) {
+            if (idParam && (idParam.length === 15 || idParam.length === 18) && /^[a-zA-Z0-9]+$/.test(idParam)) {
                 return idParam;
             }
 
-            // Generic pattern match
+            // recordId query param (sometimes used)
+            const recordIdParam = urlObj.searchParams.get('recordId');
+            if (recordIdParam && (recordIdParam.length === 15 || recordIdParam.length === 18) && /^[a-zA-Z0-9]+$/.test(recordIdParam)) {
+                return recordIdParam;
+            }
+
+            // Generic pattern match - look for Salesforce ID pattern
+            // Be more selective: avoid matching random alphanumeric strings
             const idPattern = /\b([a-zA-Z0-9]{15}|[a-zA-Z0-9]{18})\b/g;
             const matches = url.match(idPattern);
             if (matches) {
                 for (const m of matches) {
-                    if (m.length === 15 || m.length === 18) {
-                        // Basic validation: starts with valid prefix (most SF IDs start with 0 or a)
-                        if (/^[0-9a-zA-Z]/.test(m)) {
-                            return m;
-                        }
+                    // Validate it looks like a Salesforce ID (starts with known prefixes or lowercase a-z for custom objects)
+                    if (/^[0-9]{3}|^[a-zA-Z][0-9]{2}|^[a-z]{3}/.test(m)) {
+                        return m;
                     }
                 }
             }
@@ -1455,13 +1687,147 @@ const DataExplorerHelper = {
         return null;
     },
 
-    // ==========================================
-    // RECORD SEARCH
-    // ==========================================
+    // Key prefix to object name mapping for common Salesforce objects
+    _keyPrefixMap: {
+        '001': 'Account',
+        '003': 'Contact',
+        '006': 'Opportunity',
+        '00Q': 'Lead',
+        '500': 'Case',
+        '005': 'User',
+        '00D': 'Organization',
+        '00e': 'Profile',
+        '00G': 'Group',
+        '01p': 'ApexClass',
+        '01q': 'ApexTrigger',
+        '066': 'CustomField',
+        '0DM': 'CustomMetadata',
+        '801': 'ContentDocument',
+        '068': 'ContentVersion',
+        '00T': 'Task',
+        '00U': 'Event',
+        '701': 'Campaign',
+        '00k': 'Product2',
+        '01u': 'Pricebook2',
+        '00l': 'Folder',
+        '015': 'Document',
+        '00b': 'Attachment',
+        '570': 'EmailTemplate',
+        'a00': 'CustomObject', // Custom object records often start with 'a0x' pattern
+    },
+
+    /**
+     * Fallback method to fetch record details via SOQL when UI API fails
+     * Uses key prefix mapping to determine object type
+     */
+    fetchRecordViaSoql: async function(recordId) {
+        const keyPrefix = recordId.substring(0, 3);
+
+        // Try to find object name from key prefix
+        let objectName = this._keyPrefixMap[keyPrefix];
+
+        // If not found in common map, try to get object type from global describe
+        if (!objectName) {
+            try {
+                // Query global describe to find object by key prefix
+                const apiSel = document.getElementById('api-version');
+                const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
+                const describeResult = await PlatformHelper.fetchFromSalesforce(`/services/data/v${v}/sobjects`);
+
+                if (describeResult && describeResult.sobjects) {
+                    for (const obj of describeResult.sobjects) {
+                        if (obj.keyPrefix === keyPrefix) {
+                            objectName = obj.name;
+                            // Cache for future use
+                            this._keyPrefixMap[keyPrefix] = objectName;
+                            break;
+                        }
+                    }
+                }
+            } catch (describeError) {
+                console.warn('Could not fetch global describe:', describeError);
+            }
+        }
+
+        // If still no object name, return basic info with the record ID
+        if (!objectName) {
+            return {
+                _objectName: `Unknown (${keyPrefix}...)`,
+                _fields: { Id: recordId },
+                _note: `Object type for key prefix '${keyPrefix}' not found. The record may be from a custom object or a special object type.`
+            };
+        }
+
+        // Build SOQL query to fetch record - start with minimal fields that exist on all objects
+        const minimalFields = 'Id';
+        const commonFields = 'Id, CreatedById, CreatedDate, LastModifiedById, LastModifiedDate';
+        const extraFields = {
+            'Case': 'CaseNumber, Subject, Status, Priority, OwnerId',
+            'Opportunity': 'Name, StageName, Amount, CloseDate, OwnerId',
+            'Lead': 'Name, Company, Status, LeadSource, OwnerId',
+            'Account': 'Name, Type, Industry, BillingCity, OwnerId',
+            'Contact': 'Name, Email, Phone, Title, OwnerId',
+            'Task': 'Subject, Status, Priority, OwnerId',
+            'Event': 'Subject, StartDateTime, EndDateTime, OwnerId',
+            'Campaign': 'Name, Status, Type, StartDate, OwnerId',
+            'User': 'Name, Username, Email, IsActive',
+            'ContentDocument': 'Title, FileType, ContentSize',
+            'ContentVersion': 'Title, FileType, ContentSize'
+        };
+
+        // Try with full fields first, then fall back to minimal
+        const fieldSets = [
+            extraFields[objectName] ? `${commonFields}, ${extraFields[objectName]}` : commonFields,
+            commonFields,
+            minimalFields
+        ];
+
+        for (const fieldsToQuery of fieldSets) {
+            try {
+                const query = `SELECT ${fieldsToQuery} FROM ${objectName} WHERE Id = '${recordId}' LIMIT 1`;
+                const result = await PlatformHelper.executeQuery(query);
+
+                if (result && result.records && result.records.length > 0) {
+                    const record = result.records[0];
+
+                    // Convert to a format similar to UI API response
+                    return {
+                        _objectName: objectName,
+                        _fields: record, // SOQL returns direct values, not {value: x} format
+                        _fromSoql: true
+                    };
+                } else {
+                    // Record not found via SOQL - return with object name at least
+                    return {
+                        _objectName: objectName,
+                        _fields: { Id: recordId },
+                        _note: 'Record not found or you may not have access to view it.'
+                    };
+                }
+            } catch (soqlError) {
+                const errMsg = soqlError?.message?.toLowerCase() || '';
+                // If it's a field not found error, try with fewer fields
+                if (errMsg.includes('no such column') || errMsg.includes('invalid field') || errMsg.includes('doesn\'t exist')) {
+                    console.warn(`SOQL failed with fields [${fieldsToQuery}], trying with fewer fields...`);
+                    continue;
+                }
+                // For other errors, log and continue to next field set
+                console.warn('SOQL fallback failed:', soqlError);
+                continue;
+            }
+        }
+
+        // All attempts failed - return basic info
+        return {
+            _objectName: objectName,
+            _fields: { Id: recordId },
+            _error: 'Could not fetch record details. You may not have access to this record.'
+        };
+    },
 
     searchRecord: function() {
         const input = document.getElementById('record-search-input');
-        const container = document.getElementById('search-results-container');
+        const container = document.getElementById('current-record-info');
         const recordId = input?.value?.trim();
 
         if (!recordId) {
@@ -1470,67 +1836,1411 @@ const DataExplorerHelper = {
         }
 
         if (recordId.length !== 15 && recordId.length !== 18) {
-            container.innerHTML = '<div class="error-message">Invalid ID length. Salesforce IDs are 15 or 18 characters.</div>';
+            container.innerHTML = '<div class="error-message">Invalid ID length. Salesforce IDs must be 15 or 18 characters.</div>';
             return;
         }
 
-        this.identifyRecord(recordId, container);
+        if (!/^[a-zA-Z0-9]+$/.test(recordId)) {
+            container.innerHTML = '<div class="error-message">Invalid ID format. Only alphanumeric characters allowed.</div>';
+            return;
+        }
+
+        this.identifyRecord(recordId, container, false);
     },
 
-    identifyRecord: async function(recordId, container) {
-        container.innerHTML = `<div class="spinner">Identifying record ${recordId}...</div>`;
+    identifyRecord: async function(recordId, container, isAutoDetect = false) {
+        container.innerHTML = `<div class="spinner">Identifying record ${recordId.substring(0, 8)}...</div>`;
+
+        // Check if PlatformHelper is available
+        if (!window.PlatformHelper || typeof window.PlatformHelper.fetchFromSalesforce !== 'function') {
+            container.innerHTML = `<div class="record-detail-card">
+                <div class="record-detail-row">
+                    <span class="record-detail-label">ID</span>
+                    <span class="record-detail-value"><code>${recordId}</code></span>
+                </div>
+                <div class="error-message" style="margin-top:8px;">Platform helper not available. Please refresh the extension.</div>
+            </div>`;
+            return;
+        }
 
         try {
-            const endpoint = `/ui-api/records/${recordId}`;
-            const response = await PlatformHelper.fetchFromSalesforce(endpoint);
+            // First, try UI API for full record details
+            let response = null;
+            let usedFallback = false;
+            let uiApiErrorMsg = '';
 
-            if (response && response.apiName) {
-                const objectName = response.apiName;
-                const fields = response.fields;
+            try {
+                const endpoint = `/ui-api/records/${recordId}`;
+                response = await PlatformHelper.fetchFromSalesforce(endpoint);
+            } catch (uiApiError) {
+                // UI API failed - check if it's a 404 or object not supported
+                uiApiErrorMsg = (uiApiError && uiApiError.message) ? uiApiError.message : '';
+                const errorMsgLower = uiApiErrorMsg.toLowerCase();
 
-                let html = `<div class="record-card">
-                    <h4>${objectName}</h4>
-                    <div class="detail-row"><span class="detail-label">Record ID:</span><span class="detail-value">${recordId}</span></div>`;
+                // Check if we should fall back to SOQL
+                const shouldFallback = errorMsgLower.includes('not found') ||
+                                       errorMsgLower.includes('404') ||
+                                       errorMsgLower.includes('does not support') ||
+                                       errorMsgLower.includes('invalid') ||
+                                       errorMsgLower.includes('not connected') ||
+                                       errorMsgLower.includes('no response') ||
+                                       errorMsgLower === '' ||
+                                       errorMsgLower === 'error';
 
-                // Show common fields if available
-                const commonFields = ['Name', 'Subject', 'Title', 'CaseNumber', 'OrderNumber'];
-                for (const fieldName of commonFields) {
-                    if (fields[fieldName] && fields[fieldName].value) {
-                        html += `<div class="detail-row"><span class="detail-label">${fieldName}:</span><span class="detail-value">${fields[fieldName].value}</span></div>`;
-                        break;
+                if (shouldFallback) {
+                    // Fallback: Use SOQL with key prefix mapping
+                    usedFallback = true;
+                    console.log('UI API failed, trying SOQL fallback for record:', recordId, 'Error:', uiApiErrorMsg);
+                    try {
+                        response = await this.fetchRecordViaSoql(recordId);
+                    } catch (soqlFallbackError) {
+                        // SOQL fallback also failed - create a basic response with error info
+                        console.warn('SOQL fallback also failed:', soqlFallbackError);
+                        const keyPrefix = recordId.substring(0, 3);
+                        const objectName = this._keyPrefixMap[keyPrefix] || `Unknown (${keyPrefix}...)`;
+                        response = {
+                            _objectName: objectName,
+                            _fields: { Id: recordId },
+                            _error: uiApiErrorMsg || soqlFallbackError?.message || 'Unable to fetch record details. Please check your Salesforce connection.'
+                        };
+                    }
+                } else {
+                    // For other errors, still try fallback but keep the original error
+                    usedFallback = true;
+                    console.log('UI API error, attempting SOQL fallback:', uiApiErrorMsg);
+                    try {
+                        response = await this.fetchRecordViaSoql(recordId);
+                    } catch (soqlFallbackError) {
+                        // Both failed - throw a more informative error
+                        const combinedError = new Error(uiApiErrorMsg || 'Unable to fetch record details');
+                        throw combinedError;
+                    }
+                }
+            }
+
+            // Handle null/undefined response
+            if (response === null || response === undefined) {
+                container.innerHTML = `<div class="record-detail-card">
+                    <div class="record-detail-row">
+                        <span class="record-detail-label">ID</span>
+                        <span class="record-detail-value"><code>${recordId}</code></span>
+                    </div>
+                    <div class="error-message" style="margin-top:8px;">Not connected to Salesforce or record not found. Please ensure you have an active Salesforce tab open and you are logged in.</div>
+                </div>`;
+                return;
+            }
+
+            // Check if we have valid record data (from UI API or SOQL fallback)
+            const objectName = response.apiName || response._objectName;
+            const fields = response.fields || response._fields || {};
+
+            if (objectName) {
+                // Get display name - handle both UI API format ({value: x}) and SOQL format (direct value)
+                let displayName = '';
+                const nameFields = ['Name', 'Subject', 'Title', 'CaseNumber', 'OrderNumber', 'ContractNumber', 'DeveloperName'];
+                for (const fieldName of nameFields) {
+                    const fieldData = fields[fieldName];
+                    if (fieldData) {
+                        displayName = fieldData.value !== undefined ? fieldData.value : fieldData;
+                        if (displayName) break;
                     }
                 }
 
-                if (fields['CreatedById']) {
-                    html += `<div class="detail-row"><span class="detail-label">Created By:</span><span class="detail-value">${fields['CreatedById'].value}</span></div>`;
+                // Build enhanced HTML
+                let html = `<div class="record-detail-card">
+                    <div class="record-card-header">
+                        <span class="object-badge">${objectName}</span>
+                        <span class="record-title">${displayName || 'Record Details'}</span>
+                    </div>
+                    <div class="record-detail-row">
+                        <span class="record-detail-label">Record ID</span>
+                        <span class="record-detail-value">
+                            <code>${recordId}</code>
+                            <button class="copy-btn" data-copy="${recordId}" title="Copy ID">📋</button>
+                        </span>
+                    </div>`;
+
+                if (displayName) {
+                    html += `<div class="record-detail-row">
+                        <span class="record-detail-label">Name</span>
+                        <span class="record-detail-value">${displayName}</span>
+                    </div>`;
                 }
-                if (fields['LastModifiedDate']) {
-                    html += `<div class="detail-row"><span class="detail-label">Last Modified:</span><span class="detail-value">${new Date(fields['LastModifiedDate'].value).toLocaleString()}</span></div>`;
+
+                // Get Created By (handle both formats)
+                const createdById = fields['CreatedById'];
+                if (createdById) {
+                    const createdByValue = createdById.value !== undefined ? createdById.value : createdById;
+                    if (createdByValue) {
+                        html += `<div class="record-detail-row">
+                            <span class="record-detail-label">Created By</span>
+                            <span class="record-detail-value">${createdByValue}</span>
+                        </div>`;
+                    }
                 }
+
+                // Get Last Modified Date (handle both formats)
+                const lastModDate = fields['LastModifiedDate'];
+                if (lastModDate) {
+                    const lastModValue = lastModDate.value !== undefined ? lastModDate.value : lastModDate;
+                    if (lastModValue) {
+                        const modDate = new Date(lastModValue);
+                        html += `<div class="record-detail-row">
+                            <span class="record-detail-label">Last Modified</span>
+                            <span class="record-detail-value">${modDate.toLocaleString()}</span>
+                        </div>`;
+                    }
+                }
+
+                // Developer Info Section
+                html += `<div class="dev-info-section">`;
+
+                // Key Prefix
+                const keyPrefix = recordId.substring(0, 3);
+                html += `<div class="dev-info-row">
+                    <span class="dev-info-label">Key Prefix</span>
+                    <span class="dev-info-value">${keyPrefix}</span>
+                </div>`;
+
+                // Record ID (15 char)
+                const id15 = recordId.length === 18 ? recordId.substring(0, 15) : recordId;
+                html += `<div class="dev-info-row">
+                    <span class="dev-info-label">15-char ID</span>
+                    <span class="dev-info-value">${id15}</span>
+                </div>`;
+
+                // Created Date if available (handle both formats)
+                const createdDateField = fields['CreatedDate'];
+                if (createdDateField) {
+                    const createdDateValue = createdDateField.value !== undefined ? createdDateField.value : createdDateField;
+                    if (createdDateValue) {
+                        const createdDate = new Date(createdDateValue);
+                        html += `<div class="dev-info-row">
+                            <span class="dev-info-label">Created</span>
+                            <span class="dev-info-value">${createdDate.toLocaleDateString()}</span>
+                        </div>`;
+                    }
+                }
+
+                // Owner ID if available (handle both formats)
+                const ownerIdField = fields['OwnerId'];
+                if (ownerIdField) {
+                    const ownerIdValue = ownerIdField.value !== undefined ? ownerIdField.value : ownerIdField;
+                    if (ownerIdValue) {
+                        html += `<div class="dev-info-row">
+                            <span class="dev-info-label">Owner</span>
+                            <span class="dev-info-value">${ownerIdValue}</span>
+                        </div>`;
+                    }
+                }
+
+                // Record Type if available (handle both formats)
+                const recordTypeField = fields['RecordTypeId'];
+                if (recordTypeField) {
+                    const recordTypeValue = recordTypeField.value !== undefined ? recordTypeField.value : recordTypeField;
+                    if (recordTypeValue) {
+                        html += `<div class="dev-info-row">
+                            <span class="dev-info-label">Record Type</span>
+                            <span class="dev-info-value">${recordTypeValue}</span>
+                        </div>`;
+                    }
+                }
+
+                // Show if SOQL fallback was used
+                if (usedFallback) {
+                    html += `<div class="dev-info-row">
+                        <span class="dev-info-label">Source</span>
+                        <span class="dev-info-value" style="color:#868e96;">SOQL (UI API N/A)</span>
+                    </div>`;
+                }
+
+                html += `</div>`;
+
+                // Show any error or note from the SOQL fallback
+                if (response._error) {
+                    html += `<div class="info-message" style="margin:10px 14px;border-radius:6px;">${response._error}</div>`;
+                } else if (response._note) {
+                    html += `<div class="info-message" style="margin:10px 14px;border-radius:6px;">${response._note}</div>`;
+                }
+
+                // Action buttons - Compact
+                html += `<div class="record-actions-bar">
+                    <button class="btn btn-secondary btn-xs open-record-btn" data-record-id="${recordId}">🔗 Open</button>
+                    <button class="btn btn-secondary btn-xs copy-link-btn" data-record-id="${recordId}">📋 Link</button>
+                    <button class="btn btn-secondary btn-xs copy-id-btn" data-record-id="${recordId}">📋 ID</button>
+                </div>`;
 
                 html += '</div>';
                 container.innerHTML = html;
+
+                // Store current record for dev tools
+                this._currentRecordId = recordId;
+                this._currentRecordObject = objectName;
+                this._currentRecordResponse = response;
+
+                // Show record-specific tools
+                const toolsSection = document.getElementById('record-specific-tools');
+                if (toolsSection) toolsSection.style.display = 'block';
+
+                // Add copy button listeners
+                container.querySelectorAll('.copy-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const text = btn.dataset.copy;
+                        navigator.clipboard.writeText(text).then(() => {
+                            btn.classList.add('copied');
+                            btn.textContent = '✓';
+                            setTimeout(() => {
+                                btn.classList.remove('copied');
+                                btn.textContent = '📋';
+                            }, 1500);
+                        });
+                    });
+                });
+
+                // Add action button listeners
+                const openBtn = container.querySelector('.open-record-btn');
+                if (openBtn) {
+                    openBtn.addEventListener('click', () => this.openRecordInSalesforce(recordId));
+                }
+
+                const copyLinkBtn = container.querySelector('.copy-link-btn');
+                if (copyLinkBtn) {
+                    copyLinkBtn.addEventListener('click', () => this.copyRecordLink(recordId));
+                }
+
+                const copyIdBtn = container.querySelector('.copy-id-btn');
+                if (copyIdBtn) {
+                    copyIdBtn.addEventListener('click', async () => {
+                        await navigator.clipboard.writeText(recordId);
+                        copyIdBtn.textContent = '✓ ID';
+                        setTimeout(() => { copyIdBtn.textContent = '📋 ID'; }, 1500);
+                    });
+                }
+
+                // Add to history
+                this.addToRecordHistory({
+                    recordId,
+                    objectName,
+                    displayName,
+                    timestamp: Date.now()
+                });
+
+                // Load Field History and Related Records for Record Scanner
+                this.loadFieldHistory(recordId, objectName);
+                this.loadRelatedRecords(recordId, objectName);
+
+                // Show history tools
+                const historyTools = document.getElementById('history-tools');
+                if (historyTools) historyTools.style.display = 'block';
+
             } else {
-                container.innerHTML = `<div class="record-card">
-                    <div class="detail-row"><span class="detail-label">ID:</span><span class="detail-value">${recordId}</span></div>
-                    <div class="info-message" style="margin-top:8px;">Could not retrieve details. The record may not exist or you may lack permissions.</div>
+                // Response exists but no apiName - might be an error response
+                let errorMessage = 'Could not retrieve details. The record may not exist or you may lack permissions.';
+
+                // Check if response contains error information
+                if (response && response.errorCode) {
+                    errorMessage = response.message || response.errorCode;
+                } else if (response && Array.isArray(response) && response[0]?.message) {
+                    errorMessage = response[0].message;
+                } else if (response && response.error) {
+                    errorMessage = response.error;
+                }
+
+                container.innerHTML = `<div class="record-detail-card">
+                    <div class="record-detail-row">
+                        <span class="record-detail-label">ID</span>
+                        <span class="record-detail-value"><code>${recordId}</code></span>
+                    </div>
+                    <div class="info-message" style="margin-top:8px;">${errorMessage}</div>
                 </div>`;
             }
         } catch (e) {
-            container.innerHTML = `<div class="record-card">
-                <div class="detail-row"><span class="detail-label">ID:</span><span class="detail-value">${recordId}</span></div>
-                <div class="error-message" style="margin-top:8px;">Error: ${e.message}</div>
+            // Build a meaningful error message - handle various error formats
+            let errorMessage = 'Unable to fetch record details';
+
+            // Try to extract error message from various formats safely
+            try {
+                if (e) {
+                    if (typeof e === 'string' && e.length > 0 && e.toLowerCase() !== 'error') {
+                        errorMessage = e;
+                    } else if (e instanceof Error) {
+                        // Handle standard Error objects - but filter out generic "Error" messages
+                        const msg = e.message || '';
+                        if (msg && msg.toLowerCase() !== 'error' && msg.length > 5) {
+                            errorMessage = msg;
+                        } else if (e.stack && e.stack.includes('Not connected')) {
+                            errorMessage = 'Not connected';
+                        }
+                    } else if (typeof e.message === 'string' && e.message.length > 0 && e.message.toLowerCase() !== 'error') {
+                        errorMessage = e.message;
+                    } else if (typeof e.error === 'string' && e.error.length > 0) {
+                        errorMessage = e.error;
+                    } else if (e.errorCode) {
+                        errorMessage = (typeof e.errorMessage === 'string' ? e.errorMessage : null) || e.errorCode;
+                    } else if (e.body && typeof e.body.message === 'string') {
+                        errorMessage = e.body.message;
+                    } else if (typeof e.statusText === 'string' && e.statusText.length > 0) {
+                        errorMessage = e.statusText;
+                    } else if (Array.isArray(e) && e[0] && typeof e[0].message === 'string') {
+                        errorMessage = e[0].message;
+                    }
+                }
+            } catch (extractErr) {
+                console.error('Error extracting error message:', extractErr);
+                errorMessage = 'Unable to fetch record details';
+            }
+
+            // Ensure errorMessage is definitely a string before using string methods
+            if (typeof errorMessage !== 'string' || !errorMessage || errorMessage.toLowerCase() === 'error') {
+                errorMessage = 'Unable to fetch record details. Please check your Salesforce connection.';
+            }
+
+            // Make error messages more user-friendly using safe lowercase comparison
+            const lowerMsg = errorMessage.toLowerCase();
+            if (lowerMsg.includes('not connected') || lowerMsg === 'unable to fetch record details') {
+                errorMessage = 'Not connected to Salesforce. Please ensure you have an active Salesforce tab open and you are logged in.';
+            } else if (lowerMsg.includes('unauthorized') || lowerMsg.includes('401') || lowerMsg.includes('403')) {
+                errorMessage = 'Access denied. You may not have permission to view this record.';
+            } else if (lowerMsg.includes('404') || lowerMsg.includes('not found')) {
+                errorMessage = 'Record not found. The record may have been deleted or the ID is incorrect.';
+            } else if (lowerMsg.includes('invalid_session') || lowerMsg.includes('session expired')) {
+                errorMessage = 'Session expired. Please refresh your Salesforce tab and try again.';
+            } else if (lowerMsg.includes('insufficient_access') || lowerMsg.includes('insufficient access')) {
+                errorMessage = 'Insufficient access. You do not have permission to view this record.';
+            }
+
+            console.error('Error identifying record:', e);
+
+            // Show a user-friendly error card with the record ID and helpful message
+            const keyPrefix = recordId.substring(0, 3);
+            const objectName = this._keyPrefixMap[keyPrefix] || `Unknown (${keyPrefix}...)`;
+
+            container.innerHTML = `<div class="record-detail-card">
+                <div class="record-card-header">
+                    <span class="object-badge">${objectName}</span>
+                    <span class="record-title">Record Scan Failed</span>
+                </div>
+                <div class="record-detail-row">
+                    <span class="record-detail-label">Record ID</span>
+                    <span class="record-detail-value">
+                        <code>${recordId}</code>
+                        <button class="copy-btn" data-copy="${recordId}" title="Copy ID">📋</button>
+                    </span>
+                </div>
+                <div class="dev-info-section">
+                    <div class="dev-info-row">
+                        <span class="dev-info-label">Key Prefix</span>
+                        <span class="dev-info-value">${keyPrefix}</span>
+                    </div>
+                    <div class="dev-info-row">
+                        <span class="dev-info-label">15-char ID</span>
+                        <span class="dev-info-value">${recordId.length === 18 ? recordId.substring(0, 15) : recordId}</span>
+                    </div>
+                </div>
+                <div class="error-message" style="margin:10px 14px;border-radius:6px;">${errorMessage}</div>
+                <div class="record-actions-bar">
+                    <button class="btn btn-secondary btn-xs open-record-btn" data-record-id="${recordId}">🔗 Try Open</button>
+                    <button class="btn btn-secondary btn-xs copy-id-btn" data-record-id="${recordId}">📋 Copy ID</button>
+                </div>
+            </div>`;
+
+            // Wire up buttons even in error state
+            const openBtn = container.querySelector('.open-record-btn');
+            if (openBtn) {
+                openBtn.addEventListener('click', () => this.openRecordInSalesforce(recordId));
+            }
+            const copyIdBtn = container.querySelector('.copy-id-btn');
+            if (copyIdBtn) {
+                copyIdBtn.addEventListener('click', async () => {
+                    await navigator.clipboard.writeText(recordId);
+                    copyIdBtn.textContent = '✓ Copied';
+                    setTimeout(() => { copyIdBtn.textContent = '📋 Copy ID'; }, 1500);
+                });
+            }
+            const copyBtn = container.querySelector('.copy-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await navigator.clipboard.writeText(recordId);
+                    copyBtn.textContent = '✓';
+                    setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
+                });
+            }
+        }
+    },
+
+    openRecordInSalesforce: async function(recordId) {
+        try {
+            // Get the Salesforce base URL - try multiple sources
+            let baseUrl = null;
+
+            // 1. Try to get from session (most reliable for popup/standalone)
+            if (window.getSession && typeof window.getSession === 'function') {
+                const session = window.getSession();
+                if (session && session.instanceUrl) {
+                    baseUrl = session.instanceUrl;
+                }
+            }
+
+            // 2. Try to find a Salesforce tab
+            if (!baseUrl) {
+                let sfTab = null;
+                if (window.Utils && typeof window.Utils.findSalesforceTab === 'function') {
+                    sfTab = await window.Utils.findSalesforceTab();
+                }
+
+                if (!sfTab) {
+                    // Fallback: query for SF tabs directly
+                    const tabs = await chrome.tabs.query({
+                        url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*']
+                    });
+                    if (tabs && tabs.length > 0) {
+                        sfTab = tabs.find(t => t.active) || tabs[0];
+                    }
+                }
+
+                if (sfTab && sfTab.url) {
+                    try {
+                        const sfUrl = new URL(sfTab.url);
+                        // Normalize to my.salesforce.com format
+                        let host = sfUrl.host;
+                        if (host.includes('lightning.force.com')) {
+                            host = host.replace('.lightning.force.com', '.my.salesforce.com');
+                        }
+                        baseUrl = `${sfUrl.protocol}//${host}`;
+                    } catch (e) {
+                        console.warn('Error parsing SF tab URL:', e);
+                    }
+                }
+            }
+
+            // 3. Last resort - prompt user or use a generic domain
+            if (!baseUrl) {
+                console.warn('Could not determine Salesforce base URL');
+                this.showNotification('Please open a Salesforce tab first', 'error');
+                return;
+            }
+
+            const recordUrl = `${baseUrl}/lightning/r/sObject/${recordId}/view`;
+            chrome.tabs.create({ url: recordUrl });
+        } catch (e) {
+            console.error('Error opening record:', e);
+            this.showNotification('Error opening record: ' + e.message, 'error');
+        }
+    },
+
+    copyRecordLink: async function(recordId) {
+        try {
+            // Get the Salesforce base URL - try multiple sources
+            let baseUrl = null;
+
+            // 1. Try to get from session (most reliable for popup/standalone)
+            if (window.getSession && typeof window.getSession === 'function') {
+                const session = window.getSession();
+                if (session && session.instanceUrl) {
+                    baseUrl = session.instanceUrl;
+                }
+            }
+
+            // 2. Try to find a Salesforce tab
+            if (!baseUrl) {
+                let sfTab = null;
+                if (window.Utils && typeof window.Utils.findSalesforceTab === 'function') {
+                    sfTab = await window.Utils.findSalesforceTab();
+                }
+
+                if (!sfTab) {
+                    // Fallback: query for SF tabs directly
+                    const tabs = await chrome.tabs.query({
+                        url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*']
+                    });
+                    if (tabs && tabs.length > 0) {
+                        sfTab = tabs.find(t => t.active) || tabs[0];
+                    }
+                }
+
+                if (sfTab && sfTab.url) {
+                    try {
+                        const sfUrl = new URL(sfTab.url);
+                        // Normalize to my.salesforce.com format
+                        let host = sfUrl.host;
+                        if (host.includes('lightning.force.com')) {
+                            host = host.replace('.lightning.force.com', '.my.salesforce.com');
+                        }
+                        baseUrl = `${sfUrl.protocol}//${host}`;
+                    } catch (e) {
+                        console.warn('Error parsing SF tab URL:', e);
+                    }
+                }
+            }
+
+            // 3. If still no URL, show error
+            if (!baseUrl) {
+                console.warn('Could not determine Salesforce base URL');
+                // Still copy a placeholder URL that user can fix
+                const placeholderUrl = `https://YOUR_ORG.my.salesforce.com/lightning/r/sObject/${recordId}/view`;
+                await navigator.clipboard.writeText(placeholderUrl);
+                this.showNotification('Link copied (please update org domain)', 'warning');
+                return;
+            }
+
+            const recordUrl = `${baseUrl}/lightning/r/sObject/${recordId}/view`;
+            await navigator.clipboard.writeText(recordUrl);
+            this.showNotification('Link copied to clipboard!', 'success');
+        } catch (e) {
+            console.error('Error copying link:', e);
+            this.showNotification('Error copying link: ' + e.message, 'error');
+        }
+    },
+
+    // ==========================================
+    // RECORD HISTORY
+    // ==========================================
+
+    loadRecordHistory: async function() {
+        try {
+            const result = await chrome.storage.local.get('recordHistory');
+            this._recordHistory = result.recordHistory || [];
+            this.renderRecordHistory();
+        } catch (e) {
+            console.warn('Error loading record history:', e);
+        }
+    },
+
+    addToRecordHistory: async function(record) {
+        // Remove duplicate if exists
+        this._recordHistory = this._recordHistory.filter(r => r.recordId !== record.recordId);
+
+        // Add to beginning
+        this._recordHistory.unshift(record);
+
+        // Keep only max items
+        if (this._recordHistory.length > this._maxHistoryItems) {
+            this._recordHistory = this._recordHistory.slice(0, this._maxHistoryItems);
+        }
+
+        // Save to storage
+        try {
+            await chrome.storage.local.set({ recordHistory: this._recordHistory });
+        } catch (e) {
+            console.warn('Error saving record history:', e);
+        }
+
+        this.renderRecordHistory();
+    },
+
+    renderRecordHistory: function() {
+        const container = document.getElementById('record-history-list');
+        const countEl = document.getElementById('history-count');
+        if (!container) return;
+
+        if (!this._recordHistory || this._recordHistory.length === 0) {
+            container.innerHTML = '<div class="placeholder-note">No recent records</div>';
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+
+        // Update count
+        if (countEl) countEl.textContent = `(${this._recordHistory.length})`;
+
+        // Build vertical list UI
+        let html = '';
+        for (const record of this._recordHistory) {
+            const shortType = this.getShortObjectName(record.objectName);
+            const displayName = record.displayName || record.recordId.substring(0, 10) + '...';
+            const timeAgo = this.getTimeAgo(record.timestamp);
+            html += `<div class="record-history-item-v" data-record-id="${record.recordId}" title="${record.objectName}: ${record.displayName || record.recordId}">
+                <span class="item-type">${shortType}</span>
+                <div class="item-info">
+                    <div class="item-name">${displayName}</div>
+                    <div class="item-id">${record.recordId}</div>
+                </div>
+                <span class="item-time">${timeAgo}</span>
             </div>`;
         }
+        container.innerHTML = html;
+
+        // Add click listeners - clicking updates the Record Inspector panel
+        container.querySelectorAll('.record-history-item-v').forEach(item => {
+            item.addEventListener('click', () => {
+                const recordId = item.dataset.recordId;
+
+                // Update search input
+                const searchInput = document.getElementById('record-search-input');
+                if (searchInput) {
+                    searchInput.value = recordId;
+                }
+
+                // Mark this item as selected
+                container.querySelectorAll('.record-history-item-v').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+
+                // Load record into inspector
+                const recordContainer = document.getElementById('current-record-info');
+                if (recordContainer) {
+                    this.identifyRecord(recordId, recordContainer, false);
+                }
+            });
+        });
+    },
+
+    getShortObjectName: function(objectName) {
+        const shortNames = {
+            'Account': 'Acc',
+            'Contact': 'Con',
+            'Opportunity': 'Opp',
+            'Lead': 'Lead',
+            'Case': 'Case',
+            'Task': 'Task',
+            'Event': 'Evt',
+            'User': 'User',
+            'Campaign': 'Cmp',
+            'Contract': 'Ctr',
+            'Order': 'Ord',
+            'Product2': 'Prod',
+            'Pricebook2': 'PB',
+            'Quote': 'Qt'
+        };
+        return shortNames[objectName] || objectName.substring(0, 4);
+    },
+
+    clearRecordHistory: async function() {
+        this._recordHistory = [];
+        try {
+            await chrome.storage.local.remove('recordHistory');
+        } catch (e) {
+            console.warn('Error clearing record history:', e);
+        }
+        this.renderRecordHistory();
+    },
+
+    getTimeAgo: function(timestamp) {
+        const seconds = Math.floor((Date.now() - timestamp) / 1000);
+        if (seconds < 60) return 'Just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+    },
+
+    // ==========================================
+    // DEVELOPER TOOLS
+    // ==========================================
+
+    openSalesforceLink: async function(path) {
+        try {
+            let sfTab = null;
+            if (window.Utils && typeof window.Utils.findSalesforceTab === 'function') {
+                sfTab = await window.Utils.findSalesforceTab();
+            }
+            if (!sfTab) {
+                const tabs = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+                sfTab = tabs?.[0];
+            }
+            if (sfTab && sfTab.url) {
+                const urlObj = new URL(sfTab.url);
+                const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
+                chrome.tabs.create({ url: `${baseUrl}${path}` });
+            } else {
+                this.showNotification('No Salesforce tab found', 'error');
+            }
+        } catch (e) {
+            console.error('Error opening Salesforce link:', e);
+        }
+    },
+
+    openDevConsole: async function() {
+        try {
+            let sfTab = null;
+            if (window.Utils && typeof window.Utils.findSalesforceTab === 'function') {
+                sfTab = await window.Utils.findSalesforceTab();
+            }
+            if (!sfTab) {
+                const tabs = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*'] });
+                sfTab = tabs?.[0];
+            }
+            if (sfTab && sfTab.url) {
+                const urlObj = new URL(sfTab.url);
+                const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
+                // Developer console opens in a popup window
+                chrome.windows.create({
+                    url: `${baseUrl}/_ui/common/apex/debug/ApexCSIPage`,
+                    type: 'popup',
+                    width: 1200,
+                    height: 800
+                });
+            }
+        } catch (e) {
+            console.error('Error opening Developer Console:', e);
+        }
+    },
+
+    openObjectSetup: async function() {
+        if (!this._currentRecordObject) {
+            this.showNotification('No record loaded', 'error');
+            return;
+        }
+        const objectName = this._currentRecordObject;
+        // For standard objects, use ObjectManager path
+        this.openSalesforceLink(`/lightning/setup/ObjectManager/${objectName}/Details/view`);
+    },
+
+    queryCurrentRecord: async function() {
+        if (!this._currentRecordId || !this._currentRecordObject) {
+            this.showNotification('No record loaded', 'error');
+            return;
+        }
+        // Build a basic SOQL query
+        const query = `SELECT Id, Name FROM ${this._currentRecordObject} WHERE Id = '${this._currentRecordId}'`;
+
+        // Try to switch to SOQL tab and populate
+        const soqlTab = document.querySelector('[data-tab="soql"]');
+        if (soqlTab) {
+            soqlTab.click();
+            // Give it a moment to switch, then populate
+            setTimeout(() => {
+                const queryInput = document.getElementById('soql-query') || document.getElementById('soql-manual-query');
+                if (queryInput) {
+                    queryInput.value = query;
+                }
+            }, 100);
+        }
+    },
+
+    copyRecordSOQL: async function() {
+        if (!this._currentRecordId || !this._currentRecordObject) {
+            this.showNotification('No record loaded', 'error');
+            return;
+        }
+        const query = `SELECT Id, Name FROM ${this._currentRecordObject} WHERE Id = '${this._currentRecordId}'`;
+        try {
+            await navigator.clipboard.writeText(query);
+            this.showNotification('SOQL query copied!', 'success');
+            // Visual feedback
+            const btn = document.getElementById('btn-copy-soql');
+            if (btn) {
+                btn.textContent = '✓ Copied';
+                setTimeout(() => { btn.textContent = '📋 Copy Query'; }, 1500);
+            }
+        } catch (e) {
+            console.error('Error copying SOQL:', e);
+        }
+    },
+
+    viewRecordAPI: async function() {
+        if (!this._currentRecordId) {
+            this.showNotification('No record loaded', 'error');
+            return;
+        }
+        // Open the UI API record endpoint in a new tab
+        this.openSalesforceLink(`/services/data/v60.0/ui-api/records/${this._currentRecordId}`);
+    },
+
+    // ==========================================
+    // FIELD HISTORY (Record Scanner)
+    // ==========================================
+
+    // Cache for field history data
+    _fieldHistoryCache: {},
+
+    /**
+     * Load field history for the current record
+     * Queries {ObjectName}History or {ObjectName}__History tables
+     */
+    loadFieldHistory: async function(recordId, objectName) {
+        const container = document.getElementById('field-history-list');
+        if (!container) return;
+
+        container.innerHTML = '<div class="loading-note">Loading field history...</div>';
+
+        try {
+            // Determine the history object name
+            // Standard objects: AccountHistory, ContactHistory, etc.
+            // Custom objects: CustomObject__History
+            const historyObjectName = this.getHistoryObjectName(objectName);
+
+            if (!historyObjectName) {
+                container.innerHTML = '<div class="info-note">Field history tracking not available for this object type.</div>';
+                return;
+            }
+
+            // Check if the history object exists and is queryable
+            const historyExists = await this.checkHistoryObjectExists(historyObjectName);
+            if (!historyExists) {
+                container.innerHTML = `<div class="info-note">Field history tracking is not enabled for ${objectName}. Enable it in Setup → Object Manager → ${objectName} → Fields & Relationships.</div>`;
+                return;
+            }
+
+            // Determine the parent ID field name
+            // Standard objects use {ObjectName}Id (e.g., AccountId for AccountHistory)
+            // Custom objects use ParentId
+            let parentIdField;
+            if (objectName.endsWith('__c')) {
+                parentIdField = 'ParentId';
+            } else {
+                parentIdField = objectName + 'Id';
+            }
+
+            // Try to query field history with the determined field
+            // If that fails, try alternative field names
+            let result = null;
+            const fieldAttempts = [parentIdField, 'ParentId', objectName + 'Id'];
+            const uniqueAttempts = [...new Set(fieldAttempts)]; // Remove duplicates
+
+            for (const fieldName of uniqueAttempts) {
+                try {
+                    const query = `SELECT Id, Field, OldValue, NewValue, CreatedById, CreatedBy.Name, CreatedDate 
+                                  FROM ${historyObjectName} 
+                                  WHERE ${fieldName} = '${recordId}' 
+                                  ORDER BY CreatedDate DESC 
+                                  LIMIT 20`;
+                    result = await PlatformHelper.executeQuery(query);
+                    if (result && result.records) {
+                        break; // Success, exit loop
+                    }
+                } catch (queryError) {
+                    console.warn(`History query with ${fieldName} failed:`, queryError.message);
+                    // Continue to try next field name
+                }
+            }
+
+            if (!result || !result.records || result.records.length === 0) {
+                container.innerHTML = '<div class="info-note">No field history changes found for this record.</div>';
+                return;
+            }
+
+            // Store in cache
+            this._fieldHistoryCache[recordId] = result.records;
+
+            // Render field history
+            this.renderFieldHistory(result.records, container);
+
+        } catch (e) {
+            console.error('Error loading field history:', e);
+            const errorMsg = e.message || 'Unknown error';
+
+            // Check for common errors
+            if (errorMsg.includes('does not exist') || errorMsg.includes('invalid') || errorMsg.includes('INVALID_TYPE')) {
+                container.innerHTML = `<div class="info-note">Field history tracking is not enabled for ${objectName}.</div>`;
+            } else if (errorMsg.includes('INVALID_FIELD') || errorMsg.includes('No such column')) {
+                container.innerHTML = '<div class="info-note">Unable to query field history. The history object may have a different structure.</div>';
+            } else {
+                container.innerHTML = `<div class="error-note">Error loading history: ${errorMsg}</div>`;
+            }
+        }
+    },
+
+    /**
+     * Get the history object name for a given object
+     */
+    getHistoryObjectName: function(objectName) {
+        if (!objectName) return null;
+
+        // Standard objects with history tracking support
+        const standardHistoryObjects = [
+            'Account', 'Contact', 'Lead', 'Opportunity', 'Case', 'Contract',
+            'Solution', 'Asset', 'Campaign', 'Order', 'Quote', 'Product2',
+            'Pricebook2', 'Task', 'Event'
+        ];
+
+        if (standardHistoryObjects.includes(objectName)) {
+            return `${objectName}History`;
+        }
+
+        // Custom objects use __History suffix
+        if (objectName.endsWith('__c')) {
+            return objectName.replace('__c', '__History');
+        }
+
+        // Person accounts
+        if (objectName === 'PersonAccount') {
+            return 'AccountHistory';
+        }
+
+        // Some objects don't support field history
+        const noHistoryObjects = ['User', 'Profile', 'Group', 'Organization', 'ContentDocument', 'ContentVersion'];
+        if (noHistoryObjects.includes(objectName)) {
+            return null;
+        }
+
+        // Try standard format for other objects
+        return `${objectName}History`;
+    },
+
+    /**
+     * Check if a history object exists and is queryable
+     */
+    checkHistoryObjectExists: async function(historyObjectName) {
+        try {
+            const apiSel = document.getElementById('api-version');
+            const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
+            const result = await PlatformHelper.fetchFromSalesforce(`/services/data/v${v}/sobjects/${historyObjectName}/describe`);
+            return result && result.name === historyObjectName;
+        } catch (e) {
+            return false;
+        }
+    },
+
+    /**
+     * Render field history items
+     */
+    renderFieldHistory: function(records, container) {
+        if (!records || records.length === 0) {
+            container.innerHTML = '<div class="info-note">No field history changes found.</div>';
+            return;
+        }
+
+        let html = '';
+        for (const record of records) {
+            const fieldName = record.Field || 'Unknown Field';
+            const oldValue = record.OldValue !== null && record.OldValue !== undefined ? String(record.OldValue) : '(empty)';
+            const newValue = record.NewValue !== null && record.NewValue !== undefined ? String(record.NewValue) : '(empty)';
+            const createdByName = record.CreatedBy?.Name || record.CreatedById || 'Unknown';
+            const createdDate = record.CreatedDate ? new Date(record.CreatedDate).toLocaleString() : 'Unknown date';
+
+            // Format field name (convert API name to readable)
+            const displayFieldName = this.formatFieldName(fieldName);
+
+            html += `<div class="field-history-item">
+                <div class="history-field-name">${displayFieldName}</div>
+                <div class="history-change">
+                    <span class="history-old-value" title="${this.escapeHtml(oldValue)}">${this.truncate(oldValue, 25)}</span>
+                    <span class="history-arrow">→</span>
+                    <span class="history-new-value" title="${this.escapeHtml(newValue)}">${this.truncate(newValue, 25)}</span>
+                </div>
+                <div class="history-meta">
+                    <span class="history-user">👤 ${createdByName}</span>
+                    <span class="history-date">📅 ${createdDate}</span>
+                </div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+    },
+
+    /**
+     * Format field API name to readable format
+     */
+    formatFieldName: function(fieldName) {
+        if (!fieldName) return 'Unknown';
+
+        // Handle special field names
+        if (fieldName === 'created') return 'Record Created';
+        if (fieldName === 'feedEvent') return 'Feed Event';
+        if (fieldName === 'ownerAccepted') return 'Owner Accepted';
+        if (fieldName === 'ownerAssignment') return 'Owner Assignment';
+        if (fieldName === 'locked') return 'Record Locked';
+        if (fieldName === 'unlocked') return 'Record Unlocked';
+
+        // Remove __c suffix for custom fields
+        let name = fieldName.replace(/__c$/, '');
+
+        // Split by underscores and camelCase
+        name = name.replace(/_/g, ' ');
+        name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+        // Capitalize first letter of each word
+        return name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    },
+
+    /**
+     * Refresh field history
+     */
+    refreshFieldHistory: function() {
+        if (this._currentRecordId && this._currentRecordObject) {
+            // Clear cache
+            delete this._fieldHistoryCache[this._currentRecordId];
+            this.loadFieldHistory(this._currentRecordId, this._currentRecordObject);
+        }
+    },
+
+    /**
+     * Export field history to CSV
+     */
+    exportFieldHistory: function() {
+        const records = this._fieldHistoryCache[this._currentRecordId];
+        if (!records || records.length === 0) {
+            this.showNotification('No field history to export', 'warning');
+            return;
+        }
+
+        const headers = ['Field', 'Old Value', 'New Value', 'Changed By', 'Changed Date'];
+        const rows = records.map(r => [
+            r.Field || '',
+            r.OldValue !== null ? String(r.OldValue) : '',
+            r.NewValue !== null ? String(r.NewValue) : '',
+            r.CreatedBy?.Name || r.CreatedById || '',
+            r.CreatedDate || ''
+        ]);
+
+        const csv = [headers.join(','), ...rows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `field-history-${this._currentRecordId}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        this.showNotification('Field history exported!', 'success');
+    },
+
+    // ==========================================
+    // RELATED RECORDS (Record Scanner)
+    // ==========================================
+
+    // Cache for related records data
+    _relatedRecordsCache: {},
+
+    /**
+     * Load related records for the current record
+     */
+    loadRelatedRecords: async function(recordId, objectName) {
+        const container = document.getElementById('related-records-list');
+        if (!container) return;
+
+        container.innerHTML = '<div class="loading-note">Loading related records...</div>';
+
+        try {
+            // Get object describe to find relationships
+            const apiSel = document.getElementById('api-version');
+            const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
+            const describe = await PlatformHelper.fetchFromSalesforce(`/services/data/v${v}/sobjects/${objectName}/describe`);
+
+            if (!describe || !describe.childRelationships) {
+                container.innerHTML = '<div class="info-note">No related record information available for this object.</div>';
+                return;
+            }
+
+            // Objects that don't support direct SOQL queries
+            const nonQueryableObjects = [
+                'ActivityHistory', 'ActivityHistories',
+                'AttachedContentDocument', 'AttachedContentDocuments',
+                'AttachedContentNote', 'AttachedContentNotes',
+                'CombinedAttachment', 'CombinedAttachments',
+                'ContentDocumentLink', // Often restricted
+                'EmailStatus',
+                'EventRelation',
+                'TaskRelation',
+                'OpenActivity', 'OpenActivities',
+                'ProcessInstance', 'ProcessInstanceHistory',
+                'TaskWhoRelation', 'TaskWhoRelations',
+                'EventWhoRelation', 'EventWhoRelations',
+                'Name', // Polymorphic Name object
+                'NoteAndAttachment',
+                'TopicAssignment',
+                'UserRecordAccess',
+                'Vote',
+                'FeedTrackedChange',
+                // Feed objects often have complex structures
+                'AccountFeed', 'CaseFeed', 'ContactFeed', 'LeadFeed',
+                'OpportunityFeed', 'UserFeed', 'CollaborationGroupFeed',
+                'FeedItem', 'FeedComment', 'FeedLike', 'FeedRevision',
+                // Share objects
+                'AccountShare', 'CaseShare', 'ContactShare', 'LeadShare', 'OpportunityShare',
+                // Team member objects can be complex
+                'AccountTeamMember', 'CaseTeamMember', 'CaseTeamTemplateMember',
+                // Entity subscriptions
+                'EntitySubscription',
+                // Duplicate rules
+                'DuplicateRecordItem', 'DuplicateRecordSet'
+            ];
+
+            // Filter to meaningful relationships (ones with relationshipName)
+            // and exclude non-queryable objects
+            const relationships = describe.childRelationships
+                .filter(r => r.relationshipName && r.childSObject &&
+                            !nonQueryableObjects.includes(r.childSObject) &&
+                            !r.childSObject.endsWith('History') && // Skip history objects (handled separately)
+                            !r.childSObject.endsWith('__History') &&
+                            !r.childSObject.endsWith('Feed') && // Skip all Feed objects
+                            !r.childSObject.endsWith('Share')); // Skip all Share objects
+
+            // Deduplicate by childSObject (same object might appear multiple times with different relationship names)
+            const seenObjects = new Set();
+            const uniqueRelationships = relationships.filter(r => {
+                if (seenObjects.has(r.childSObject)) {
+                    return false;
+                }
+                seenObjects.add(r.childSObject);
+                return true;
+            }).slice(0, 15); // Limit to avoid too many queries
+
+            if (uniqueRelationships.length === 0) {
+                container.innerHTML = '<div class="info-note">No queryable child relationships found for this object.</div>';
+                return;
+            }
+
+            // Get counts for each relationship
+            const relatedData = await this.fetchRelatedRecordCounts(recordId, objectName, uniqueRelationships);
+
+            // Store in cache
+            this._relatedRecordsCache[recordId] = relatedData;
+
+            // Render related records
+            this.renderRelatedRecords(relatedData, container, recordId);
+
+        } catch (e) {
+            console.error('Error loading related records:', e);
+            container.innerHTML = `<div class="error-note">Error loading related records: ${e.message}</div>`;
+        }
+    },
+
+    /**
+     * Fetch counts for related records
+     */
+    fetchRelatedRecordCounts: async function(recordId, parentObject, relationships) {
+        const results = [];
+
+        for (const rel of relationships) {
+            try {
+                // Build count query
+                const query = `SELECT COUNT() FROM ${rel.childSObject} WHERE ${rel.field} = '${recordId}'`;
+                const result = await PlatformHelper.executeQuery(query);
+                const count = result?.totalSize || 0;
+
+                results.push({
+                    relationshipName: rel.relationshipName,
+                    childObject: rel.childSObject,
+                    field: rel.field,
+                    count: count,
+                    label: this.formatObjectName(rel.childSObject)
+                });
+            } catch (e) {
+                // Some relationships may not be queryable, skip them
+                console.warn(`Could not query ${rel.childSObject}:`, e.message);
+            }
+        }
+
+        // Sort by count (descending) then by name
+        results.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+        return results;
+    },
+
+    /**
+     * Render related records groups
+     */
+    renderRelatedRecords: function(relatedData, container, recordId) {
+        if (!relatedData || relatedData.length === 0) {
+            container.innerHTML = '<div class="info-note">No related records found.</div>';
+            return;
+        }
+
+        let html = '';
+        for (const rel of relatedData) {
+            const countClass = rel.count === 0 ? 'zero' : '';
+            html += `<div class="related-record-group" data-relationship="${rel.relationshipName}" data-object="${rel.childObject}" data-field="${rel.field}" data-parent-id="${recordId}">
+                <div class="related-record-header">
+                    <span class="related-record-name">
+                        ${rel.label}
+                    </span>
+                    <span class="related-record-count ${countClass}">${rel.count}</span>
+                </div>
+                <div class="related-record-items">
+                    <div class="loading-note">Loading...</div>
+                </div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+
+        // Add click listeners to expand/collapse and load items
+        container.querySelectorAll('.related-record-group').forEach(group => {
+            const header = group.querySelector('.related-record-header');
+            header.addEventListener('click', () => this.toggleRelatedRecordGroup(group));
+        });
+    },
+
+    /**
+     * Toggle a related record group expansion
+     */
+    toggleRelatedRecordGroup: async function(group) {
+        const isExpanded = group.classList.contains('expanded');
+
+        if (isExpanded) {
+            group.classList.remove('expanded');
+            return;
+        }
+
+        // Expand and load items if not already loaded
+        group.classList.add('expanded');
+
+        const itemsContainer = group.querySelector('.related-record-items');
+        const childObject = group.dataset.object;
+        const field = group.dataset.field;
+        const parentId = group.dataset.parentId;
+
+        // Check if already loaded
+        if (itemsContainer.dataset.loaded === 'true') {
+            return;
+        }
+
+        try {
+            // Query actual records (limit to 5 for preview)
+            const nameField = await this.getNameFieldForObject(childObject);
+            const query = `SELECT Id, ${nameField} FROM ${childObject} WHERE ${field} = '${parentId}' ORDER BY ${nameField} LIMIT 5`;
+            const result = await PlatformHelper.executeQuery(query);
+
+            if (!result || !result.records || result.records.length === 0) {
+                itemsContainer.innerHTML = '<div class="placeholder-note">No records found</div>';
+            } else {
+                let html = '';
+                for (const record of result.records) {
+                    const displayName = record[nameField] || record.Name || record.Id;
+                    html += `<div class="related-record-item" data-record-id="${record.Id}">
+                        <span class="item-name" title="Click to scan this record">${displayName}</span>
+                        <span class="item-id">${record.Id.substring(0, 10)}...</span>
+                    </div>`;
+                }
+
+                // Add "View more" link if there might be more records
+                if (result.totalSize > 5) {
+                    html += `<div class="view-more-link" data-object="${childObject}" data-field="${field}" data-parent-id="${parentId}">
+                        View all ${result.totalSize} records →
+                    </div>`;
+                }
+
+                itemsContainer.innerHTML = html;
+
+                // Add click listeners to load individual records
+                itemsContainer.querySelectorAll('.related-record-item').forEach(item => {
+                    item.querySelector('.item-name').addEventListener('click', () => {
+                        const recId = item.dataset.recordId;
+                        const searchInput = document.getElementById('record-search-input');
+                        if (searchInput) searchInput.value = recId;
+                        this.searchRecord();
+                    });
+                });
+
+                // Add view more listener
+                const viewMore = itemsContainer.querySelector('.view-more-link');
+                if (viewMore) {
+                    viewMore.addEventListener('click', () => {
+                        // Open related list in Salesforce
+                        this.openSalesforceLink(`/lightning/r/${this._currentRecordObject}/${parentId}/related/${group.dataset.relationship}/view`);
+                    });
+                }
+            }
+
+            itemsContainer.dataset.loaded = 'true';
+        } catch (e) {
+            console.error('Error loading related records:', e);
+            itemsContainer.innerHTML = `<div class="error-note">Error: ${e.message}</div>`;
+        }
+    },
+
+    /**
+     * Get the Name field for an object (handles objects without standard Name field)
+     */
+    getNameFieldForObject: async function(objectName) {
+        // Common objects with non-standard name fields
+        const nameFieldMap = {
+            'Case': 'CaseNumber',
+            'Task': 'Subject',
+            'Event': 'Subject',
+            'ContentDocument': 'Title',
+            'ContentVersion': 'Title',
+            'EmailMessage': 'Subject',
+            'Attachment': 'Name',
+            'Note': 'Title',
+            'FeedItem': 'Body',
+            'FeedComment': 'CommentBody',
+            'CaseFeed': 'Body',
+            'AccountFeed': 'Body',
+            'ContactFeed': 'Body',
+            'LeadFeed': 'Body',
+            'OpportunityFeed': 'Body',
+            'CollaborationGroupFeed': 'Body',
+            'UserFeed': 'Body',
+            'CaseComment': 'CommentBody',
+            'Solution': 'SolutionName',
+            'Contract': 'ContractNumber',
+            'Order': 'OrderNumber',
+            'Quote': 'QuoteNumber',
+            'Invoice': 'InvoiceNumber',
+            'CampaignMember': 'Id',
+            'OpportunityLineItem': 'Id',
+            'OrderItem': 'Id',
+            'QuoteLineItem': 'Id',
+            'PricebookEntry': 'Id',
+            'AccountContactRelation': 'Id',
+            'CaseTeamMember': 'Id',
+            'OpportunityTeamMember': 'Id'
+        };
+
+        if (nameFieldMap[objectName]) {
+            return nameFieldMap[objectName];
+        }
+
+        // Handle any Feed object (ends with Feed)
+        if (objectName.endsWith('Feed')) {
+            return 'Body';
+        }
+
+        // Default to Name field
+        return 'Name';
+    },
+
+    /**
+     * Format object API name to readable format
+     */
+    formatObjectName: function(objectName) {
+        if (!objectName) return 'Unknown';
+
+        // Remove __c suffix for custom objects
+        let name = objectName.replace(/__c$/, ' (Custom)');
+
+        // Handle __r relationship names
+        name = name.replace(/__r$/, '');
+
+        // Split by underscores and camelCase
+        name = name.replace(/_/g, ' ');
+        name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+        return name;
     },
 
     // ==========================================
     // UTILITIES
     // ==========================================
 
+    /**
+     * Truncate string with ellipsis
+     */
+    truncate: function(str, maxLength) {
+        if (!str) return str;
+        str = String(str);
+        if (str.length <= maxLength) return str;
+        return str.substring(0, maxLength) + '...';
+    },
+
+    /**
+     * Escape HTML special characters
+     */
+    escapeHtml: function(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    },
+
     showNotification: function(message, type) {
         // Simple notification - could be enhanced
         console.log(`[${type}] ${message}`);
+        // Try to use Utils toast if available
+        try {
+            if (window.Utils && window.Utils.showToast) {
+                window.Utils.showToast(message, type);
+            }
+        } catch (e) {}
     }
 };
 

@@ -46,10 +46,9 @@ File: `popup.html` (replace body content with this)
             </div>
             <label for="api-version" class="api-version-label" title="Salesforce API version">API</label>
             <select id="api-version" class="api-version-select" aria-label="Salesforce API version">
-                <option value="66.0">66.0</option>
                 <option value="65.0">65.0</option>
                 <option value="64.0">64.0</option>
-                <option value="63.0">63.0</option>
+                <option value="63.0" selected>63.0</option>
                 <option value="62.0">62.0</option>
                 <option value="61.0">61.0</option>
                 <option value="60.0">60.0</option>
@@ -726,8 +725,7 @@ File: `popup.html` (replace body content with this)
                 <nav class="sub-tabs" role="tablist" aria-label="Data Explorer sections">
                     <button class="sub-tab-button active" role="tab" aria-selected="true" data-subtab="sandbox-manager">Sandbox & Favicon</button>
                     <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="user-manager">User Manager</button>
-                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="current-record">Current Record</button>
-                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="record-search">Record Search</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="record-lookup">Record Scanner</button>
                 </nav>
             </div>
 
@@ -788,6 +786,15 @@ File: `popup.html` (replace body content with this)
                                             <label class="shape-opt" title="Rounded"><input type="radio" name="favicon-shape" value="rounded" /><span>▢</span></label>
                                             <label class="shape-opt" title="Diamond"><input type="radio" name="favicon-shape" value="diamond" /><span>◆</span></label>
                                             <label class="shape-opt" title="Hexagon"><input type="radio" name="favicon-shape" value="hexagon" /><span>⬡</span></label>
+                                        </div>
+                                        <!-- Color Presets -->
+                                        <div class="favicon-color-presets" id="favicon-color-presets">
+                                            <button type="button" class="color-preset" data-color="#ff6b6b" title="Red (Production)" style="background-color: #ff6b6b;"></button>
+                                            <button type="button" class="color-preset" data-color="#51cf66" title="Green (Dev)" style="background-color: #51cf66;"></button>
+                                            <button type="button" class="color-preset" data-color="#339af0" title="Blue (UAT)" style="background-color: #339af0;"></button>
+                                            <button type="button" class="color-preset" data-color="#fcc419" title="Yellow (QA)" style="background-color: #fcc419;"></button>
+                                            <button type="button" class="color-preset" data-color="#9775fa" title="Purple (Staging)" style="background-color: #9775fa;"></button>
+                                            <button type="button" class="color-preset" data-color="#ff922b" title="Orange (Hotfix)" style="background-color: #ff922b;"></button>
                                         </div>
                                         <div class="favicon-inputs-grid">
                                             <input type="color" id="favicon-color" value="#ff6b6b" aria-label="Color" title="Badge Color" />
@@ -882,30 +889,126 @@ File: `popup.html` (replace body content with this)
                 </div>
             </div>
 
-            <!-- Sub-tab: Current Record -->
-            <div id="subtab-current-record" class="sub-tab-content" hidden aria-labelledby="current-record">
-                <div class="section-card">
-                    <h3 class="section-card-title">📄 Current Page Record</h3>
-                    <div class="record-actions-row">
-                        <button id="refresh-record-btn" class="icon-btn btn-sm" aria-label="Refresh record info" title="Refresh">⟲</button>
+            <!-- Sub-tab: Record Scanner (Merged: Current Record + Record Search + History) -->
+            <div id="subtab-record-lookup" class="sub-tab-content" hidden aria-labelledby="record-lookup">
+                <!-- Beta Banner -->
+                <div class="beta-banner beta-banner-compact" id="record-lookup-beta-banner">
+                    <div class="beta-banner-icon">🔬</div>
+                    <div class="beta-banner-content">
+                        <div class="beta-banner-title">Record Scanner is in Beta</div>
+                        <div class="beta-banner-message">Scan records, view field history, explore related records & more!</div>
                     </div>
-                    <div id="current-record-info" class="details-list">
-                        <div class="placeholder-note">Navigate to a record page and click refresh to detect the record.</div>
-                    </div>
+                    <a href="https://github.com/manaskumarbehera/sf-audit-extractor/issues" target="_blank" class="beta-banner-action" title="Request features or report issues">
+                        <span class="beta-banner-action-icon">💡</span>
+                        <span class="beta-banner-action-text">Feedback</span>
+                    </a>
+                    <button class="beta-banner-dismiss" id="record-lookup-banner-dismiss" title="Dismiss" aria-label="Dismiss banner">&times;</button>
                 </div>
-            </div>
 
-            <!-- Sub-tab: Record Search -->
-            <div id="subtab-record-search" class="sub-tab-content" hidden aria-labelledby="record-search">
-                <div class="section-card">
-                    <h3 class="section-card-title">🔎 Search by Record ID</h3>
-                    <p class="section-description">Enter any Salesforce Record ID (15 or 18 characters) to identify its object type and basic details.</p>
-                    <div class="record-search-row">
-                        <input type="text" id="record-search-input" placeholder="Enter Record ID (e.g., 001xx000003DGbYAAW)" aria-label="Record ID" />
-                        <button id="record-search-btn" class="btn btn-primary btn-sm">Identify</button>
+                <div class="record-lookup-layout-v2">
+                    <!-- Top Row: Search Bar -->
+                    <div class="record-search-bar">
+                        <input type="text" id="record-search-input" placeholder="Paste Record ID (15 or 18 chars)..." aria-label="Record ID" />
+                        <button id="record-search-btn" class="btn btn-primary btn-sm" title="Search">🔍 Search</button>
+                        <button id="refresh-record-btn" class="btn btn-secondary btn-sm" aria-label="Refresh" title="Detect from current page">⟲ Detect</button>
                     </div>
-                    <div id="search-results-container" class="details-list">
-                        <div class="placeholder-note">Enter a Record ID to identify it</div>
+
+                    <!-- Main Content: Three Columns Side by Side -->
+                    <div class="record-main-grid-v2">
+                        <!-- Left: Recent Records -->
+                        <div class="record-history-panel">
+                            <div class="panel-header">
+                                <span class="panel-title">🕐 Recent <span id="history-count"></span></span>
+                                <button id="clear-record-history" class="icon-btn btn-xs" aria-label="Clear history" title="Clear history">✕</button>
+                            </div>
+                            <div id="record-history-list" class="record-history-list-vertical">
+                                <div class="placeholder-note">No recent records</div>
+                            </div>
+                        </div>
+
+                        <!-- Center: Record Scanner (Inspector + History + Related) -->
+                        <div class="record-scanner-center-panel">
+                            <!-- Record Inspector -->
+                            <div class="record-inspector-panel">
+                                <div class="panel-header">
+                                    <span class="panel-title">📄 Record Details</span>
+                                </div>
+                                <div id="current-record-info" class="record-inspector-content">
+                                    <div class="placeholder-note">Select a recent record or search by ID</div>
+                                </div>
+                            </div>
+
+                            <!-- Field History Panel -->
+                            <div class="field-history-panel collapsible-panel" id="field-history-panel">
+                                <div class="panel-header collapsible-header" id="field-history-toggle">
+                                    <span class="panel-title">📜 Field History</span>
+                                    <span class="collapse-indicator">▼</span>
+                                </div>
+                                <div class="panel-content collapsible-content" id="field-history-content">
+                                    <div id="field-history-list" class="field-history-list">
+                                        <div class="placeholder-note">Load a record to view field history</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Related Records Panel -->
+                            <div class="related-records-panel collapsible-panel" id="related-records-panel">
+                                <div class="panel-header collapsible-header" id="related-records-toggle">
+                                    <span class="panel-title">🔗 Related Records</span>
+                                    <span class="collapse-indicator">▼</span>
+                                </div>
+                                <div class="panel-content collapsible-content" id="related-records-content">
+                                    <div id="related-records-list" class="related-records-list">
+                                        <div class="placeholder-note">Load a record to view related records</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Developer Tools & Quick Links -->
+                        <div class="dev-tools-panel">
+                            <div class="panel-header">
+                                <span class="panel-title">🛠️ Dev Tools</span>
+                            </div>
+                            <div class="dev-tools-panel-content">
+                                <div class="dev-tools-section">
+                                    <div class="dev-tools-label">Quick Links</div>
+                                    <div class="dev-tools-buttons">
+                                        <button class="quick-link-btn-sm" id="btn-open-setup" title="Open Setup">⚙️ Setup</button>
+                                        <button class="quick-link-btn-sm" id="btn-open-dev-console" title="Open Developer Console">🖥️ Console</button>
+                                        <button class="quick-link-btn-sm" id="btn-open-object-manager" title="Open Object Manager">📦 Objects</button>
+                                        <button class="quick-link-btn-sm" id="btn-open-debug-logs" title="Open Debug Logs">📋 Logs</button>
+                                    </div>
+                                </div>
+                                <div class="dev-tools-section" id="record-specific-tools" style="display:none;">
+                                    <div class="dev-tools-label">Record Tools</div>
+                                    <div class="dev-tools-buttons">
+                                        <button class="quick-link-btn-sm" id="btn-view-in-setup" title="View Object in Setup">📦 Obj Setup</button>
+                                        <button class="quick-link-btn-sm" id="btn-query-record" title="Query this record in SOQL">🔍 SOQL</button>
+                                        <button class="quick-link-btn-sm" id="btn-copy-soql" title="Copy SOQL query">📋 Copy</button>
+                                        <button class="quick-link-btn-sm" id="btn-view-api" title="View API response">{ } API</button>
+                                    </div>
+                                </div>
+                                <div class="dev-tools-section" id="history-tools" style="display:none;">
+                                    <div class="dev-tools-label">History Tools</div>
+                                    <div class="dev-tools-buttons">
+                                        <button class="quick-link-btn-sm" id="btn-refresh-history" title="Refresh field history">⟲ Refresh</button>
+                                        <button class="quick-link-btn-sm" id="btn-export-history" title="Export history to CSV">📥 Export</button>
+                                    </div>
+                                </div>
+                                <div class="dev-tools-section">
+                                    <div class="dev-tools-label">ID Prefixes</div>
+                                    <div class="id-reference-grid">
+                                        <span class="id-ref-sm">001=Acc</span>
+                                        <span class="id-ref-sm">003=Con</span>
+                                        <span class="id-ref-sm">006=Opp</span>
+                                        <span class="id-ref-sm">00Q=Lead</span>
+                                        <span class="id-ref-sm">500=Case</span>
+                                        <span class="id-ref-sm">005=User</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -980,7 +1083,7 @@ File: `popup.html` (replace body content with this)
                         </div>
                         <div class="tip-item">
                             <span class="tip-icon">🔍</span>
-                            <span class="tip-text">Paste any <strong>Salesforce ID</strong> in Record Search to identify its object type.</span>
+                            <span class="tip-text">Paste any <strong>Salesforce ID</strong> in Record Lookup to identify its object type.</span>
                         </div>
                     </div>
                 </div>
