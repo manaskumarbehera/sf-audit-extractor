@@ -1,5 +1,16 @@
 # TrackForcePro - Chrome Extension User Guide
-### Version 1.1.1
+### Version 1.1.2 | February 9, 2026
+
+---
+
+## What's New in v1.1.2
+
+- 🔬 **Record Scanner** - Renamed from Record Lookup with new features:
+  - Field History tracking (view old → new value changes)
+  - Related Records explorer with counts
+  - Export history to CSV
+- ✨ **Page Blinker** - Floating indicator on Salesforce pages for quick access
+- 🐛 **Bug Fixes** - Content script loading, query errors resolved
 
 ---
 
@@ -23,18 +34,43 @@ TrackForcePro is a powerful Chrome extension designed specifically for Salesforc
    - [SOQL Builder](#3-soql-builder)
    - [Data Explorer](#4-data-explorer)
    - [Platform Tools](#5-platform-tools)
-3. [Window & Tab Modes](#6-window--tab-modes)
+   - [Page Blinker](#6-page-blinker) *(New)*
+3. [Window & Tab Modes](#7-window--tab-modes)
 4. [Settings](#settings)
 5. [Help & Support](#help--support)
 6. [About TrackForcePro](#about-trackforcepro)
 7. [Troubleshooting](#troubleshooting)
 8. [Keyboard Shortcuts](#keyboard-shortcuts)
+9. [Version History](#version-history)
 
 ---
 
 ## Getting Started
 
 ### Installation
+
+#### Option 1: Chrome Web Store (Recommended) ⭐
+
+The easiest way to install TrackForcePro:
+
+1. **Visit the Chrome Web Store**
+   - Go to: **[TrackForcePro on Chrome Web Store](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)**
+
+2. **Click "Add to Chrome"**
+   - Click the blue "Add to Chrome" button
+   - Confirm by clicking "Add extension" in the popup
+
+3. **Done!**
+   - TrackForcePro will be installed and appear in your extensions
+   - Pin it to your toolbar for easy access
+
+**[Screenshot: Chrome Web Store Installation]**
+
+---
+
+#### Option 2: Manual Installation (Developer Mode)
+
+For developers or advanced users who want to use the development version:
 
 1. **Download the Extension**
    - Visit our website and download the TrackForcePro extension package
@@ -464,7 +500,44 @@ Monitor and interact with Lightning Message Channels.
 
 ---
 
-## 6. Window & Tab Modes
+### 6. Page Blinker *(New in v1.1.2)*
+
+A convenient floating indicator that appears on Salesforce pages for quick access to the extension.
+
+**[Screenshot: Page Blinker on Salesforce Page]**
+
+#### Location
+The blinker appears in the **top-right corner** of all Salesforce pages.
+
+#### Appearance
+- Salesforce blue gradient background
+- "TF" icon with pulsing animation
+- "TrackForcePro" label
+- Close (×) button
+
+#### Interactions
+
+| Action | Result |
+|--------|--------|
+| **Single Click** | Opens TrackForcePro in a new browser tab (adjacent to current tab) |
+| **Double Click** | Minimizes to just the "TF" icon (toggle to expand) |
+| **Click ×** | Hides the blinker for current session |
+
+#### Behavior
+- **Session Storage**: Hidden/minimized state persists for the browser session
+- **Page Reload**: Blinker reappears after page reload if it was closed
+- **Salesforce Only**: Only appears on pages matching Salesforce domains
+
+#### Supported Domains
+- `*.salesforce.com`
+- `*.force.com`
+- `*.lightning.force.com`
+- `*.salesforce-setup.com`
+- `*.visualforce.com`
+
+---
+
+## 7. Window & Tab Modes
 
 **Purpose:** Open TrackForcePro in a larger workspace—either as a browser tab or a standalone window.
 

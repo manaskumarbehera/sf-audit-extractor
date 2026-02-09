@@ -14,6 +14,7 @@
     connectLoopActive: false,
     peLogPaused: false,
     peLogAutoScrollEnabled: true,
+    handshakeRetried: false,
     // Publish modal state
     publishModalEventName: null,
     publishModalFields: [],
@@ -241,7 +242,40 @@
     }
     const arr = await res.json();
     const m = Array.isArray(arr) ? arr[0] : null;
-    if (!m || !m.successful) throw new Error(`Handshake unsuccessful: ${JSON.stringify(m || {})}`);
+    if (!m || !m.successful) {
+      // Check if it's an authentication failure that we should retry
+      const errStr = JSON.stringify(m || {});
+      const errLower = errStr.toLowerCase();
+      const isAuthError = errLower.includes('401') || errLower.includes('403') ||
+                          errLower.includes('authentication') || errLower.includes('unauthorized') ||
+                          errLower.includes('handshake denied');
+
+      if (isAuthError && !state.handshakeRetried) {
+        // Mark that we've retried to avoid infinite loops
+        state.handshakeRetried = true;
+        appendPeLog('Handshake failed due to authentication. Refreshing session and retrying...', m, 'error');
+
+        // Clear caches and refresh session
+        try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+        try { await opts.refreshSessionFromTab(); } catch {}
+        state.cometdBaseUrl = getCometdBase();
+
+        // Reset state for retry
+        state.cometdState = 'disconnected';
+        state.cometdClientId = null;
+
+        // Retry handshake once
+        return await cometdHandshake();
+      }
+
+      state.cometdState = 'disconnected';
+      state.handshakeRetried = false; // Reset for next attempt
+      updateCometdStatus(false, 'Handshake failed');
+      appendPeLog(`Handshake unsuccessful: ${errStr}`, m, 'error');
+      throw new Error(`Handshake unsuccessful: ${errStr}`);
+    }
+
+    state.handshakeRetried = false; // Reset on success
     state.cometdClientId = m.clientId;
     state.cometdAdvice = m.advice || state.cometdAdvice;
     state.cometdState = 'connected';

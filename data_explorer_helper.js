@@ -23,10 +23,55 @@ const DataExplorerHelper = {
         this._initialized = true;
         console.log("Initializing Data Explorer...");
         this.wireEvents();
-        // Load the default active sub-tab
+
+        // Load the default active sub-tab for Data Explorer (Record Scanner)
         const activeBtn = document.querySelector('#tab-data .sub-tab-button.active');
         if (activeBtn) {
             this.switchSubTab(activeBtn.dataset.subtab);
+        }
+
+        // Wire Settings sub-tabs
+        this.wireSettingsSubTabs();
+    },
+
+    wireSettingsSubTabs: function() {
+        // Wire Settings sub-tab switching
+        const settingsSubTabButtons = document.querySelectorAll('#tab-settings .sub-tab-button');
+        settingsSubTabButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchSettingsSubTab(e.target.dataset.subtab);
+            });
+        });
+    },
+
+    switchSettingsSubTab: function(subTabId) {
+        // Update buttons in Settings
+        document.querySelectorAll('#tab-settings .sub-tab-button').forEach(btn => {
+            const isActive = btn.dataset.subtab === subTabId;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        // Update content
+        document.querySelectorAll('#tab-settings .sub-tab-content').forEach(content => {
+            const isActive = content.id === `subtab-${subTabId}`;
+            content.hidden = !isActive;
+            content.classList.toggle('active', isActive);
+        });
+
+        // Load content on switch
+        switch (subTabId) {
+            case 'settings-org':
+                this.loadOrgInfo();
+                this.initFaviconPreview();
+                this.loadSavedFavicons();
+                break;
+            case 'settings-display':
+                // Load display settings
+                break;
+            case 'settings-about':
+                // Static content, no loading needed
+                break;
         }
     },
 
@@ -39,47 +84,18 @@ const DataExplorerHelper = {
             });
         });
 
-        // Sandbox & Favicon Manager
-        const faviconColor = document.getElementById('favicon-color');
-        const faviconLabel = document.getElementById('favicon-label');
-        const faviconApply = document.getElementById('favicon-apply');
-        const faviconReset = document.getElementById('favicon-reset');
-        const faviconShapeOptions = document.querySelectorAll('input[name="favicon-shape"]');
-        const faviconOrgSelect = document.getElementById('favicon-org-select');
-        const faviconColorPresets = document.querySelectorAll('#favicon-color-presets .color-preset');
+        // Sandbox & Favicon Manager - Wire up events for both Settings tab and Data Explorer tab
+        this.wireFaviconEventsDataExplorer('-data'); // Data Explorer tab (suffixed IDs)
+        this.wireFaviconEventsSettings(); // Settings tab (legacy IDs)
 
-        if (faviconColor) {
-            faviconColor.addEventListener('input', () => {
-                this.updateFaviconPreview();
-                this.updateColorPresetSelection();
-            });
-        }
-        if (faviconLabel) {
-            faviconLabel.addEventListener('input', () => this.updateFaviconPreview());
-        }
-        // Shape selection event listeners
-        faviconShapeOptions.forEach(radio => {
-            radio.addEventListener('change', () => this.updateFaviconPreview());
-        });
-        // Color preset click handlers
-        faviconColorPresets.forEach(preset => {
-            preset.addEventListener('click', () => this.selectColorPreset(preset.dataset.color));
-        });
-        if (faviconApply) {
-            faviconApply.addEventListener('click', () => this.applyFavicon());
-        }
-        if (faviconReset) {
-            faviconReset.addEventListener('click', () => this.resetFavicon());
-        }
-        // Org selector for editing different orgs
-        if (faviconOrgSelect) {
-            faviconOrgSelect.addEventListener('change', () => this.onOrgSelectChange());
-        }
-
-        // Refresh Org Info button
+        // Refresh Org Info buttons (both tabs)
         const refreshOrgBtn = document.getElementById('refresh-org-btn');
+        const refreshOrgBtnData = document.getElementById('refresh-org-btn-data');
         if (refreshOrgBtn) {
             refreshOrgBtn.addEventListener('click', () => this.loadOrgInfo());
+        }
+        if (refreshOrgBtnData) {
+            refreshOrgBtnData.addEventListener('click', () => this.loadOrgInfo());
         }
 
         // User Manager
@@ -211,6 +227,205 @@ const DataExplorerHelper = {
         }
     },
 
+    // Wire up favicon events for a specific suffix ('' for Settings, '-data' for Data Explorer)
+    wireFaviconEvents: function(suffix) {
+        const faviconColor = document.getElementById(`favicon-color${suffix}`);
+        const faviconLabel = document.getElementById(`favicon-label${suffix}`);
+        const faviconApply = document.getElementById(`apply-favicon-btn${suffix}`);
+        const faviconSave = document.getElementById(`save-favicon-btn${suffix}`);
+        const faviconReset = document.getElementById(`reset-favicon-btn${suffix}`);
+        const faviconShapeOptions = document.querySelectorAll(`#favicon-shape-options${suffix} .shape-btn`);
+        const faviconOrgSelect = document.getElementById(`favicon-org-select${suffix}`);
+        const faviconColorPresets = document.querySelectorAll(`#favicon-color-presets${suffix} .color-preset`);
+
+        if (faviconColor) {
+            faviconColor.addEventListener('input', () => {
+                this.updateFaviconPreview(suffix);
+                this.updateColorPresetSelection(suffix);
+            });
+        }
+        if (faviconLabel) {
+            faviconLabel.addEventListener('input', () => this.updateFaviconPreview(suffix));
+        }
+        // Shape selection event listeners (button-based)
+        faviconShapeOptions.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove active from siblings
+                faviconShapeOptions.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.updateFaviconPreview(suffix);
+            });
+        });
+        // Color preset click handlers
+        faviconColorPresets.forEach(preset => {
+            preset.addEventListener('click', () => this.selectColorPreset(preset.dataset.color, suffix));
+        });
+        if (faviconApply) {
+            faviconApply.addEventListener('click', () => this.applyFavicon(suffix));
+        }
+        if (faviconSave) {
+            faviconSave.addEventListener('click', () => this.applyFavicon(suffix));
+        }
+        if (faviconReset) {
+            faviconReset.addEventListener('click', () => this.resetFavicon(suffix));
+        }
+        // Org selector for editing different orgs
+        if (faviconOrgSelect) {
+            faviconOrgSelect.addEventListener('change', () => this.onOrgSelectChange(suffix));
+        }
+    },
+
+    // Wire events for Data Explorer tab (-data suffix) - uses radio buttons for shapes
+    wireFaviconEventsDataExplorer: function(suffix) {
+        const faviconColor = document.getElementById(`favicon-color${suffix}`);
+        const faviconLabel = document.getElementById(`favicon-label${suffix}`);
+        const faviconApply = document.getElementById(`apply-favicon-btn${suffix}`);
+        const faviconReset = document.getElementById(`reset-favicon-btn${suffix}`);
+        const faviconShapeRadios = document.querySelectorAll(`input[name="favicon-shape${suffix}"]`);
+        const faviconOrgSelect = document.getElementById(`favicon-org-select${suffix}`);
+        const faviconColorPresets = document.querySelectorAll(`#favicon-color-presets${suffix} .color-preset`);
+
+        if (faviconColor) {
+            faviconColor.addEventListener('input', () => {
+                this.updateFaviconPreviewRadio(suffix);
+            });
+        }
+        if (faviconLabel) {
+            faviconLabel.addEventListener('input', () => this.updateFaviconPreviewRadio(suffix));
+        }
+        // Shape selection event listeners (radio-based)
+        faviconShapeRadios.forEach(radio => {
+            radio.addEventListener('change', () => this.updateFaviconPreviewRadio(suffix));
+        });
+        // Color preset click handlers
+        faviconColorPresets.forEach(preset => {
+            preset.addEventListener('click', () => {
+                if (faviconColor) faviconColor.value = preset.dataset.color;
+                this.updateFaviconPreviewRadio(suffix);
+            });
+        });
+        if (faviconApply) {
+            faviconApply.addEventListener('click', () => this.applyFaviconRadio(suffix));
+        }
+        if (faviconReset) {
+            faviconReset.addEventListener('click', () => this.resetFavicon(suffix));
+        }
+        // Org selector for editing different orgs
+        if (faviconOrgSelect) {
+            faviconOrgSelect.addEventListener('change', () => this.onOrgSelectChange(suffix));
+        }
+    },
+
+    // Update preview for radio-based shape selection
+    updateFaviconPreviewRadio: function(suffix) {
+        const preview = document.getElementById(`favicon-preview${suffix}`);
+        const color = document.getElementById(`favicon-color${suffix}`)?.value || '#ff6b6b';
+        const label = document.getElementById(`favicon-label${suffix}`)?.value || '';
+        const shapeRadio = document.querySelector(`input[name="favicon-shape${suffix}"]:checked`);
+        const shape = shapeRadio ? shapeRadio.value : 'circle';
+
+        if (!preview) return;
+
+        const ctx = preview.getContext('2d');
+        if (!ctx) return;
+
+        ctx.clearRect(0, 0, preview.width, preview.height);
+        this.drawFaviconShape(ctx, color, label, shape);
+    },
+
+    // Apply favicon for radio-based shape selection
+    applyFaviconRadio: async function(suffix) {
+        const color = document.getElementById(`favicon-color${suffix}`)?.value || '#ff6b6b';
+        const label = document.getElementById(`favicon-label${suffix}`)?.value || '';
+        const shapeRadio = document.querySelector(`input[name="favicon-shape${suffix}"]:checked`);
+        const shape = shapeRadio ? shapeRadio.value : 'circle';
+
+        await this.applyFaviconWithValues(color, label, shape);
+    },
+
+    // Wire events for Settings tab (legacy IDs without suffix)
+    wireFaviconEventsSettings: function() {
+        const faviconColor = document.getElementById('favicon-color');
+        const faviconLabel = document.getElementById('favicon-label');
+        const faviconApply = document.getElementById('favicon-apply');
+        const faviconReset = document.getElementById('favicon-reset');
+        const faviconShapeRadios = document.querySelectorAll('input[name="favicon-shape"]');
+        const faviconOrgSelect = document.getElementById('favicon-org-select');
+        const faviconColorPresets = document.querySelectorAll('#favicon-color-presets .color-preset');
+
+        if (faviconColor) {
+            faviconColor.addEventListener('input', () => {
+                this.updateFaviconPreviewSettings();
+                this.updateColorPresetSelection('');
+            });
+        }
+        if (faviconLabel) {
+            faviconLabel.addEventListener('input', () => this.updateFaviconPreviewSettings());
+        }
+        // Shape selection event listeners (radio-based for Settings)
+        faviconShapeRadios.forEach(radio => {
+            radio.addEventListener('change', () => this.updateFaviconPreviewSettings());
+        });
+        // Color preset click handlers
+        faviconColorPresets.forEach(preset => {
+            preset.addEventListener('click', () => this.selectColorPresetSettings(preset.dataset.color));
+        });
+        if (faviconApply) {
+            faviconApply.addEventListener('click', () => this.applyFaviconSettings());
+        }
+        if (faviconReset) {
+            faviconReset.addEventListener('click', () => this.resetFavicon(''));
+        }
+        // Org selector for editing different orgs
+        if (faviconOrgSelect) {
+            faviconOrgSelect.addEventListener('change', () => this.onOrgSelectChange(''));
+        }
+    },
+
+    // Settings-specific favicon preview update (uses radio buttons)
+    updateFaviconPreviewSettings: function() {
+        const preview = document.getElementById('favicon-preview');
+        const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
+        const label = document.getElementById('favicon-label')?.value || '';
+        const shapeRadio = document.querySelector('input[name="favicon-shape"]:checked');
+        const shape = shapeRadio ? shapeRadio.value : 'cloud';
+
+        if (!preview) return;
+
+        // Clear and render preview
+        preview.innerHTML = '';
+        const canvas = document.createElement('canvas');
+        canvas.width = 36;
+        canvas.height = 36;
+        canvas.style.width = '36px';
+        canvas.style.height = '36px';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(36/32, 36/32);
+        this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape);
+        preview.appendChild(canvas);
+    },
+
+    // Settings-specific color preset selection
+    selectColorPresetSettings: function(color) {
+        const colorInput = document.getElementById('favicon-color');
+        if (colorInput && color) {
+            colorInput.value = color;
+            this.updateFaviconPreviewSettings();
+            this.updateColorPresetSelection('');
+        }
+    },
+
+    // Settings-specific apply favicon (uses radio buttons)
+    applyFaviconSettings: async function() {
+        const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
+        const label = document.getElementById('favicon-label')?.value || '';
+        const shapeRadio = document.querySelector('input[name="favicon-shape"]:checked');
+        const shape = shapeRadio ? shapeRadio.value : 'cloud';
+
+        // Use the main apply logic with these values
+        await this.applyFaviconWithValues(color, label, shape);
+    },
+
     switchSubTab: function(subTabId) {
         // Update buttons
         document.querySelectorAll('#tab-data .sub-tab-button').forEach(btn => {
@@ -248,9 +463,17 @@ const DataExplorerHelper = {
     // ==========================================
 
     loadOrgInfo: async function() {
-        const container = document.getElementById('org-info-container');
-        if (!container) return;
-        container.innerHTML = '<div class="spinner">Loading organization info...</div>';
+        // Support both Settings tab and Data Explorer tab containers
+        const containers = [
+            document.getElementById('org-info-container'),
+            document.getElementById('org-info-container-data')
+        ].filter(Boolean);
+
+        if (containers.length === 0) return;
+
+        containers.forEach(c => {
+            c.innerHTML = '<div class="spinner">Loading organization info...</div>';
+        });
 
         try {
             // IMPORTANT: Always refresh session from current window's tab to ensure correct org context
@@ -262,13 +485,14 @@ const DataExplorerHelper = {
             // Check if we have a valid session first
             const session = await PlatformHelper.getSession();
             if (!session || !session.isLoggedIn) {
-                container.innerHTML = `
+                const notConnectedHtml = `
                     <div class="not-connected-message">
                         <div style="font-size: 24px; margin-bottom: 8px;">🔌</div>
                         <div style="font-weight: 600; margin-bottom: 4px;">Not Connected</div>
                         <div style="font-size: 12px; color: #6c757d;">Please navigate to a Salesforce org to view organization info.</div>
                     </div>
                 `;
+                containers.forEach(c => { c.innerHTML = notConnectedHtml; });
                 // Still load saved favicons even if not connected
                 this.loadSavedFavicons();
                 return;
@@ -284,23 +508,26 @@ const DataExplorerHelper = {
                 // Store current org info
                 this._currentOrgId = org.Id;
                 this._currentOrgName = org.Name;
-                this.renderOrgInfo(org, container);
+                containers.forEach(c => this.renderOrgInfo(org, c));
                 // Load saved favicons list
                 this.loadSavedFavicons();
             } else {
-                container.innerHTML = '<div class="error-message">Could not retrieve organization information.</div>';
+                containers.forEach(c => {
+                    c.innerHTML = '<div class="error-message">Could not retrieve organization information.</div>';
+                });
                 this.loadSavedFavicons();
             }
         } catch (error) {
             console.error('Error loading org info:', error);
             const errorDetails = error.message || String(error);
             const isNotConnected = errorDetails.includes('Not connected') || errorDetails.includes('Missing session');
-            container.innerHTML = `<div class="error-message">
+            const errorHtml = `<div class="error-message">
                 ${isNotConnected 
                     ? '<div style="font-size: 24px; margin-bottom: 8px;">🔌</div><div style="font-weight: 600; margin-bottom: 4px;">Session Error</div><div style="font-size: 12px; color: #6c757d;">Please ensure you are logged into Salesforce in an active tab.</div>'
                     : `Error: ${errorDetails}`
                 }
             </div>`;
+            containers.forEach(c => { c.innerHTML = errorHtml; });
             // Still try to load saved favicons
             this.loadSavedFavicons();
         }
@@ -342,9 +569,8 @@ const DataExplorerHelper = {
     },
 
     loadExistingFaviconOrSuggest: async function(orgId, isSandbox) {
-        const labelInput = document.getElementById('favicon-label');
-        const colorInput = document.getElementById('favicon-color');
-        const editIndicator = document.getElementById('favicon-edit-indicator');
+        // Support both Settings tab and Data Explorer tab forms
+        const suffixes = ['', '-data'];
 
         try {
             const result = await chrome.storage.local.get('orgFavicons');
@@ -352,25 +578,29 @@ const DataExplorerHelper = {
                 ? result.orgFavicons : {};
 
             if (orgId && orgFavicons[orgId]) {
-                // Existing data found - populate form in edit mode
+                // Existing data found - populate both forms in edit mode
                 const { color, label, shape } = orgFavicons[orgId];
-                if (colorInput && color) colorInput.value = color;
-                if (labelInput) labelInput.value = label || '';
-                // Set the shape selection
-                if (shape) {
-                    this.setSelectedShape(shape);
-                }
 
-                // Show edit mode indicator
-                if (editIndicator) {
-                    editIndicator.innerHTML = '<span style="color:#2b8a3e;font-size:11px;">✓ Editing existing favicon</span>';
-                    editIndicator.style.display = 'block';
-                }
+                for (const suffix of suffixes) {
+                    const labelInput = document.getElementById(`favicon-label${suffix}`);
+                    const colorInput = document.getElementById(`favicon-color${suffix}`);
 
-                // Update preview with saved settings
-                this.updateFaviconPreview();
-                // Update color preset selection highlight
-                this.updateColorPresetSelection();
+                    if (colorInput && color) {
+                        colorInput.value = color;
+                    }
+                    if (labelInput) labelInput.value = label || '';
+                    // Set the shape selection
+                    if (shape) {
+                        this.setSelectedShape(shape, suffix);
+                    }
+
+                    // Update preview with saved settings
+                    if (suffix === '-data') {
+                        this.updateFaviconPreviewRadio(suffix);
+                    } else {
+                        this.updateFaviconPreview(suffix);
+                    }
+                }
                 return;
             }
         } catch (e) {
@@ -378,80 +608,93 @@ const DataExplorerHelper = {
         }
 
         // No existing data - auto-suggest based on org type
-        if (editIndicator) {
-            editIndicator.innerHTML = '';
-            editIndicator.style.display = 'none';
+        for (const suffix of suffixes) {
+            const labelInput = document.getElementById(`favicon-label${suffix}`);
+            if (labelInput && !labelInput.value && isSandbox) {
+                labelInput.value = 'SBX';
+            }
+            if (suffix === '-data') {
+                this.updateFaviconPreviewRadio(suffix);
+            } else {
+                this.updateFaviconPreview(suffix);
+            }
         }
-
-        if (labelInput && !labelInput.value && isSandbox) {
-            labelInput.value = 'SBX';
-            this.updateFaviconPreview();
-        }
-        // Update color preset selection for default color
-        this.updateColorPresetSelection();
     },
 
-    initFaviconPreview: async function() {
+    initFaviconPreview: async function(suffix = '') {
         // Render initial preview based on current form values
         // Note: loadExistingFaviconOrSuggest (called from renderOrgInfo) handles loading saved data
-        const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
-        const label = document.getElementById('favicon-label')?.value || '';
-        this.renderFaviconPreview(color, label);
-        // Initialize color preset selection
-        this.updateColorPresetSelection();
+        // Initialize both Settings and Data Explorer previews if no suffix specified
+        const suffixes = suffix ? [suffix] : ['', '-data'];
+
+        for (const s of suffixes) {
+            const color = document.getElementById(`favicon-color${s}`)?.value || '#ff6b6b';
+            const label = document.getElementById(`favicon-label${s}`)?.value || '';
+            const shape = this.getSelectedShape(s);
+
+            // For Data Explorer (-data suffix), use radio-based update
+            if (s === '-data') {
+                this.updateFaviconPreviewRadio(s);
+            } else {
+                this.renderFaviconPreview(color, label, shape, s);
+            }
+        }
     },
 
-    updateFaviconPreview: function() {
-        const preview = document.getElementById('favicon-preview');
-        const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
-        const label = document.getElementById('favicon-label')?.value || '';
-        const shapeRadio = document.querySelector('input[name="favicon-shape"]:checked');
-        const shape = shapeRadio ? shapeRadio.value : 'cloud';
+    updateFaviconPreview: function(suffix = '') {
+        const preview = document.getElementById(`favicon-preview${suffix}`);
+        const color = document.getElementById(`favicon-color${suffix}`)?.value || '#ff6b6b';
+        const label = document.getElementById(`favicon-label${suffix}`)?.value || '';
+        const shape = this.getSelectedShape(suffix);
 
         if (!preview) return;
-
-        // Remove existing content
-        const existingBadge = preview.querySelector('.favicon-badge');
-        if (existingBadge) existingBadge.remove();
 
         // Update preview with colored shape
-        this.renderFaviconPreview(color, label, shape);
+        this.renderFaviconPreview(color, label, shape, suffix);
     },
 
-    renderFaviconPreview: function(color, label, shape = 'cloud') {
-        const preview = document.getElementById('favicon-preview');
+    renderFaviconPreview: function(color, label, shape = 'circle', suffix = '') {
+        const preview = document.getElementById(`favicon-preview${suffix}`);
         if (!preview) return;
 
-        // Clear preview
-        preview.innerHTML = '';
+        const ctx = preview.getContext('2d');
+        if (!ctx) return;
 
-        // Create canvas for preview
-        const canvas = document.createElement('canvas');
-        canvas.width = 36;
-        canvas.height = 36;
-        canvas.style.width = '36px';
-        canvas.style.height = '36px';
-        const ctx = canvas.getContext('2d');
+        // Clear canvas
+        ctx.clearRect(0, 0, preview.width, preview.height);
 
-        // Scale and draw the selected shape with color
-        ctx.scale(36/32, 36/32);
+        // Draw the selected shape with color
         this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape);
-
-        preview.appendChild(canvas);
     },
 
-    // Helper to get selected shape from the form
-    getSelectedShape: function() {
-        const shapeRadio = document.querySelector('input[name="favicon-shape"]:checked');
-        return shapeRadio ? shapeRadio.value : 'cloud';
+    // Helper to get selected shape from the form (supports both button and radio-based)
+    getSelectedShape: function(suffix = '') {
+        // First try radio buttons (Data Explorer uses these)
+        const shapeRadio = document.querySelector(`input[name="favicon-shape${suffix}"]:checked`);
+        if (shapeRadio) return shapeRadio.value;
+
+        // Fallback to button-based (Settings tab uses these)
+        const activeShapeBtn = document.querySelector(`#favicon-shape-options${suffix} .shape-btn.active`);
+        if (activeShapeBtn) return activeShapeBtn.dataset.shape;
+
+        // Default to circle
+        return 'circle';
     },
 
-    // Set shape selection in the form
-    setSelectedShape: function(shape) {
-        const shapeRadio = document.querySelector(`input[name="favicon-shape"][value="${shape}"]`);
+    // Set shape selection in the form (supports both button and radio-based)
+    setSelectedShape: function(shape, suffix = '') {
+        // Try radio buttons first (Data Explorer)
+        const shapeRadio = document.querySelector(`input[name="favicon-shape${suffix}"][value="${shape}"]`);
         if (shapeRadio) {
             shapeRadio.checked = true;
+            return;
         }
+
+        // Fallback to buttons (Settings tab)
+        const shapeButtons = document.querySelectorAll(`#favicon-shape-options${suffix} .shape-btn`);
+        shapeButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.shape === shape);
+        });
     },
 
     // Color presets configuration
@@ -465,19 +708,19 @@ const DataExplorerHelper = {
     ],
 
     // Select a color preset
-    selectColorPreset: function(color) {
-        const colorInput = document.getElementById('favicon-color');
+    selectColorPreset: function(color, suffix = '') {
+        const colorInput = document.getElementById(`favicon-color${suffix}`);
         if (colorInput && color) {
             colorInput.value = color;
-            this.updateFaviconPreview();
-            this.updateColorPresetSelection();
+            this.updateFaviconPreview(suffix);
+            this.updateColorPresetSelection(suffix);
         }
     },
 
-    // Update the visual selection state of color presets
-    updateColorPresetSelection: function() {
-        const colorInput = document.getElementById('favicon-color');
-        const presets = document.querySelectorAll('#favicon-color-presets .color-preset');
+    // Update color preset selection state
+    updateColorPresetSelection: function(suffix = '') {
+        const colorInput = document.getElementById(`favicon-color${suffix}`);
+        const presets = document.querySelectorAll(`#favicon-color-presets${suffix} .color-preset`);
         const currentColor = colorInput?.value?.toLowerCase() || '#ff6b6b';
 
         presets.forEach(preset => {
@@ -605,11 +848,15 @@ const DataExplorerHelper = {
         this.drawFaviconShape(ctx, color, label, 'cloud');
     },
 
-    applyFavicon: async function() {
-        const color = document.getElementById('favicon-color')?.value || '#ff6b6b';
-        const label = document.getElementById('favicon-label')?.value || '';
-        const shape = this.getSelectedShape();
+    applyFavicon: async function(suffix = '') {
+        const color = document.getElementById(`favicon-color${suffix}`)?.value || '#ff6b6b';
+        const label = document.getElementById(`favicon-label${suffix}`)?.value || '';
+        const shape = this.getSelectedShape(suffix);
 
+        await this.applyFaviconWithValues(color, label, shape);
+    },
+
+    applyFaviconWithValues: async function(color, label, shape) {
         // Determine which org to save for - editing org or current org
         const targetOrgId = this._editingOrgId || this._currentOrgId;
 
@@ -885,7 +1132,7 @@ const DataExplorerHelper = {
         }
     },
 
-    resetFavicon: async function() {
+    resetFavicon: async function(suffix = '') {
         try {
             // Remove from saved list for current org only
             if (this._currentOrgId) {
@@ -904,15 +1151,24 @@ const DataExplorerHelper = {
                 this.loadSavedFavicons();
             }
 
-            // Reset UI
-            const colorInput = document.getElementById('favicon-color');
-            const labelInput = document.getElementById('favicon-label');
+            // Reset UI for both form sets
+            const suffixes = ['', '-data'];
+            for (const s of suffixes) {
+                const colorInput = document.getElementById(`favicon-color${s}`);
+                const labelInput = document.getElementById(`favicon-label${s}`);
+                const colorValueSpan = document.getElementById(`favicon-color-value${s}`);
 
-            if (colorInput) colorInput.value = '#ff6b6b';
-            if (labelInput) labelInput.value = '';
+                if (colorInput) colorInput.value = '#ff6b6b';
+                if (labelInput) labelInput.value = '';
+                if (colorValueSpan) colorValueSpan.textContent = '#ff6b6b';
 
-            // Reset preview to default
-            this.renderFaviconPreview('#ff6b6b', '');
+                // Reset shape to circle
+                this.setSelectedShape('circle', s);
+
+                // Reset preview to default
+                this.renderFaviconPreview('#ff6b6b', '', 'circle', s);
+                this.updateColorPresetSelection(s);
+            }
 
             // Try to reset on Salesforce tabs (not the popup)
             try {
@@ -946,8 +1202,16 @@ const DataExplorerHelper = {
     },
 
     loadSavedFavicons: async function() {
-        const container = document.getElementById('saved-favicons-list');
-        const orgSelect = document.getElementById('favicon-org-select');
+        // Support both Settings tab and Data Explorer tab containers
+        const containers = [
+            document.getElementById('saved-favicons-list'),
+            document.getElementById('saved-favicons-list-data')
+        ].filter(Boolean);
+
+        const orgSelects = [
+            document.getElementById('favicon-org-select'),
+            document.getElementById('favicon-org-select-data')
+        ].filter(Boolean);
 
         try {
             const result = await chrome.storage.local.get('orgFavicons');
@@ -960,8 +1224,8 @@ const DataExplorerHelper = {
             const entries = Object.entries(orgFavicons);
             console.log('Loading saved favicons, count:', entries.length);
 
-            // Populate org selector dropdown
-            if (orgSelect) {
+            // Populate org selector dropdowns (both tabs)
+            orgSelects.forEach(orgSelect => {
                 const currentValue = orgSelect.value;
                 orgSelect.innerHTML = '<option value="">Current Org</option>';
                 entries.forEach(([orgId, data]) => {
@@ -973,73 +1237,80 @@ const DataExplorerHelper = {
                 if (currentValue && orgSelect.querySelector(`option[value="${currentValue}"]`)) {
                     orgSelect.value = currentValue;
                 }
-            }
+            });
 
-            if (!container) return;
+            if (containers.length === 0) return;
 
             if (entries.length === 0) {
-                container.innerHTML = '<div class="placeholder-note">No saved favicons yet</div>';
+                containers.forEach(container => {
+                    container.innerHTML = '<div class="placeholder-note">No saved favicons yet</div>';
+                });
                 return;
             }
 
-            let html = '';
-            entries.forEach(([orgId, data]) => {
-                const isCurrentOrg = orgId === this._currentOrgId;
+            // Render the saved favicons list in each container
+            containers.forEach(container => {
+                let html = '';
+                entries.forEach(([orgId, data]) => {
+                    const isCurrentOrg = orgId === this._currentOrgId;
+                    const previewId = `preview-${orgId}-${container.id}`;
 
-                html += `
-                    <div class="favicon-list-item ${isCurrentOrg ? 'current-org' : ''}" data-org-id="${orgId}">
-                        <div class="favicon-list-preview" id="preview-${orgId}"></div>
-                        <div class="favicon-list-info">
-                            <div class="favicon-list-org-name">${data.orgName || 'Unknown Org'}${isCurrentOrg ? ' <span class="current-badge">●</span>' : ''}</div>
+                    html += `
+                        <div class="favicon-list-item ${isCurrentOrg ? 'current-org' : ''}" data-org-id="${orgId}">
+                            <div class="favicon-list-preview" id="${previewId}"></div>
+                            <div class="favicon-list-info">
+                                <div class="favicon-list-org-name">${data.orgName || 'Unknown Org'}${isCurrentOrg ? ' <span class="current-badge">●</span>' : ''}</div>
+                            </div>
+                            <div class="favicon-list-meta">
+                                <span class="favicon-list-label" style="background:${data.color};color:#fff;">${data.label || '—'}</span>
+                            </div>
+                            <div class="favicon-list-actions">
+                                <button class="btn-edit" data-org-id="${orgId}" title="Edit">✎</button>
+                                <button class="btn-delete" data-org-id="${orgId}" title="Delete">×</button>
+                            </div>
                         </div>
-                        <div class="favicon-list-meta">
-                            <span class="favicon-list-label" style="background:${data.color};color:#fff;">${data.label || '—'}</span>
-                        </div>
-                        <div class="favicon-list-actions">
-                            <button class="btn-edit" data-org-id="${orgId}" title="Edit">✎</button>
-                            <button class="btn-delete" data-org-id="${orgId}" title="Delete">×</button>
-                        </div>
-                    </div>
-                `;
-            });
-
-            container.innerHTML = html;
-
-            // Render previews for each item (using saved shape)
-            entries.forEach(([orgId, data]) => {
-                const previewEl = document.getElementById(`preview-${orgId}`);
-                if (previewEl) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 24;
-                    canvas.height = 24;
-                    const ctx = canvas.getContext('2d');
-                    ctx.scale(24/32, 24/32);
-                    this.drawFaviconShape(ctx, data.color || '#ff6b6b', data.label, data.shape || 'cloud');
-                    previewEl.appendChild(canvas);
-                }
-            });
-
-            // Wire edit buttons
-            container.querySelectorAll('.btn-edit').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.editSavedFavicon(btn.dataset.orgId);
+                    `;
                 });
-            });
 
-            // Wire delete buttons
-            container.querySelectorAll('.btn-delete').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.deleteSavedFavicon(btn.dataset.orgId);
+                container.innerHTML = html;
+
+                // Render previews for each item (using saved shape)
+                entries.forEach(([orgId, data]) => {
+                    const previewId = `preview-${orgId}-${container.id}`;
+                    const previewEl = document.getElementById(previewId);
+                    if (previewEl) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 24;
+                        canvas.height = 24;
+                        const ctx = canvas.getContext('2d');
+                        ctx.scale(24/32, 24/32);
+                        this.drawFaviconShape(ctx, data.color || '#ff6b6b', data.label, data.shape || 'cloud');
+                        previewEl.appendChild(canvas);
+                    }
+                });
+
+                // Wire edit buttons
+                container.querySelectorAll('.btn-edit').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.editSavedFavicon(btn.dataset.orgId);
+                    });
+                });
+
+                // Wire delete buttons
+                container.querySelectorAll('.btn-delete').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.deleteSavedFavicon(btn.dataset.orgId);
+                    });
                 });
             });
 
         } catch (error) {
             console.error('Error loading saved favicons:', error);
-            if (container) {
+            containers.forEach(container => {
                 container.innerHTML = '<div class="error-message">Error loading saved favicons</div>';
-            }
+            });
         }
     },
 

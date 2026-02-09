@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrackForcePro - Documentation</title>
+    <!-- Favicon - multiple paths for different hosting contexts -->
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/Icon-32.png" id="fav32">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/Icon-16.png" id="fav16">
+    <link rel="shortcut icon" href="../icons/Icon-32.png" id="favshort">
+    <script>
+        // Fix favicon path for GitHub Pages
+        (function() {
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            if (isGitHubPages) {
+                const basePath = '/sf-audit-extractor/icons/';
+                document.getElementById('fav32').href = basePath + 'Icon-32.png';
+                document.getElementById('fav16').href = basePath + 'Icon-16.png';
+                document.getElementById('favshort').href = basePath + 'Icon-32.png';
+            }
+        })();
+    </script>
     <style>
         :root {
             --primary-color: #0176d3;
@@ -182,13 +198,27 @@
         <div style="font-size: 4rem; margin-bottom: 10px;">⚡</div>
         <h1>TrackForcePro</h1>
         <p class="subtitle">Salesforce Admin & Developer Toolkit</p>
-        <span class="version-badge">Version 1.1.1</span>
+        <div style="margin-top: 15px;">
+            <select id="version-select" style="padding: 8px 16px; border-radius: 6px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; font-size: 14px; font-weight: 600; cursor: pointer;">
+                <option value="1.1.2" style="color:#333;background:white;">v1.1.2 (Latest)</option>
+                <option value="1.1.1" style="color:#333;background:white;">v1.1.1</option>
+                <option value="1.1.0" style="color:#333;background:white;">v1.1.0</option>
+                <option value="1.0.9" style="color:#333;background:white;">v1.0.9</option>
+            </select>
+        </div>
     </header>
 
     <div class="container">
         <h2 class="section-title">📚 Documentation</h2>
 
         <div class="card-grid">
+            <a href="documentation.html" class="card">
+                <div class="card-icon">📖</div>
+                <h2>Full Documentation</h2>
+                <p>Complete documentation with version history. Select any version to view its docs.</p>
+                <span class="badge">New</span>
+            </a>
+
             <a href="QUICK_START_GUIDE.html" class="card">
                 <div class="card-icon">🚀</div>
                 <h2>Quick Start Guide</h2>
@@ -216,7 +246,7 @@
         </div>
 
         <div class="features">
-            <h2 class="section-title">✨ Key Features</h2>
+            <h2 class="section-title">✨ Key Features (v1.1.2)</h2>
 
             <div class="feature-list">
                 <div class="feature-item">
@@ -232,17 +262,30 @@
                     <p>Build queries with filters & ordering</p>
                 </div>
                 <div class="feature-item">
-                    <h4>💾 Data Explorer</h4>
-                    <p>Favicon manager, user search, record lookup</p>
+                    <h4>🔬 Record Scanner</h4>
+                    <p>Field history & related records</p>
                 </div>
                 <div class="feature-item">
                     <h4>📡 Platform Events</h4>
                     <p>Monitor and publish events in real-time</p>
                 </div>
                 <div class="feature-item">
-                    <h4>📢 LMS</h4>
-                    <p>Lightning Message Service tools</p>
+                    <h4>✨ Page Blinker</h4>
+                    <p>Quick access from any SF page</p>
                 </div>
+            </div>
+        </div>
+
+        <div class="features" style="margin-top: 30px;">
+            <h2 class="section-title">📋 Recent Changes</h2>
+            <div style="background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: var(--shadow);">
+                <h4 style="color: var(--primary-color); margin-bottom: 10px;">v1.1.2 - February 9, 2026</h4>
+                <ul style="margin-left: 20px; color: var(--text-muted);">
+                    <li><strong>New:</strong> Record Scanner with Field History tracking</li>
+                    <li><strong>New:</strong> Related Records explorer with counts</li>
+                    <li><strong>New:</strong> Page Blinker indicator on Salesforce pages</li>
+                    <li><strong>Fixed:</strong> Content script loading on *.salesforce.com</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -250,6 +293,7 @@
     <footer>
         <p><strong>TrackForcePro</strong> - Open Source Chrome Extension</p>
         <p style="margin-top: 10px;">
+            <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">🛒 Chrome Web Store</a> ·
             <a href="help.html">💡 Help</a> ·
             <a href="privacy-policy.html">🔐 Privacy Policy</a> ·
             <a href="QUICK_START_GUIDE.html">🚀 Quick Start</a>

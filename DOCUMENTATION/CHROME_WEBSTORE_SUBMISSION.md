@@ -2,6 +2,14 @@
 
 This document contains all the information needed to submit TrackForcePro to the Chrome Web Store.
 
+## 🛒 LIVE STORE LINK
+
+**TrackForcePro is now available on the Chrome Web Store!**
+
+👉 **[Install TrackForcePro](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)**
+
+Extension ID: `eombeiphccjbnndbabnkimdlkpaooipk`
+
 ---
 
 ## 📋 STORE LISTING DETAILS
@@ -250,7 +258,7 @@ Consider verifying your domain if you have a website.
 ## ✅ PRE-SUBMISSION CHECKLIST
 
 - [ ] ZIP file created with `./build.sh`
-- [ ] All icons present (16x16, 32x32, 48x48, 128x128 PNG)
+- [ ] All icons present (16x16, 32x32, 64x64, 128x128, 256x256, 512x512, 1024x1024 PNG)
 - [ ] manifest.json version matches your release (currently 1.1.1)
 - [ ] Screenshots taken (1280x800 or 640x400)
 - [ ] Privacy policy hosted online

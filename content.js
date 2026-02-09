@@ -5,7 +5,10 @@
     'use strict';
 
     const isSalesforceHost = (hostname) =>
-        /(^|\.)salesforce\.com$/i.test(hostname) || /(^|\.)force\.com$/i.test(hostname) || /(^|\.)salesforce-setup\.com$/i.test(hostname);
+        /(^|\.)salesforce\.com$/i.test(hostname) ||
+        /(^|\.)force\.com$/i.test(hostname) ||
+        /(^|\.)salesforce-setup\.com$/i.test(hostname) ||
+        /(^|\.)visualforce\.com$/i.test(hostname);
 
     const isTop = window === window.top;
     const host = location.hostname;
@@ -81,10 +84,181 @@
     if (onSF && isTop) {
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             notifyReady();
+            createBlinkerIndicator();
         } else {
-            window.addEventListener('DOMContentLoaded', notifyReady, { once: true });
-            window.addEventListener('load', notifyReady, { once: true });
+            window.addEventListener('DOMContentLoaded', () => {
+                notifyReady();
+                createBlinkerIndicator();
+            }, { once: true });
+            window.addEventListener('load', () => {
+                notifyReady();
+                createBlinkerIndicator();
+            }, { once: true });
         }
+    }
+
+    /**
+     * Create a blinker/indicator in the top-right corner of Salesforce pages
+     * Allows users to quickly open the extension
+     */
+    function createBlinkerIndicator() {
+        // Only create in top frame and on Salesforce pages
+        if (!isTop || !onSF) return;
+
+        // Check if already created
+        if (document.getElementById('trackforcepro-blinker')) return;
+
+        // Create the blinker container
+        const blinker = document.createElement('div');
+        blinker.id = 'trackforcepro-blinker';
+
+        // Inject styles
+        const style = document.createElement('style');
+        style.textContent = `
+            #trackforcepro-blinker {
+                position: fixed;
+                top: 12px;
+                right: 12px;
+                z-index: 2147483647;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 10px;
+                background: linear-gradient(135deg, #0176d3 0%, #1b96ff 100%);
+                border-radius: 20px;
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(1, 118, 211, 0.4), 0 0 0 1px rgba(255,255,255,0.1) inset;
+                transition: all 0.3s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                user-select: none;
+                opacity: 0.9;
+            }
+            #trackforcepro-blinker:hover {
+                transform: scale(1.05);
+                box-shadow: 0 4px 16px rgba(1, 118, 211, 0.5), 0 0 0 1px rgba(255,255,255,0.2) inset;
+                opacity: 1;
+            }
+            #trackforcepro-blinker:active {
+                transform: scale(0.98);
+            }
+            #trackforcepro-blinker .tfp-icon {
+                width: 18px;
+                height: 18px;
+                background: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 11px;
+                font-weight: bold;
+                color: #0176d3;
+                animation: tfp-pulse 2s ease-in-out infinite;
+            }
+            #trackforcepro-blinker .tfp-label {
+                color: white;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+            }
+            #trackforcepro-blinker .tfp-close {
+                width: 16px;
+                height: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: rgba(255,255,255,0.7);
+                font-size: 14px;
+                border-radius: 50%;
+                margin-left: 2px;
+                transition: all 0.2s ease;
+            }
+            #trackforcepro-blinker .tfp-close:hover {
+                background: rgba(255,255,255,0.2);
+                color: white;
+            }
+            @keyframes tfp-pulse {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(1, 118, 211, 0.4); }
+                50% { box-shadow: 0 0 0 4px rgba(1, 118, 211, 0); }
+            }
+            #trackforcepro-blinker.tfp-minimized {
+                padding: 6px;
+                border-radius: 50%;
+            }
+            #trackforcepro-blinker.tfp-minimized .tfp-label,
+            #trackforcepro-blinker.tfp-minimized .tfp-close {
+                display: none;
+            }
+            #trackforcepro-blinker.tfp-hidden {
+                display: none !important;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Create icon
+        const icon = document.createElement('span');
+        icon.className = 'tfp-icon';
+        icon.textContent = 'TF';
+
+        // Create label
+        const label = document.createElement('span');
+        label.className = 'tfp-label';
+        label.textContent = 'TrackForcePro';
+
+        // Create close button
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'tfp-close';
+        closeBtn.textContent = '×';
+        closeBtn.title = 'Hide (will reappear on page reload)';
+
+        blinker.appendChild(icon);
+        blinker.appendChild(label);
+        blinker.appendChild(closeBtn);
+
+        // Click handler - open extension popup/tab
+        blinker.addEventListener('click', (e) => {
+            if (e.target === closeBtn || e.target.closest('.tfp-close')) {
+                e.stopPropagation();
+                // Hide the blinker
+                blinker.classList.add('tfp-hidden');
+                // Save preference for this session
+                try {
+                    sessionStorage.setItem('tfp-blinker-hidden', 'true');
+                } catch {}
+                return;
+            }
+
+            // Send message to background to open extension
+            if (isExtensionContextValid()) {
+                chrome.runtime.sendMessage({ action: 'openPopup' }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        // Fallback: try to open as tab
+                        chrome.runtime.sendMessage({ action: 'openAsTab' });
+                    }
+                });
+            }
+        });
+
+        // Double-click to minimize/expand
+        blinker.addEventListener('dblclick', (e) => {
+            if (e.target === closeBtn || e.target.closest('.tfp-close')) return;
+            blinker.classList.toggle('tfp-minimized');
+            try {
+                sessionStorage.setItem('tfp-blinker-minimized', blinker.classList.contains('tfp-minimized'));
+            } catch {}
+        });
+
+        // Check if hidden in this session
+        try {
+            if (sessionStorage.getItem('tfp-blinker-hidden') === 'true') {
+                blinker.classList.add('tfp-hidden');
+            }
+            if (sessionStorage.getItem('tfp-blinker-minimized') === 'true') {
+                blinker.classList.add('tfp-minimized');
+            }
+        } catch {}
+
+        // Append to body
+        document.body.appendChild(blinker);
     }
 
     function notifyReady() {

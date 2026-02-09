@@ -1,6 +1,25 @@
 # TrackForcePro - Documentation
 
+**Current Version: 1.1.2** | **Release Date: February 9, 2026**
+
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-green?logo=google-chrome)](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)
+
 Welcome to the documentation for the TrackForcePro Chrome Extension. This library contains comprehensive guides for users, developers, and testers.
+
+## 🛒 Install TrackForcePro
+
+**[Install from Chrome Web Store](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)** - One-click installation, automatic updates.
+
+## 📋 Version History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| [v1.1.2](CHANGELOG.md#v112---february-9-2026) | Feb 9, 2026 | Record Scanner, Field History, Related Records, Page Blinker |
+| [v1.1.1](CHANGELOG.md#v111---february-8-2026) | Feb 8, 2026 | Unified Record Lookup, Dev Tools Panel |
+| [v1.1.0](CHANGELOG.md#v110---february-7-2026) | Feb 7, 2026 | Popout Window, User Manager, Favicon Manager |
+| [v1.0.9](CHANGELOG.md#v109---february-6-2026) | Feb 6, 2026 | Enhanced SOQL/GraphQL Builders |
+
+👉 **[View Full Changelog](CHANGELOG.md)**
 
 ## ⚡ Quick Start
 

@@ -6,7 +6,11 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('PlatformHelper cometd handshake failure', () => {
   let hooks;
+  let mockRefreshSession;
+
   beforeAll(async () => {
+    mockRefreshSession = jest.fn();
+
     global.Utils = {
       getAccessToken: () => 'token',
       normalizeApiVersion: (v) => v,
@@ -30,14 +34,16 @@ describe('PlatformHelper cometd handshake failure', () => {
     hooks.setDomForTests({ peLogEl, cometdStatusEl });
     hooks.setOpts({
       getSession: () => ({ isLoggedIn: true, instanceUrl: 'https://example.my.salesforce.com' }),
-      refreshSessionFromTab: jest.fn(),
+      refreshSessionFromTab: mockRefreshSession,
       apiVersion: '65.0',
     });
-    hooks.setState({ apiVersion: '65.0' });
+    hooks.setState({ apiVersion: '65.0', handshakeRetried: false });
   });
 
   beforeEach(() => {
     Utils.fetchWithTimeout.mockReset();
+    mockRefreshSession.mockReset();
+    hooks.setState({ handshakeRetried: false, cometdState: 'disconnected', cometdClientId: null });
   });
 
   test('surface API version mandatory error detail on handshake', async () => {
@@ -51,6 +57,39 @@ describe('PlatformHelper cometd handshake failure', () => {
 
     await expect(hooks.cometdHandshake()).rejects.toThrow('API version in the URI is mandatory');
     expect(Utils.fetchWithTimeout).toHaveBeenCalled();
+    expect(hooks.getState().cometdState).toBe('disconnected');
+  });
+
+  test('retry handshake on 401 authentication invalid error', async () => {
+    const authErrorResponse = [{"ext":{"sfdc":{"failureReason":"401::Authentication invalid"},"replay":true,"payload.format":true},"advice":{"reconnect":"none"},"channel":"/meta/handshake","error":"403::Handshake denied","successful":false}];
+    const successResponse = [{"channel":"/meta/handshake","clientId":"abc123","successful":true,"advice":{"timeout":110000,"interval":0}}];
+
+    Utils.fetchWithTimeout
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => authErrorResponse })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => successResponse });
+
+    await hooks.cometdHandshake();
+
+    // Should have called fetch twice (original + retry)
+    expect(Utils.fetchWithTimeout).toHaveBeenCalledTimes(2);
+    // Should have called refreshSessionFromTab
+    expect(mockRefreshSession).toHaveBeenCalled();
+    // Should be connected after retry
+    expect(hooks.getState().cometdState).toBe('connected');
+    expect(hooks.getState().cometdClientId).toBe('abc123');
+  });
+
+  test('fail after retry if auth error persists', async () => {
+    const authErrorResponse = [{"ext":{"sfdc":{"failureReason":"401::Authentication invalid"}},"advice":{"reconnect":"none"},"channel":"/meta/handshake","error":"403::Handshake denied","successful":false}];
+
+    Utils.fetchWithTimeout
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => authErrorResponse })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => authErrorResponse });
+
+    await expect(hooks.cometdHandshake()).rejects.toThrow('Handshake unsuccessful');
+
+    // Should have called fetch twice (original + retry)
+    expect(Utils.fetchWithTimeout).toHaveBeenCalledTimes(2);
     expect(hooks.getState().cometdState).toBe('disconnected');
   });
 });

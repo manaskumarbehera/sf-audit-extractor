@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrackForcePro - Quick Start Guide</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/Icon-32.png" id="fav32">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/Icon-16.png" id="fav16">
+    <link rel="shortcut icon" href="../icons/Icon-32.png" id="favshort">
+    <script>
+        (function() {
+            if (window.location.hostname.includes('github.io')) {
+                var basePath = '/sf-audit-extractor/icons/';
+                document.getElementById('fav32').href = basePath + 'Icon-32.png';
+                document.getElementById('fav16').href = basePath + 'Icon-16.png';
+                document.getElementById('favshort').href = basePath + 'Icon-32.png';
+            }
+        })();
+    </script>
     <style>
         :root {
             --primary-color: #0176d3;
@@ -388,7 +402,12 @@
         <div style="font-size: 4rem; margin-bottom: 10px;">⚡</div>
         <h1>TrackForcePro</h1>
         <p class="subtitle">Quick Start Guide - Salesforce Admin & Developer Toolkit</p>
-        <span class="version-badge">Version 1.1.1</span>
+        <span class="version-badge">Version 1.1.2</span>
+        <div style="margin-top: 20px;">
+            <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank" class="btn btn-primary" style="background: #2e844a; padding: 12px 24px; border-radius: 8px; color: white; text-decoration: none; font-weight: 600;">
+                🛒 Install from Chrome Web Store
+            </a>
+        </div>
     </header>
 
     <nav>
@@ -411,6 +430,19 @@
                 <h2><span class="step-number">1</span> Installation</h2>
             </div>
             <div class="section-content">
+                <h3 style="color: var(--success-color); margin-bottom: 15px;">Option 1: Install from Chrome Web Store (Recommended)</h3>
+                <div class="tip" style="background: #ebfbee; border-left-color: #2e844a; margin-bottom: 30px;">
+                    <p><strong>Easiest Method!</strong> Install directly from the official Chrome Web Store with one click:</p>
+                    <p style="margin-top: 15px;">
+                        <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank" style="display: inline-block; background: #2e844a; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                            🛒 Add to Chrome - It's Free
+                        </a>
+                    </p>
+                </div>
+
+                <h3 style="margin-bottom: 15px;">Option 2: Manual Installation (Developer Mode)</h3>
+                <p style="margin-bottom: 20px; color: var(--text-muted);">For developers or if you want to use the latest development version:</p>
+
                 <div class="instructions">
                     <div class="instruction-step">
                         <div class="instruction-content">
@@ -865,9 +897,11 @@
 
     <footer>
         <p><strong>TrackForcePro</strong> - Salesforce Admin & Developer Toolkit</p>
-        <p>Version 1.1.1 | February 2026</p>
+        <p>Version 1.1.2 | February 2026</p>
         <p style="margin-top: 10px; font-size: 0.9rem;">
-            For detailed documentation, see the <a href="help.html">Help & Support</a> page
+            <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">🛒 Chrome Web Store</a> ·
+            <a href="help.html">Help & Support</a> ·
+            <a href="index.html">Documentation Home</a>
         </p>
     </footer>
 

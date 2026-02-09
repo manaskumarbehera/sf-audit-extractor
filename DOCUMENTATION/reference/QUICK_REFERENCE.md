@@ -1,5 +1,11 @@
 # TrackForcePro - Visual Quick Reference Card
 
+**Version 1.1.2** | **Last Updated: February 9, 2026**
+
+> 📋 Quick visual guide for all TrackForcePro features. For detailed documentation, see [User Guide](../guides/USER_GUIDE.md).
+
+---
+
 ## GraphQL Builder
 
 ### Screen 1: Object Selection

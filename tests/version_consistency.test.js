@@ -46,16 +46,16 @@ describe('Version Consistency', () => {
         expect(popupHtmlContent).toContain('Version ');
     });
 
-    test('manifest.json version should be 1.1.1 or higher', () => {
+    test('manifest.json version should be 1.1.2 or higher', () => {
         const [major, minor, patch] = manifestVersion.split('.').map(Number);
         const versionNumber = major * 10000 + minor * 100 + patch;
 
-        // 1.1.1 = 10101
-        expect(versionNumber).toBeGreaterThanOrEqual(10101);
+        // 1.1.2 = 10102
+        expect(versionNumber).toBeGreaterThanOrEqual(10102);
     });
 
-    test('current version should be 1.1.1', () => {
-        expect(manifestVersion).toBe('1.1.1');
+    test('current version should be 1.1.2', () => {
+        expect(manifestVersion).toBe('1.1.2');
     });
 
     test('build output filename should match manifest version', () => {
@@ -150,12 +150,13 @@ describe('Help Links Validation', () => {
 });
 
 describe('Docs HTML Files Version', () => {
-    const EXPECTED_VERSION = '1.1.1';
+    const EXPECTED_VERSION = '1.1.2';
 
     test('docs/index.html should have correct version', () => {
         const filePath = path.join(__dirname, '..', 'docs', 'index.html');
         const content = fs.readFileSync(filePath, 'utf8');
-        expect(content).toContain(`Version ${EXPECTED_VERSION}`);
+        // Check for version in dropdown or version badge
+        expect(content).toContain(`v${EXPECTED_VERSION}`);
     });
 
     test('docs/help.html should have correct version', () => {
@@ -223,8 +224,8 @@ describe('docs/help.html Structure', () => {
 });
 
 describe('Build Zip File', () => {
-    test('TrackForcePro-v1.1.1.zip should exist', () => {
-        const zipPath = path.join(__dirname, '..', 'TrackForcePro-v1.1.1.zip');
+    test('TrackForcePro-v1.1.2.zip should exist', () => {
+        const zipPath = path.join(__dirname, '..', 'TrackForcePro-v1.1.2.zip');
         expect(fs.existsSync(zipPath)).toBe(true);
     });
 });

@@ -7,14 +7,32 @@ File: `popup.html` (replace body content with this)
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TrackForcePro</title>
-    <!-- Favicons for browser tab icon -->
-    <link rel="icon" type="image/png" sizes="128x128" href="icons/Icon-128.png" />
-    <link rel="icon" type="image/png" sizes="64x64" href="icons/Icon-64.png" />
-    <link rel="icon" type="image/png" sizes="48x48" href="icons/Icon-48.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/Icon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/Icon-16.png" />
-    <link rel="shortcut icon" type="image/png" href="icons/Icon-32.png" />
-    <link rel="apple-touch-icon" sizes="128x128" href="icons/Icon-128.png" />
+    <!-- Favicons for browser tab icon - will be set dynamically for extension context -->
+    <link rel="icon" type="image/png" sizes="128x128" href="icons/Icon-128.png" id="favicon-128" />
+    <link rel="icon" type="image/png" sizes="64x64" href="icons/Icon-64.png" id="favicon-64" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/Icon-32.png" id="favicon-32" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/Icon-16.png" id="favicon-16" />
+    <link rel="shortcut icon" type="image/png" href="icons/Icon-32.png" id="favicon-shortcut" />
+    <link rel="apple-touch-icon" sizes="128x128" href="icons/Icon-128.png" id="favicon-apple" />
+    <script>
+        // Fix favicon for Chrome extension context
+        (function() {
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+                const icons = {
+                    'favicon-128': 'icons/Icon-128.png',
+                    'favicon-64': 'icons/Icon-64.png',
+                    'favicon-32': 'icons/Icon-32.png',
+                    'favicon-16': 'icons/Icon-16.png',
+                    'favicon-shortcut': 'icons/Icon-32.png',
+                    'favicon-apple': 'icons/Icon-128.png'
+                };
+                for (const [id, path] of Object.entries(icons)) {
+                    const link = document.getElementById(id);
+                    if (link) link.href = chrome.runtime.getURL(path);
+                }
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
@@ -723,90 +741,97 @@ File: `popup.html` (replace body content with this)
             <!-- Sub-tabs navigation -->
             <div class="data-explorer-header">
                 <nav class="sub-tabs" role="tablist" aria-label="Data Explorer sections">
-                    <button class="sub-tab-button active" role="tab" aria-selected="true" data-subtab="sandbox-manager">Sandbox & Favicon</button>
+                    <button class="sub-tab-button active" role="tab" aria-selected="true" data-subtab="record-lookup">Record Scanner</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="sandbox-manager">Org & Favicon</button>
                     <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="user-manager">User Manager</button>
-                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="record-lookup">Record Scanner</button>
                 </nav>
             </div>
 
-            <!-- Sub-tab: Sandbox & Favicon Manager -->
-            <div id="subtab-sandbox-manager" class="sub-tab-content active" aria-labelledby="sandbox-manager">
+            <!-- Sub-tab: Org & Favicon (Sandbox Manager) -->
+            <div id="subtab-sandbox-manager" class="sub-tab-content" hidden aria-labelledby="sandbox-manager">
                 <div class="sandbox-favicon-grid">
                     <!-- Left Column: Organization Info -->
                     <div class="org-info-card">
                         <div class="org-card-header">
                             <span class="org-card-icon">🏢</span>
                             <h3 class="org-card-title">Organization Info</h3>
-                            <button id="refresh-org-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
+                            <button id="refresh-org-btn-data" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
                         </div>
-                        <div id="org-info-container" class="org-details-grid">
+                        <div id="org-info-container-data" class="org-details-grid">
                             <div class="spinner">Loading organization info...</div>
                         </div>
                     </div>
 
-                    <!-- Right Column: Saved Favicons (LEFT) & Favicon Customization (RIGHT) -->
+                    <!-- Right Column: Saved Favicons & Favicon Customization -->
                     <div class="favicon-panels-container">
-                        <!-- Saved Org Favicons - NOW ON LEFT -->
+                        <!-- Saved Org Favicons -->
                         <div class="favicon-saved-card">
                             <div class="org-card-header">
-                                <span class="org-card-icon">📋</span>
+                                <span class="org-card-icon">💾</span>
                                 <h3 class="org-card-title">Saved Favicons</h3>
                             </div>
                             <div class="favicon-card-body">
-                                <div id="saved-favicons-list" class="saved-favicons-list-compact">
+                                <div id="saved-favicons-list-data" class="saved-favicons-list-compact">
                                     <div class="placeholder-note">No saved favicons yet</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Favicon Customization - NOW ON RIGHT -->
+                        <!-- Favicon Customization - Redesigned -->
                         <div class="favicon-customize-card">
                             <div class="org-card-header">
                                 <span class="org-card-icon">🎨</span>
                                 <h3 class="org-card-title">Customize Favicon</h3>
                             </div>
                             <div class="favicon-card-body">
-                                <!-- Org Selector for editing -->
+                                <!-- Org Selector -->
                                 <div class="favicon-org-selector">
-                                    <select id="favicon-org-select" aria-label="Select org to edit">
-                                        <option value="">Current Org</option>
+                                    <select id="favicon-org-select-data" class="form-select">
+                                        <option value="current">Current Org</option>
                                     </select>
                                 </div>
-                                <div id="favicon-edit-indicator" class="favicon-edit-indicator" style="display:none;"></div>
-                                <!-- Preview & Controls in horizontal layout -->
+
+                                <!-- Editor Layout: Preview + Controls -->
                                 <div class="favicon-editor-layout">
-                                    <div id="favicon-preview" class="favicon-preview-box">
-                                        <!-- Rendered dynamically -->
+                                    <!-- Large Preview -->
+                                    <div class="favicon-preview-box">
+                                        <canvas id="favicon-preview-data" width="32" height="32"></canvas>
                                     </div>
+
+                                    <!-- Controls -->
                                     <div class="favicon-editor-controls">
-                                        <div class="favicon-shapes-grid" id="favicon-shape-options">
-                                            <label class="shape-opt" title="Cloud"><input type="radio" name="favicon-shape" value="cloud" checked /><span>☁</span></label>
-                                            <label class="shape-opt" title="Circle"><input type="radio" name="favicon-shape" value="circle" /><span>●</span></label>
-                                            <label class="shape-opt" title="Square"><input type="radio" name="favicon-shape" value="square" /><span>■</span></label>
-                                            <label class="shape-opt" title="Rounded"><input type="radio" name="favicon-shape" value="rounded" /><span>▢</span></label>
-                                            <label class="shape-opt" title="Diamond"><input type="radio" name="favicon-shape" value="diamond" /><span>◆</span></label>
-                                            <label class="shape-opt" title="Hexagon"><input type="radio" name="favicon-shape" value="hexagon" /><span>⬡</span></label>
-                                        </div>
-                                        <!-- Color Presets -->
-                                        <div class="favicon-color-presets" id="favicon-color-presets">
-                                            <button type="button" class="color-preset" data-color="#ff6b6b" title="Red (Production)" style="background-color: #ff6b6b;"></button>
-                                            <button type="button" class="color-preset" data-color="#51cf66" title="Green (Dev)" style="background-color: #51cf66;"></button>
-                                            <button type="button" class="color-preset" data-color="#339af0" title="Blue (UAT)" style="background-color: #339af0;"></button>
-                                            <button type="button" class="color-preset" data-color="#fcc419" title="Yellow (QA)" style="background-color: #fcc419;"></button>
-                                            <button type="button" class="color-preset" data-color="#9775fa" title="Purple (Staging)" style="background-color: #9775fa;"></button>
-                                            <button type="button" class="color-preset" data-color="#ff922b" title="Orange (Hotfix)" style="background-color: #ff922b;"></button>
-                                        </div>
+                                        <!-- Color + Label Row -->
                                         <div class="favicon-inputs-grid">
-                                            <input type="color" id="favicon-color" value="#ff6b6b" aria-label="Color" title="Badge Color" />
-                                            <input type="text" id="favicon-label" maxlength="3" placeholder="LBL" aria-label="Label" title="Badge Label (max 3 chars)" />
+                                            <input type="color" id="favicon-color-data" value="#ff6b6b" title="Pick color" />
+                                            <input type="text" id="favicon-label-data" maxlength="3" placeholder="DEV" />
+                                        </div>
+
+                                        <!-- Color Presets -->
+                                        <div id="favicon-color-presets-data" class="favicon-color-presets">
+                                            <button type="button" class="color-preset" data-color="#ff6b6b" title="Red" style="background:#ff6b6b;"></button>
+                                            <button type="button" class="color-preset" data-color="#ffa500" title="Orange" style="background:#ffa500;"></button>
+                                            <button type="button" class="color-preset" data-color="#ffd43b" title="Yellow" style="background:#ffd43b;"></button>
+                                            <button type="button" class="color-preset" data-color="#51cf66" title="Green" style="background:#51cf66;"></button>
+                                            <button type="button" class="color-preset" data-color="#339af0" title="Blue" style="background:#339af0;"></button>
+                                            <button type="button" class="color-preset" data-color="#9775fa" title="Purple" style="background:#9775fa;"></button>
+                                        </div>
+
+                                        <!-- Shape Options -->
+                                        <div id="favicon-shape-options-data" class="favicon-shapes-grid">
+                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="circle" checked /><span title="Circle">●</span></label>
+                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="square" /><span title="Square">■</span></label>
+                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="rounded" /><span title="Rounded">▢</span></label>
+                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="diamond" /><span title="Diamond">◆</span></label>
+                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="hexagon" /><span title="Hexagon">⬡</span></label>
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Action Buttons -->
                                 <div class="favicon-btn-row">
-                                    <button id="favicon-apply" class="btn btn-primary btn-sm">💾 Save</button>
-                                    <button id="favicon-reset" class="btn btn-secondary btn-sm">↺ Reset</button>
+                                    <button id="apply-favicon-btn-data" class="btn btn-primary">✓ Apply</button>
+                                    <button id="reset-favicon-btn-data" class="btn btn-secondary">↺ Reset</button>
                                 </div>
-                                <div id="favicon-status" class="update-status" hidden></div>
                             </div>
                         </div>
                     </div>
@@ -890,7 +915,7 @@ File: `popup.html` (replace body content with this)
             </div>
 
             <!-- Sub-tab: Record Scanner (Merged: Current Record + Record Search + History) -->
-            <div id="subtab-record-lookup" class="sub-tab-content" hidden aria-labelledby="record-lookup">
+            <div id="subtab-record-lookup" class="sub-tab-content active" aria-labelledby="record-lookup">
                 <!-- Beta Banner -->
                 <div class="beta-banner beta-banner-compact" id="record-lookup-beta-banner">
                     <div class="beta-banner-icon">🔬</div>
@@ -1014,10 +1039,197 @@ File: `popup.html` (replace body content with this)
             </div>
         </div>
         <div id="tab-settings" class="tab-pane" data-tab="settings" hidden>
-            <div class="logs-container">
-                <div class="placeholder">
-                    <p>Settings</p>
-                    <p class="placeholder-note">Configure preferences for the extension.</p>
+            <!-- Settings Sub-tabs navigation -->
+            <div class="data-explorer-header">
+                <nav class="sub-tabs" role="tablist" aria-label="Settings sections">
+                    <button class="sub-tab-button active" role="tab" aria-selected="true" data-subtab="settings-org">🏢 Org & Favicon</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="settings-display">🎨 Display</button>
+                    <button class="sub-tab-button" role="tab" aria-selected="false" data-subtab="settings-about">ℹ️ About</button>
+                </nav>
+            </div>
+
+            <!-- Sub-tab: Org & Favicon Settings -->
+            <div id="subtab-settings-org" class="sub-tab-content active" aria-labelledby="settings-org">
+                <div class="sandbox-favicon-grid">
+                    <!-- Left Column: Organization Info -->
+                    <div class="org-info-card">
+                        <div class="org-card-header">
+                            <span class="org-card-icon">🏢</span>
+                            <h3 class="org-card-title">Organization Info</h3>
+                            <button id="refresh-org-btn" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
+                        </div>
+                        <div id="org-info-container" class="org-details-grid">
+                            <div class="spinner">Loading organization info...</div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Saved Favicons & Favicon Customization -->
+                    <div class="favicon-panels-container">
+                        <!-- Saved Org Favicons -->
+                        <div class="favicon-saved-card">
+                            <div class="favicon-saved-header">
+                                <span class="favicon-saved-icon">💾</span>
+                                <h3 class="favicon-saved-title">Saved Org Favicons</h3>
+                            </div>
+                            <div id="saved-favicons-list" class="saved-favicons-grid">
+                                <div class="placeholder-note">No saved favicons yet. Customize and save below!</div>
+                            </div>
+                        </div>
+
+                        <!-- Favicon Customization -->
+                        <div class="favicon-customizer-card">
+                            <div class="favicon-header">
+                                <span class="favicon-icon">🎨</span>
+                                <h3 class="favicon-title">Favicon Customization</h3>
+                            </div>
+                            <div class="favicon-form">
+                                <div class="favicon-form-row">
+                                    <div class="form-group">
+                                        <label for="favicon-org-select" class="form-label">Select Org</label>
+                                        <select id="favicon-org-select" class="form-select">
+                                            <option value="current">Current Org</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="favicon-form-row">
+                                    <div class="form-group">
+                                        <label for="favicon-color" class="form-label">Color</label>
+                                        <div class="color-input-wrapper">
+                                            <input type="color" id="favicon-color" class="color-picker" value="#ff6b6b" />
+                                            <span class="color-value" id="favicon-color-value">#ff6b6b</span>
+                                        </div>
+                                        <div id="favicon-color-presets" class="color-presets">
+                                            <button type="button" class="color-preset" data-color="#ff6b6b" style="background:#ff6b6b" title="Red (DEV)"></button>
+                                            <button type="button" class="color-preset" data-color="#feca57" style="background:#feca57" title="Yellow (UAT)"></button>
+                                            <button type="button" class="color-preset" data-color="#48dbfb" style="background:#48dbfb" title="Cyan (QA)"></button>
+                                            <button type="button" class="color-preset" data-color="#1dd1a1" style="background:#1dd1a1" title="Green (PROD)"></button>
+                                            <button type="button" class="color-preset" data-color="#5f27cd" style="background:#5f27cd" title="Purple"></button>
+                                            <button type="button" class="color-preset" data-color="#ff9ff3" style="background:#ff9ff3" title="Pink"></button>
+                                            <button type="button" class="color-preset" data-color="#54a0ff" style="background:#54a0ff" title="Blue"></button>
+                                            <button type="button" class="color-preset" data-color="#ff6348" style="background:#ff6348" title="Orange"></button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="favicon-label" class="form-label">Label (3 chars)</label>
+                                        <input type="text" id="favicon-label" class="form-input" maxlength="3" placeholder="DEV" value="" />
+                                    </div>
+                                </div>
+                                <div class="favicon-form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">Shape</label>
+                                        <div class="shape-options">
+                                            <label class="shape-option">
+                                                <input type="radio" name="favicon-shape" value="cloud" checked />
+                                                <span class="shape-icon" title="Salesforce Cloud">☁️</span>
+                                            </label>
+                                            <label class="shape-option">
+                                                <input type="radio" name="favicon-shape" value="circle" />
+                                                <span class="shape-icon" title="Circle">⭕</span>
+                                            </label>
+                                            <label class="shape-option">
+                                                <input type="radio" name="favicon-shape" value="square" />
+                                                <span class="shape-icon" title="Square">⬜</span>
+                                            </label>
+                                            <label class="shape-option">
+                                                <input type="radio" name="favicon-shape" value="rounded" />
+                                                <span class="shape-icon" title="Rounded Square">🔲</span>
+                                            </label>
+                                            <label class="shape-option">
+                                                <input type="radio" name="favicon-shape" value="diamond" />
+                                                <span class="shape-icon" title="Diamond">💠</span>
+                                            </label>
+                                            <label class="shape-option">
+                                                <input type="radio" name="favicon-shape" value="hexagon" />
+                                                <span class="shape-icon" title="Hexagon">⬡</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="form-group favicon-preview-group">
+                                        <label class="form-label">Preview</label>
+                                        <div id="favicon-preview" class="favicon-preview-box"></div>
+                                    </div>
+                                </div>
+                                <div class="favicon-actions">
+                                    <button type="button" id="favicon-apply" class="btn btn-primary">Apply & Save</button>
+                                    <button type="button" id="favicon-reset" class="btn btn-secondary">Reset</button>
+                                </div>
+                                <div id="favicon-status" class="favicon-status" hidden></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-tab: Display Settings -->
+            <div id="subtab-settings-display" class="sub-tab-content" hidden aria-labelledby="settings-display">
+                <div class="settings-section">
+                    <h3 class="settings-section-title">🎨 Display Preferences</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label class="setting-label">Show Tab Labels</label>
+                            <input type="checkbox" id="setting-show-labels" checked />
+                        </div>
+                        <div class="setting-item">
+                            <label class="setting-label">Compact Mode</label>
+                            <input type="checkbox" id="setting-compact-mode" />
+                        </div>
+                        <div class="setting-item">
+                            <label class="setting-label">Show Page Blinker</label>
+                            <input type="checkbox" id="setting-show-blinker" checked />
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3 class="settings-section-title">📋 Feature Visibility</h3>
+                    <p class="settings-note">Toggle tabs on/off based on your workflow</p>
+                    <div id="tab-visibility-settings" class="tab-visibility-grid">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-tab: About -->
+            <div id="subtab-settings-about" class="sub-tab-content" hidden aria-labelledby="settings-about">
+                <div class="about-container">
+                    <div class="about-header">
+                        <div class="about-logo">
+                            <img src="icons/Icon-128.png" alt="TrackForcePro Logo" />
+                        </div>
+                        <div class="about-title-section">
+                            <h2 class="about-title">TrackForcePro</h2>
+                            <span class="about-version">Version 1.1.2</span>
+                            <p class="about-tagline">⚡ Your Salesforce Development & Admin Companion</p>
+                        </div>
+                    </div>
+                    <div class="section-card">
+                        <h3 class="section-card-title">✨ About This Extension</h3>
+                        <p class="about-description">
+                            TrackForcePro is a powerful Chrome extension designed for Salesforce Administrators and Developers.
+                            It streamlines the process of auditing fields, building GraphQL/SOQL queries, managing users,
+                            and inspecting object schemas directly from your browser.
+                        </p>
+                    </div>
+                    <div class="section-card">
+                        <h3 class="section-card-title">👨‍💻 Developer</h3>
+                        <div class="about-developer">
+                            <div class="developer-info">
+                                <span class="developer-name">Manas Behera</span>
+                                <span class="developer-role">Salesforce Developer & Architect</span>
+                            </div>
+                            <a href="https://www.linkedin.com/in/manas-behera-68607547/" target="_blank" rel="noopener noreferrer" class="linkedin-link">
+                                <svg class="linkedin-icon" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                                </svg>
+                                <span>Connect on LinkedIn</span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="section-card">
+                        <h3 class="section-card-title">🛒 Get TrackForcePro</h3>
+                        <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank" rel="noopener noreferrer" class="chrome-store-link">
+                            Install from Chrome Web Store →
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1118,7 +1330,7 @@ File: `popup.html` (replace body content with this)
                         </div>
                         <div class="about-title-section">
                             <h2 class="about-title">TrackForcePro</h2>
-                            <span class="about-version">Version 1.1.1</span>
+                            <span class="about-version">Version 1.1.2</span>
                             <p class="about-tagline">⚡ Your Salesforce Development & Admin Companion</p>
                         </div>
                     </div>

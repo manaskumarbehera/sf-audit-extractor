@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "TrackForcePro",
-  "version": "1.1.1",
+  "version": "1.1.12",
   "action": {
     "default_title": "TrackForcePro",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/Icon-16.png",
       "32": "icons/Icon-32.png",
-      "48": "icons/Icon-48.png",
+      "48": "icons/Icon-64.png",
+      "64": "icons/Icon-64.png",
       "128": "icons/Icon-128.png",
       "256": "icons/Icon-256.png"
     }
@@ -16,9 +17,12 @@
   "icons": {
     "16": "icons/Icon-16.png",
     "32": "icons/Icon-32.png",
-    "48": "icons/Icon-48.png",
+    "48": "icons/Icon-64.png",
+    "64": "icons/Icon-64.png",
     "128": "icons/Icon-128.png",
-    "256": "icons/Icon-256.png"
+    "256": "icons/Icon-256.png",
+    "512": "icons/Icon-512.png",
+    "1024": "icons/Icon-1024.png"
   },
   "permissions": [
     "tabs",
@@ -44,7 +48,8 @@
         "https://*.salesforce.com/*",
         "https://*.force.com/*",
         "https://*.salesforce-setup.com/*",
-        "https://*.visualforce.com/*"
+        "https://*.visualforce.com/*",
+        "https://*.lightning.force.com/*"
       ],
       "js": ["content.js"],
       "all_frames": true,
@@ -53,7 +58,14 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["scripts/lms_injected.js"],
+      "resources": [
+        "scripts/lms_injected.js",
+        "icons/Icon-16.png",
+        "icons/Icon-32.png",
+        "icons/Icon-64.png",
+        "icons/Icon-128.png",
+        "icons/Icon-256.png"
+      ],
       "matches": [
         "https://*.salesforce.com/*",
         "https://*.force.com/*",

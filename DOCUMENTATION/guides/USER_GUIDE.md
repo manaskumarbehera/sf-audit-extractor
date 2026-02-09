@@ -22,6 +22,12 @@ TrackForcePro is a powerful Chrome extension designed for Salesforce Administrat
 
 ## Installation
 
+### Option 1: Chrome Web Store (Recommended)
+**[Install TrackForcePro from Chrome Web Store](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)**
+
+Click the link above and select "Add to Chrome" - that's it!
+
+### Option 2: Manual Installation (Developer Mode)
 1.  **Download Source**: Get the source code for the extension.
 2.  **Open Chrome Extensions**: Go to `chrome://extensions/`.
 3.  **Enable Developer Mode**: Toggle the switch in the top right.
@@ -258,6 +264,29 @@ If the interface feels too cluttered, you can hide tabs you do not use.
 
 ---
 
+### Page Blinker
+*New in v1.1.2*
+
+A convenient floating indicator that appears on Salesforce pages for quick access to the extension.
+
+**Location:** Top-right corner of Salesforce pages
+
+**Interactions:**
+- **Single Click**: Opens TrackForcePro in a new browser tab (adjacent to current tab)
+- **Double Click**: Minimizes to just the "TF" icon (toggle to expand again)
+- **Close (×)**: Hides the blinker for the current session (reappears on page reload)
+
+**Appearance:**
+- Salesforce blue gradient background
+- "TF" icon with pulsing animation
+- "TrackForcePro" label
+
+**Storage:**
+- Hidden/minimized state is stored per browser session
+- Reappears after page reload if closed
+
+---
+
 ## Tips & Tricks
 
 ### General
@@ -275,11 +304,26 @@ If the interface feels too cluttered, you can hide tabs you do not use.
 - **Search Flexibility**: Search users by name, username, or email address.
 - **Bulk User Updates**: Select users from search results to quickly update their profile, role, or language.
 
-### Record Tools
-- **Quick Record ID Lookup**: Paste any Salesforce ID to instantly identify the object type and basic details.
-- **Current Record Auto-Detection**: Navigate to a record page and the extension automatically extracts and displays record information.
+### Record Scanner
+- **Field History**: Enable history tracking in Salesforce Setup to see field changes.
+- **Related Records**: Click on related record counts to expand and preview child records.
+- **Export History**: Use the Export button in Dev Tools to download field history as CSV.
 
 ### Troubleshooting
 - **"Not Connected" Error**: Ensure you're logged into Salesforce in an active browser tab.
 - **Extension Pages**: The extension cannot read data from `chrome-extension://` URLs - switch to a Salesforce tab.
 - **Favicon Not Showing**: Refresh the Salesforce page after applying a favicon. Some pages require a refresh for the icon to appear.
+- **Field History Not Loading**: Ensure history tracking is enabled for the object in Salesforce Setup.
+
+---
+
+## Version History
+
+| Version | Date | Key Changes |
+|---------|------|-------------|
+| v1.1.2 | Feb 9, 2026 | Record Scanner with Field History & Related Records, Page Blinker |
+| v1.1.1 | Feb 8, 2026 | Unified Record Lookup, Dev Tools Panel |
+| v1.1.0 | Feb 7, 2026 | Popout Window, User Manager, Favicon Manager |
+| v1.0.9 | Feb 6, 2026 | Enhanced SOQL/GraphQL Builders |
+
+For full changelog, see [CHANGELOG.md](../CHANGELOG.md)

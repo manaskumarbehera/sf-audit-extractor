@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrackForcePro - Help</title>
+    <!-- Favicon - multiple paths for different hosting contexts -->
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/Icon-32.png" id="fav32">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/Icon-16.png" id="fav16">
+    <link rel="shortcut icon" href="../icons/Icon-32.png" id="favshort">
+    <script>
+        // Fix favicon path for GitHub Pages
+        (function() {
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            if (isGitHubPages) {
+                const basePath = '/sf-audit-extractor/icons/';
+                document.getElementById('fav32').href = basePath + 'Icon-32.png';
+                document.getElementById('fav16').href = basePath + 'Icon-16.png';
+                document.getElementById('favshort').href = basePath + 'Icon-32.png';
+            }
+        })();
+    </script>
     <style>
         :root {
             --primary-color: #0176d3;
@@ -64,6 +80,26 @@
             border-radius: 20px;
             margin-top: 15px;
             font-size: 0.9rem;
+        }
+
+        .version-selector {
+            margin-top: 15px;
+        }
+
+        .version-selector select {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .version-selector select option {
+            color: #333;
+            background: white;
         }
 
         /* Navigation */
@@ -265,7 +301,7 @@
         <div style="font-size: 3rem; margin-bottom: 10px;">💡</div>
         <h1>TrackForcePro Help</h1>
         <p class="subtitle">Documentation, Resources & Support</p>
-        <span class="version-badge">Version 1.1.1</span>
+        <span class="version-badge">Version 1.1.2</span>
     </header>
 
     <nav>
@@ -489,6 +525,7 @@
     <footer>
         <p><strong>TrackForcePro</strong> - Open Source Chrome Extension</p>
         <p style="margin-top: 10px;">
+            <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">🛒 Chrome Web Store</a> ·
             <a href="index.html">Home</a> ·
             <a href="privacy-policy.html">Privacy Policy</a> ·
             <a href="QUICK_START_GUIDE.html">Quick Start</a>

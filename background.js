@@ -274,6 +274,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })();
         return true;
     }
+
+    // Handle openPopup request from blinker - open extension as new tab
+    if (msg && msg.action === 'openPopup') {
+        (async () => {
+            try {
+                // Get the current tab to open adjacent to it
+                const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                const currentTab = tabs[0];
+                const currentIndex = currentTab?.index ?? 0;
+
+                // Open popup.html as a new tab
+                const popupUrl = chrome.runtime.getURL('popup.html');
+                const newTab = await chrome.tabs.create({
+                    url: popupUrl,
+                    index: currentIndex + 1,
+                    active: true
+                });
+                sendResponse({ success: true, tabId: newTab.id });
+            } catch (err) {
+                console.error('background openPopup error', err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
+
+    // Handle openAsTab request (fallback from blinker)
+    if (msg && msg.action === 'openAsTab') {
+        (async () => {
+            try {
+                const popupUrl = chrome.runtime.getURL('popup.html');
+                const newTab = await chrome.tabs.create({ url: popupUrl, active: true });
+                sendResponse({ success: true, tabId: newTab.id });
+            } catch (err) {
+                console.error('background openAsTab error', err);
+                sendResponse({ success: false, error: String(err) });
+            }
+        })();
+        return true;
+    }
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
