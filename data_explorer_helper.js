@@ -12,11 +12,20 @@ const DataExplorerHelper = {
     _selectedUserId: null,
     _currentOrgId: null,
     _currentOrgName: null,
+    _currentOrgData: null, // Full org record from query
     _profiles: [],
     _roles: [],
     _languages: [],
     _recordHistory: [],
     _maxHistoryItems: 5,
+
+    // New state for 3-column Org & Favicon layout
+    _selectedOrgId: null, // Currently selected org in the list (for editing)
+    _savedOrgs: {}, // Cached saved orgs from storage
+    _draftIconConfig: null, // Draft icon config being edited (not yet applied)
+    _appliedIconConfig: null, // Currently applied icon config for selected org
+    _orgSearchQuery: '', // Search query for filtering orgs list
+    _detectedOrgs: {}, // Multi-org support: all detected orgs from open tabs
 
     /**
      * CRITICAL: Reset all in-memory data
@@ -29,10 +38,18 @@ const DataExplorerHelper = {
         this._selectedUserId = null;
         this._currentOrgId = null;
         this._currentOrgName = null;
+        this._currentOrgData = null;
         this._profiles = [];
         this._roles = [];
         this._languages = [];
         this._recordHistory = [];
+        // Reset new org/favicon state
+        this._selectedOrgId = null;
+        this._savedOrgs = {};
+        this._draftIconConfig = null;
+        this._appliedIconConfig = null;
+        this._orgSearchQuery = '';
+        this._detectedOrgs = {};
         console.log('✅ DataExplorerHelper: All data reset complete');
     },
 
@@ -52,6 +69,12 @@ const DataExplorerHelper = {
         });
 
         this.wireEvents();
+
+         // Apply display settings (column widths)
+        this.applyAuditDisplaySettings();
+        document.addEventListener('audit-display-settings-changed', () => {
+             this.applyAuditDisplaySettings();
+        });
 
         // Load the default active sub-tab for Data Explorer (Record Scanner)
         const activeBtn = document.querySelector('#tab-data .sub-tab-button.active');
@@ -75,33 +98,28 @@ const DataExplorerHelper = {
 
     switchSettingsSubTab: function(subTabId) {
         // Update buttons in Settings
-        document.querySelectorAll('#tab-settings .sub-tab-button').forEach(btn => {
-            const isActive = btn.dataset.subtab === subTabId;
-            btn.classList.toggle('active', isActive);
-            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        const buttons = document.querySelectorAll('#tab-settings .sub-tab-button');
+        buttons.forEach(btn => {
+            if (btn.dataset.subtab === subTabId) {
+                btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
+            } else {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+            }
         });
 
-        // Update content
-        document.querySelectorAll('#tab-settings .sub-tab-content').forEach(content => {
-            const isActive = content.id === `subtab-${subTabId}`;
-            content.hidden = !isActive;
-            content.classList.toggle('active', isActive);
+        // Update content panes in Settings
+        const panes = document.querySelectorAll('#tab-settings .sub-tab-content');
+        panes.forEach(pane => {
+            if (pane.id === `subtab-${subTabId}`) {
+                pane.hidden = false;
+                pane.classList.add('active');
+            } else {
+                pane.hidden = true;
+                pane.classList.remove('active');
+            }
         });
-
-        // Load content on switch
-        switch (subTabId) {
-            case 'settings-org':
-                this.loadOrgInfo();
-                this.initFaviconPreview();
-                this.loadSavedFavicons();
-                break;
-            case 'settings-display':
-                // Load display settings
-                break;
-            case 'settings-about':
-                // Static content, no loading needed
-                break;
-        }
     },
 
     wireEvents: function() {
@@ -113,7 +131,10 @@ const DataExplorerHelper = {
             });
         });
 
-        // Sandbox & Favicon Manager - Wire up events for both Settings tab and Data Explorer tab
+        // NEW 3-COLUMN ORG & FAVICON LAYOUT EVENTS
+        this.wireOrgFaviconEventsV2();
+
+        // Legacy: Sandbox & Favicon Manager - Wire up events for both Settings tab and Data Explorer tab
         this.wireFaviconEventsDataExplorer('-data'); // Data Explorer tab (suffixed IDs)
         this.wireFaviconEventsSettings(); // Settings tab (legacy IDs)
 
@@ -236,6 +257,32 @@ const DataExplorerHelper = {
         if (btnViewAPI) btnViewAPI.addEventListener('click', () => this.viewRecordAPI());
     },
 
+    applyAuditDisplaySettings: async function() {
+        const { auditFaviconColumnWidth = 40 } = await chrome.storage?.local?.get?.({
+            auditFaviconColumnWidth: 40
+        }) || {};
+
+        const favWidth = parseInt(auditFaviconColumnWidth) || 40;
+
+
+        // Apply favicon width via dynamic style injection
+        // This is more efficient than iterating elements and handles future elements
+        let styleTag = document.getElementById('dynamic-audit-display-styles');
+        if (!styleTag) {
+            styleTag = document.createElement('style');
+            styleTag.id = 'dynamic-audit-display-styles';
+            document.head.appendChild(styleTag);
+        }
+
+        // Set dynamic styles for favicon width
+        // Adjust canvas size to fit within the container
+        const canvasSize = Math.max(16, favWidth - 4);
+        styleTag.textContent = `
+            .org-item-icon { width: ${favWidth}px !important; }
+            .org-item-icon canvas { width: ${canvasSize}px !important; height: ${canvasSize}px !important; }
+        `;
+    },
+
     wireCollapsiblePanels: function() {
         // Field History panel toggle
         const fieldHistoryToggle = document.getElementById('field-history-toggle');
@@ -304,6 +351,2076 @@ const DataExplorerHelper = {
         }
     },
 
+    // ==========================================
+    // NEW 3-COLUMN ORG & FAVICON EVENTS (V2)
+    // ==========================================
+
+    wireOrgFaviconEventsV2: function() {
+        // Add Current Org button (in header)
+        const addOrgBtn = document.getElementById('add-current-org-btn');
+        if (addOrgBtn) {
+            addOrgBtn.addEventListener('click', () => this.addCurrentOrg());
+        }
+
+        // Add Current Org Hero Button (in empty state)
+        const addOrgHeroBtn = document.getElementById('add-current-org-hero-btn');
+        if (addOrgHeroBtn) {
+            addOrgHeroBtn.addEventListener('click', () => this.addCurrentOrg());
+        }
+
+        // Org search input
+        const orgSearchInput = document.getElementById('org-search-input');
+        if (orgSearchInput) {
+            orgSearchInput.addEventListener('input', (e) => {
+                this._orgSearchQuery = e.target.value;
+                this.renderSavedOrgsList();
+            });
+        }
+
+        // Preset chips (V2, V3, V4, V5)
+        const presetChipsV2 = document.querySelectorAll('#preset-chips .preset-chip-v2');
+        const presetChipsV3 = document.querySelectorAll('#preset-chips .preset-chip-v3');
+        const presetChipsV4 = document.querySelectorAll('#preset-chips .preset-btn');
+        const presetChipsV5 = document.querySelectorAll('#preset-chips .env-btn-v5');
+        presetChipsV2.forEach(chip => {
+            chip.addEventListener('click', () => this.applyPresetV2(chip));
+        });
+        presetChipsV3.forEach(chip => {
+            chip.addEventListener('click', () => this.applyPresetV3(chip));
+        });
+        presetChipsV4.forEach(chip => {
+            chip.addEventListener('click', () => this.applyPresetV4(chip));
+        });
+        presetChipsV5.forEach(chip => {
+            chip.addEventListener('click', () => this.applyPresetV5(chip));
+        });
+
+        // Color swatches (V2, V3, V4, V5)
+        const colorSwatches = document.querySelectorAll('#favicon-color-presets-data .color-swatch');
+        const colorSwatchesV3 = document.querySelectorAll('#favicon-color-presets-data .color-swatch-v3');
+        const colorSwatchesV4 = document.querySelectorAll('#favicon-color-presets-data .swatch');
+        const colorSwatchesV5 = document.querySelectorAll('#favicon-color-presets-data .swatch-v5');
+        colorSwatches.forEach(swatch => {
+            swatch.addEventListener('click', () => this.selectColorSwatch(swatch));
+        });
+        colorSwatchesV3.forEach(swatch => {
+            swatch.addEventListener('click', () => this.selectColorSwatchV3(swatch));
+        });
+        colorSwatchesV4.forEach(swatch => {
+            swatch.addEventListener('click', () => this.selectColorSwatchV4(swatch));
+        });
+        colorSwatchesV5.forEach(swatch => {
+            swatch.addEventListener('click', () => this.selectColorSwatchV5(swatch));
+        });
+
+        // Preview background toggle
+        const bgLightBtn = document.getElementById('preview-bg-light');
+        const bgDarkBtn = document.getElementById('preview-bg-dark');
+        if (bgLightBtn) {
+            bgLightBtn.addEventListener('click', () => this.setPreviewBackgroundV4('light'));
+        }
+        if (bgDarkBtn) {
+            bgDarkBtn.addEventListener('click', () => this.setPreviewBackgroundV4('dark'));
+        }
+
+        // Apply All Tabs toggle
+        const applyAllToggle = document.getElementById('apply-all-tabs-toggle');
+        if (applyAllToggle) {
+            // Load saved preference
+            chrome.storage.local.get('applyAllTabs').then(result => {
+                applyAllToggle.checked = result.applyAllTabs || false;
+            });
+            applyAllToggle.addEventListener('change', (e) => {
+                chrome.storage.local.set({ applyAllTabs: e.target.checked });
+            });
+        }
+
+        // Save button (single primary action)
+        const saveBtn = document.getElementById('save-org-icon-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.saveOrgAndIcon());
+        }
+
+        // Banner save button (same action as main save button)
+        const bannerSaveBtn = document.getElementById('banner-save-btn');
+        if (bannerSaveBtn) {
+            bannerSaveBtn.addEventListener('click', () => this.saveOrgAndIcon());
+        }
+
+        // Reset button
+        const resetBtn = document.getElementById('reset-favicon-btn-data');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => this.resetToApplied());
+        }
+
+        // Show More button for org info (V3/V4)
+        const showMoreBtn = document.getElementById('show-more-org-info');
+        if (showMoreBtn) {
+            showMoreBtn.addEventListener('click', () => this.toggleOrgInfoExpanded());
+        }
+
+        // Watch for changes to detect unsaved changes
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+        const shapeRadios = document.querySelectorAll('input[name="favicon-shape-data"]');
+
+        if (colorInput) {
+            colorInput.addEventListener('input', () => this.onIconConfigChangeV4());
+        }
+        if (labelInput) {
+            labelInput.addEventListener('input', () => this.onIconConfigChangeV4());
+        }
+        shapeRadios.forEach(radio => {
+            radio.addEventListener('change', () => this.onIconConfigChangeV4());
+        });
+    },
+
+    // Apply preset V4 - clean, minimal
+    applyPresetV4: function(chip) {
+        const { color, label } = chip.dataset;
+
+        // Update form values
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput && color) colorInput.value = color;
+        if (labelInput && label) labelInput.value = label;
+
+        // Update preset chip selection visuals (V4)
+        document.querySelectorAll('#preset-chips .preset-btn').forEach(c => {
+            c.classList.toggle('active', c === chip);
+        });
+
+        // Update color swatch selection
+        this.updateColorSwatchSelectionV4(color);
+
+        // Update draft and preview
+        this.onIconConfigChangeV4();
+    },
+
+    // Apply preset V5 - refactored layout with segmented control
+    applyPresetV5: function(chip) {
+        const { color, label } = chip.dataset;
+
+        // Update form values
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput && color) colorInput.value = color;
+        if (labelInput && label) labelInput.value = label;
+
+        // Update environment type selection visuals (V5)
+        document.querySelectorAll('#preset-chips .env-btn-v5').forEach(c => {
+            c.classList.toggle('active', c === chip);
+        });
+
+        // Update draft badge in preview
+        const draftBadge = document.getElementById('preview-draft-badge');
+        if (draftBadge && label) {
+            draftBadge.textContent = label;
+        }
+
+        // Update color swatch selection
+        this.updateColorSwatchSelectionV5(color);
+
+        // Update draft and preview
+        this.onIconConfigChangeV4();
+    },
+
+    // Select color swatch V4
+    selectColorSwatchV4: function(swatch) {
+        const color = swatch.dataset.color;
+        const colorInput = document.getElementById('favicon-color-data');
+
+        if (colorInput && color) {
+            colorInput.value = color;
+            this.updateColorSwatchSelectionV4(color);
+            this.onIconConfigChangeV4();
+        }
+    },
+
+    // Update color swatch selection visuals V4
+    updateColorSwatchSelectionV4: function(color) {
+        document.querySelectorAll('#favicon-color-presets-data .swatch').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+        // Also update V2/V3 swatches for compatibility
+        document.querySelectorAll('#favicon-color-presets-data .color-swatch').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+        document.querySelectorAll('#favicon-color-presets-data .color-swatch-v3').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+    },
+
+    // Select color swatch V5
+    selectColorSwatchV5: function(swatch) {
+        const color = swatch.dataset.color;
+        const colorInput = document.getElementById('favicon-color-data');
+
+        if (colorInput && color) {
+            colorInput.value = color;
+            this.updateColorSwatchSelectionV5(color);
+            this.onIconConfigChangeV4();
+        }
+    },
+
+    // Update color swatch selection visuals V5
+    updateColorSwatchSelectionV5: function(color) {
+        // Update V5 swatches
+        document.querySelectorAll('#favicon-color-presets-data .swatch-v5').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+        // Also update V4 swatches for compatibility
+        document.querySelectorAll('#favicon-color-presets-data .swatch').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+    },
+
+    // Set preview background V4 (both cards)
+    setPreviewBackgroundV4: function(mode) {
+        const previewBodies = document.querySelectorAll('.preview-canvas, .preview-card-body-v3, .editing-preview-body, .preview-canvas-v5');
+        const lightBtn = document.getElementById('preview-bg-light');
+        const darkBtn = document.getElementById('preview-bg-dark');
+
+        previewBodies.forEach(body => {
+            body.classList.toggle('dark-bg', mode === 'dark');
+        });
+
+        if (lightBtn) lightBtn.classList.toggle('active', mode === 'light');
+        if (darkBtn) darkBtn.classList.toggle('active', mode === 'dark');
+    },
+
+    // Called when any icon config input changes (V4)
+    onIconConfigChangeV4: function() {
+        this.updateDraftConfig();
+        this.updateFaviconPreviewRadio('-data');
+        this.updateUnsavedIndicatorV4();
+        this.updateSaveButtonStateV4();
+
+        // Mark draft preview as having changes
+        const draftCard = document.getElementById('preview-card-draft');
+        if (draftCard) {
+            draftCard.classList.toggle('has-changes', this.hasUnsavedChanges());
+        }
+
+        // Update change dot
+        const changeDot = document.getElementById('draft-status-badge');
+        if (changeDot) {
+            changeDot.classList.toggle('unsaved', this.hasUnsavedChanges());
+        }
+
+        // Persist draft config for pop-in/pop-out state
+        if (this._draftIconConfig) {
+            chrome.storage.local.set({ draftIconConfig: this._draftIconConfig });
+        }
+    },
+
+    // Update unsaved indicator V4 - minimal
+    updateUnsavedIndicatorV4: function() {
+        const unsavedBanner = document.getElementById('unsaved-changes-banner');
+        const hasChanges = this.hasUnsavedChanges();
+
+        // Update inline unsaved banner
+        if (unsavedBanner) {
+            unsavedBanner.hidden = !hasChanges;
+        }
+    },
+
+    // Update save button state V4
+    updateSaveButtonStateV4: function() {
+        const saveBtn = document.getElementById('save-org-icon-btn');
+        if (!saveBtn) return;
+
+        const hasChanges = this.hasUnsavedChanges();
+        const isOrgSaved = this._selectedOrgId && this._savedOrgs[this._selectedOrgId];
+        const isCurrentOrgNotSaved = this._currentOrgId && !this._savedOrgs[this._currentOrgId];
+
+        // Enable save if there are changes or if org not yet saved
+        if (isCurrentOrgNotSaved && !this._selectedOrgId) {
+            saveBtn.disabled = false;
+        } else if (!isOrgSaved && this._currentOrgId) {
+            saveBtn.disabled = false;
+        } else {
+            saveBtn.disabled = !hasChanges;
+        }
+    },
+
+    // Apply preset V3 - updates draft only, shows visual selection
+    applyPresetV3: function(chip) {
+        const { color, label } = chip.dataset;
+
+        // Update form values
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput && color) colorInput.value = color;
+        if (labelInput && label) labelInput.value = label;
+
+        // Update preset chip selection visuals (V3)
+        document.querySelectorAll('#preset-chips .preset-chip-v3').forEach(c => {
+            c.classList.toggle('active', c === chip);
+        });
+
+        // Update color swatch selection
+        this.updateColorSwatchSelectionV3(color);
+
+        // Update draft and preview
+        this.onIconConfigChangeV3();
+    },
+
+    // Select color swatch V3
+    selectColorSwatchV3: function(swatch) {
+        const color = swatch.dataset.color;
+        const colorInput = document.getElementById('favicon-color-data');
+
+        if (colorInput && color) {
+            colorInput.value = color;
+            this.updateColorSwatchSelectionV3(color);
+            this.onIconConfigChangeV3();
+        }
+    },
+
+    // Update color swatch selection visuals V3
+    updateColorSwatchSelectionV3: function(color) {
+        document.querySelectorAll('#favicon-color-presets-data .color-swatch-v3').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+        // Also update V2 swatches for compatibility
+        document.querySelectorAll('#favicon-color-presets-data .color-swatch').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+    },
+
+    // Set preview background V3 (both cards)
+    setPreviewBackgroundV3: function(mode) {
+        const previewBodies = document.querySelectorAll('.preview-card-body-v3, .editing-preview-body');
+        const lightBtn = document.getElementById('preview-bg-light');
+        const darkBtn = document.getElementById('preview-bg-dark');
+
+        previewBodies.forEach(body => {
+            body.classList.toggle('dark-bg', mode === 'dark');
+        });
+
+        if (lightBtn) lightBtn.classList.toggle('active', mode === 'light');
+        if (darkBtn) darkBtn.classList.toggle('active', mode === 'dark');
+    },
+
+    // Called when any icon config input changes (V3)
+    onIconConfigChangeV3: function() {
+        this.updateDraftConfig();
+        this.updateFaviconPreviewRadio('-data');
+        this.updateUnsavedIndicatorV3();
+        this.updateSaveButtonStateV3();
+        this.updateEditingLabelDisplay();
+
+        // Mark draft preview as having changes
+        const draftCard = document.getElementById('preview-card-draft');
+        if (draftCard) {
+            draftCard.classList.toggle('has-changes', this.hasUnsavedChanges());
+        }
+
+        // Persist draft config for pop-in/pop-out state
+        if (this._draftIconConfig) {
+            chrome.storage.local.set({ draftIconConfig: this._draftIconConfig });
+        }
+    },
+
+    // Update editing label display in preview
+    updateEditingLabelDisplay: function() {
+        const labelDisplay = document.getElementById('editing-label-display');
+        if (labelDisplay && this._draftIconConfig) {
+            labelDisplay.textContent = this._draftIconConfig.label || '—';
+        }
+    },
+
+    // Update unsaved indicator V3 - compact inline banner
+    updateUnsavedIndicatorV3: function() {
+        const draftBadge = document.getElementById('draft-status-badge');
+        const unsavedBanner = document.getElementById('unsaved-changes-banner');
+        const hasChanges = this.hasUnsavedChanges();
+
+        // Update draft badge (mini dot style - CSS handles the visual)
+        if (draftBadge) {
+            if (hasChanges) {
+                draftBadge.textContent = '';
+                draftBadge.className = 'draft-badge-mini unsaved';
+                draftBadge.title = 'Unsaved changes';
+            } else {
+                draftBadge.textContent = '';
+                draftBadge.className = 'draft-badge-mini saved';
+                draftBadge.title = 'Up to date';
+            }
+        }
+
+        // Update inline unsaved banner
+        if (unsavedBanner) {
+            unsavedBanner.hidden = !hasChanges;
+        }
+
+        // Update applied summary display
+        this.updateAppliedSummaryDisplayV3();
+    },
+
+    // Update the applied summary section V3 with current applied config
+    updateAppliedSummaryDisplayV3: function() {
+        const labelDisplay = document.getElementById('applied-label-display');
+
+        if (this._appliedIconConfig) {
+            if (labelDisplay) {
+                labelDisplay.textContent = this._appliedIconConfig.label || '—';
+            }
+        } else {
+            if (labelDisplay) labelDisplay.textContent = '—';
+        }
+    },
+
+    // Update save button state V3
+    updateSaveButtonStateV3: function() {
+        const saveBtn = document.getElementById('save-org-icon-btn');
+        if (!saveBtn) return;
+
+        const hasChanges = this.hasUnsavedChanges();
+        const isOrgSaved = this._selectedOrgId && this._savedOrgs[this._selectedOrgId];
+        const isCurrentOrgNotSaved = this._currentOrgId && !this._savedOrgs[this._currentOrgId];
+
+        // Determine button label and state
+        if (isCurrentOrgNotSaved && !this._selectedOrgId) {
+            saveBtn.textContent = 'Save & Apply';
+            saveBtn.disabled = false;
+        } else if (!isOrgSaved && this._currentOrgId) {
+            saveBtn.textContent = 'Save & Apply';
+            saveBtn.disabled = false;
+        } else {
+            saveBtn.textContent = 'Save & Apply';
+            saveBtn.disabled = !hasChanges;
+        }
+    },
+
+    // Toggle org info expanded section
+    toggleOrgInfoExpanded: function() {
+        const expandedSection = document.getElementById('org-info-expanded');
+        const showMoreBtn = document.getElementById('show-more-org-info');
+
+        if (expandedSection && showMoreBtn) {
+            const isHidden = expandedSection.hidden;
+            expandedSection.hidden = !isHidden;
+            // Support both V3 and V4 button text
+            showMoreBtn.textContent = isHidden ? 'Less ▴' : 'More ▾';
+        }
+    },
+
+    // Update org summary in V3 layout
+    updateOrgSummaryV3: function(orgData) {
+        this.updateOrgSummaryV4(orgData);
+    },
+
+    // Update org summary in V4 layout (also used by V3)
+    updateOrgSummaryV4: function(orgData) {
+        const nameEl = document.getElementById('summary-org-name');
+        const typeEl = document.getElementById('summary-org-type');
+        const apiEl = document.getElementById('summary-api-version');
+        const lastSeenEl = document.getElementById('summary-last-seen');
+        const instanceEl = document.getElementById('summary-instance');
+        const orgIdEl = document.getElementById('summary-org-id');
+        const localeEl = document.getElementById('summary-locale');
+        const createdEl = document.getElementById('summary-created');
+
+        if (orgData) {
+            if (nameEl) nameEl.textContent = orgData.orgName || orgData.Name || '—';
+            if (typeEl) typeEl.textContent = orgData.environment || (orgData.IsSandbox ? 'Sandbox' : 'Production');
+            if (apiEl) apiEl.textContent = document.getElementById('api-version')?.value || '63.0';
+            if (lastSeenEl) lastSeenEl.textContent = orgData.lastSeenAt ? this.formatRelativeTime(orgData.lastSeenAt) : '—';
+            if (instanceEl) instanceEl.textContent = orgData.instance || orgData.InstanceName || '—';
+            if (orgIdEl) orgIdEl.textContent = orgData.orgId || this._currentOrgId || '—';
+            if (localeEl) localeEl.textContent = orgData.locale || orgData.DefaultLocaleSidKey || '—';
+            if (createdEl) createdEl.textContent = orgData.createdDate ? this.formatDate(orgData.createdDate) : '—';
+
+            // Update env badge
+            this.updateEnvBadge(orgData.environment || (orgData.IsSandbox ? 'sandbox' : 'production'));
+
+            // Show live indicator
+            const liveIndicator = document.getElementById('live-indicator');
+            if (liveIndicator) liveIndicator.hidden = !this._appliedIconConfig;
+        }
+    },
+
+    // Update environment badge
+    updateEnvBadge: function(env) {
+        const badge = document.getElementById('org-env-badge');
+        if (badge) {
+            badge.dataset.env = env || 'none';
+            badge.textContent = (env || '').toUpperCase().substring(0, 4);
+        }
+    },
+
+    // Format relative time (e.g., "2 hours ago")
+    formatRelativeTime: function(dateStr) {
+        try {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return date.toLocaleDateString();
+        } catch (e) {
+            return '—';
+        }
+    },
+
+    // Format date
+    formatDate: function(dateStr) {
+        try {
+            return new Date(dateStr).toLocaleDateString();
+        } catch (e) {
+            return '—';
+        }
+    },
+
+    // Apply preset V2 - updates draft only, shows visual selection
+    applyPresetV2: function(chip) {
+        const { color, label } = chip.dataset;
+
+        // Update form values
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput && color) colorInput.value = color;
+        if (labelInput && label) labelInput.value = label;
+
+        // Update preset chip selection visuals
+        document.querySelectorAll('#preset-chips .preset-chip-v2').forEach(c => {
+            c.classList.toggle('active', c === chip);
+        });
+
+        // Update color swatch selection
+        this.updateColorSwatchSelection(color);
+
+        // Update draft and preview
+        this.onIconConfigChangeV2();
+    },
+
+    // Select color swatch
+    selectColorSwatch: function(swatch) {
+        const color = swatch.dataset.color;
+        const colorInput = document.getElementById('favicon-color-data');
+
+        if (colorInput && color) {
+            colorInput.value = color;
+            this.updateColorSwatchSelection(color);
+            this.onIconConfigChangeV2();
+        }
+    },
+
+    // Update color swatch selection visuals
+    updateColorSwatchSelection: function(color) {
+        document.querySelectorAll('#favicon-color-presets-data .color-swatch').forEach(s => {
+            s.classList.toggle('active', s.dataset.color === color);
+        });
+    },
+
+    // Set preview background V2 (both cards)
+    setPreviewBackgroundV2: function(mode) {
+        const previewBodies = document.querySelectorAll('.preview-card-body, .editing-preview-body');
+        const lightBtn = document.getElementById('preview-bg-light');
+        const darkBtn = document.getElementById('preview-bg-dark');
+
+        previewBodies.forEach(body => {
+            body.classList.toggle('dark-bg', mode === 'dark');
+        });
+
+        if (lightBtn) lightBtn.classList.toggle('active', mode === 'light');
+        if (darkBtn) darkBtn.classList.toggle('active', mode === 'dark');
+    },
+
+    // Called when any icon config input changes (V2)
+    onIconConfigChangeV2: function() {
+        this.updateDraftConfig();
+        this.updateFaviconPreviewRadio('-data');
+        this.updateUnsavedIndicatorV2();
+        this.updateSaveButtonState();
+
+        // Persist draft config for pop-in/pop-out state
+        if (this._draftIconConfig) {
+            chrome.storage.local.set({ draftIconConfig: this._draftIconConfig });
+        }
+    },
+
+    // Update unsaved indicator V2 - now includes sticky banner and applied summary
+    updateUnsavedIndicatorV2: function() {
+        const draftBadge = document.getElementById('draft-status-badge');
+        const unsavedBanner = document.getElementById('unsaved-changes-banner');
+        const hasChanges = this.hasUnsavedChanges();
+
+        // Update draft badge
+        if (draftBadge) {
+            if (hasChanges) {
+                draftBadge.textContent = 'Unsaved Changes';
+                draftBadge.className = 'draft-status-badge unsaved';
+            } else {
+                draftBadge.textContent = 'Up to date';
+                draftBadge.className = 'draft-status-badge saved';
+            }
+        }
+
+        // Update sticky unsaved banner
+        if (unsavedBanner) {
+            unsavedBanner.hidden = !hasChanges;
+        }
+
+        // Update applied summary display
+        this.updateAppliedSummaryDisplay();
+    },
+
+    // Update the applied summary section with current applied config
+    updateAppliedSummaryDisplay: function() {
+        const labelDisplay = document.getElementById('applied-label-display');
+        const colorDisplay = document.getElementById('applied-color-display');
+
+        if (this._appliedIconConfig) {
+            if (labelDisplay) {
+                labelDisplay.textContent = this._appliedIconConfig.labelText || '—';
+            }
+            if (colorDisplay) {
+                colorDisplay.textContent = this._appliedIconConfig.baseColor || '#000000';
+            }
+        } else {
+            if (labelDisplay) labelDisplay.textContent = '—';
+            if (colorDisplay) colorDisplay.textContent = 'No icon applied';
+        }
+    },
+
+    // Update save button state
+    updateSaveButtonState: function() {
+        const saveBtn = document.getElementById('save-org-icon-btn');
+        if (!saveBtn) return;
+
+        const hasChanges = this.hasUnsavedChanges();
+        const isOrgSaved = this._selectedOrgId && this._savedOrgs[this._selectedOrgId];
+        const isCurrentOrgNotSaved = this._currentOrgId && !this._savedOrgs[this._currentOrgId];
+
+        // Determine button label
+        if (isCurrentOrgNotSaved && !this._selectedOrgId) {
+            saveBtn.textContent = 'Save Org + Icon';
+            saveBtn.disabled = false; // Always allow saving new org
+        } else if (!isOrgSaved && this._currentOrgId) {
+            saveBtn.textContent = 'Save Org + Icon';
+            saveBtn.disabled = false;
+        } else {
+            saveBtn.textContent = 'Save Changes';
+            saveBtn.disabled = !hasChanges;
+        }
+    },
+
+    // Save org and icon (single save action)
+    saveOrgAndIcon: async function() {
+        const targetOrgId = this._selectedOrgId || this._currentOrgId;
+
+        if (!targetOrgId) {
+            this.showFaviconStatus('No org selected. Please select or add an org.', 'error');
+            return;
+        }
+
+        const color = document.getElementById('favicon-color-data')?.value || '#ff6b6b';
+        const label = document.getElementById('favicon-label-data')?.value || '';
+        const shapeRadio = document.querySelector('input[name="favicon-shape-data"]:checked');
+        const shape = shapeRadio ? shapeRadio.value : 'circle';
+
+        try {
+            // Load existing records
+            const result = await chrome.storage.local.get(['orgRecords', 'orgFavicons']);
+            let orgRecords = (result && result.orgRecords) || {};
+            let orgFavicons = (result && result.orgFavicons) || {};
+
+            // CRITICAL: Always get the CURRENT hostname for this org
+            // This ensures we apply favicon to the correct tabs
+            let hostname = null;
+
+            // Method 1: Try to get hostname from current session's instanceUrl (most reliable)
+            try {
+                const session = PlatformHelper.getSession ? PlatformHelper.getSession() : null;
+                if (session && session.instanceUrl) {
+                    hostname = new URL(session.instanceUrl).hostname;
+                    console.log(`📝 Got hostname from session instanceUrl: ${hostname}`);
+                }
+            } catch (e) {
+                console.warn('Could not get hostname from session:', e);
+            }
+
+            // Method 2: Query for SF tabs and find the most recent one
+            if (!hostname) {
+                try {
+                    const sfTabs = await chrome.tabs.query({
+                        url: ['*://*.salesforce.com/*', '*://*.force.com/*', '*://*.salesforce-setup.com/*']
+                    });
+
+                    if (sfTabs.length > 0) {
+                        let currentWindowId = null;
+                        try {
+                            const currentWindow = await chrome.windows.getCurrent();
+                            currentWindowId = currentWindow?.id;
+                        } catch (e) {}
+
+                        let candidateTabs = sfTabs;
+                        if (currentWindowId) {
+                            const sameWindowTabs = sfTabs.filter(t => t.windowId === currentWindowId);
+                            if (sameWindowTabs.length > 0) {
+                                candidateTabs = sameWindowTabs;
+                            }
+                        }
+
+                        candidateTabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+
+                        const targetTab = candidateTabs[0];
+                        if (targetTab?.url) {
+                            hostname = new URL(targetTab.url).hostname;
+                            console.log(`📝 Got hostname from SF tab: ${hostname}`);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Error getting hostname from tabs:', e);
+                }
+            }
+
+            // If org doesn't exist, create it from current org data
+            if (!orgRecords[targetOrgId] && this._currentOrgData) {
+                const org = this._currentOrgData;
+                const envType = org.OrganizationType || (org.IsSandbox ? 'Sandbox' : 'Production');
+                console.log(`📋 Saving new org: ${org.Name}, OrganizationType=${envType}`);
+
+                orgRecords[targetOrgId] = {
+                    orgId: targetOrgId,
+                    orgName: org.Name,
+                    displayName: org.Name,
+                    instance: org.InstanceName,
+                    environment: envType,
+                    isSandbox: org.IsSandbox === true,
+                    orgType: org.OrganizationType,
+                    locale: org.DefaultLocaleSidKey,
+                    language: org.LanguageLocaleKey,
+                    timezone: org.TimeZoneSidKey,
+                    createdDate: org.CreatedDate,
+                    hostname: hostname,
+                    lastSeenAt: new Date().toISOString(),
+                    iconConfig: { color, label, shape },
+                    appliedIconConfig: { color, label, shape }
+                };
+            } else if (orgRecords[targetOrgId]) {
+                // Update existing record
+                orgRecords[targetOrgId].iconConfig = { color, label, shape };
+                orgRecords[targetOrgId].appliedIconConfig = { color, label, shape };
+                orgRecords[targetOrgId].lastSeenAt = new Date().toISOString();
+
+                // CRITICAL FIX: Also update environment and org metadata from current org data
+                // This ensures the environment type is always current, BUT only if we are actually on that org
+                if (this._currentOrgData && this._currentOrgData.Id === targetOrgId) {
+                    const org = this._currentOrgData;
+                    const newEnv = org.OrganizationType || (org.IsSandbox ? 'Sandbox' : 'Production');
+                    const oldEnv = orgRecords[targetOrgId].environment;
+                    console.log(`📝 Updating org ${org.Name}: environment ${oldEnv} → ${newEnv}`);
+
+                    orgRecords[targetOrgId].environment = newEnv;
+                    orgRecords[targetOrgId].isSandbox = org.IsSandbox === true;
+                    orgRecords[targetOrgId].orgType = org.OrganizationType;
+                    orgRecords[targetOrgId].locale = org.DefaultLocaleSidKey;
+                    orgRecords[targetOrgId].language = org.LanguageLocaleKey;
+                    orgRecords[targetOrgId].timezone = org.TimeZoneSidKey;
+                    console.log(`📝 Updated environment and metadata for existing org: ${newEnv}`);
+                }
+
+                // CRITICAL FIX: Also update hostname if we have a new one
+                // This ensures we always have the correct hostname for tab matching
+                if (hostname) {
+                    orgRecords[targetOrgId].hostname = hostname;
+                    console.log(`📝 Updated hostname for existing org: ${hostname}`);
+                }
+            }
+
+            // Also update legacy orgFavicons - ALWAYS include current hostname
+            orgFavicons[targetOrgId] = {
+                color,
+                label,
+                shape,
+                orgName: orgRecords[targetOrgId]?.orgName || 'Unknown Org',
+                hostname: hostname || orgRecords[targetOrgId]?.hostname,
+                savedAt: new Date().toISOString()
+            };
+
+            // Save to storage
+            await chrome.storage.local.set({ orgRecords, orgFavicons });
+
+            // Update in-memory cache
+            this._savedOrgs = orgRecords;
+            this._appliedIconConfig = { color, label, shape };
+            this._draftIconConfig = { color, label, shape };
+
+            // Clear persisted draft config since we just saved
+            chrome.storage.local.remove('draftIconConfig');
+
+            // Update UI
+            this.renderSavedOrgsList();
+            this.renderAppliedPreview();
+            this.updateUnsavedIndicatorV2();
+            this.updateSaveButtonState();
+            this.updateOrgSavedStatus(true);
+
+            // Apply to tabs
+            const applyAllToggle = document.getElementById('apply-all-tabs-toggle');
+            const applyToAllTabs = applyAllToggle?.checked || false;
+
+            // Pass the hostname we detected during save to ensure we apply to correct tabs
+            await this.applyFaviconToTabs(color, label, shape, targetOrgId, applyToAllTabs, hostname);
+
+            this.showFaviconStatus('Saved successfully!', 'success');
+
+        } catch (error) {
+            console.error('Error saving org and icon:', error);
+            this.showFaviconStatus('Error: ' + error.message, 'error');
+        }
+    },
+
+    // Apply favicon to tabs
+    // targetHostnameOverride: Optional hostname to use instead of looking up from _savedOrgs
+    applyFaviconToTabs: async function(color, label, shape, orgId, applyToAll, targetHostnameOverride) {
+        try {
+            const allTabs = await chrome.tabs.query({});
+            const sfTabs = allTabs.filter(tab =>
+                tab.url && (
+                    tab.url.includes('.salesforce.com') ||
+                    tab.url.includes('.force.com') ||
+                    tab.url.includes('.salesforce-setup.com')
+                ) && !tab.url.startsWith('chrome-extension://')
+            );
+
+            if (sfTabs.length === 0) return;
+
+            // Get the saved org record to check hostname for matching
+            const orgRecord = this._savedOrgs[orgId];
+
+            // CRITICAL: Use provided hostname override if available (freshly detected during save)
+            // This ensures we apply to the correct tabs even if in-memory cache is stale
+            let targetHostname = targetHostnameOverride || orgRecord?.hostname || null;
+
+            console.log(`📍 applyFaviconToTabs: orgId=${orgId}, targetHostname=${targetHostname}, override=${!!targetHostnameOverride}`);
+
+            // FIX: If no hostname in saved record, try to get it from the active Salesforce tab
+            // and update the saved record for future use
+            if (!targetHostname && sfTabs.length > 0) {
+                const activeTab = sfTabs.find(t => t.active) || sfTabs[0];
+                if (activeTab?.url) {
+                    try {
+                        targetHostname = new URL(activeTab.url).hostname;
+                        console.log(`📝 No hostname saved for org, using active tab hostname: ${targetHostname}`);
+
+                        // Update the saved org record with this hostname for future
+                        if (orgRecord && targetHostname) {
+                            orgRecord.hostname = targetHostname;
+                            this._savedOrgs[orgId] = orgRecord;
+
+                            // Persist to storage - update BOTH orgRecords AND orgFavicons
+                            try {
+                                const result = await chrome.storage.local.get(['orgRecords', 'orgFavicons']);
+                                let orgRecords = (result && result.orgRecords) || {};
+                                let orgFavicons = (result && result.orgFavicons) || {};
+
+                                // Update orgRecords
+                                if (orgRecords[orgId]) {
+                                    orgRecords[orgId].hostname = targetHostname;
+                                }
+
+                                // CRITICAL: Also update orgFavicons (used by content.js for auto-apply)
+                                if (orgFavicons[orgId]) {
+                                    orgFavicons[orgId].hostname = targetHostname;
+                                }
+
+                                await chrome.storage.local.set({ orgRecords, orgFavicons });
+                                console.log(`✅ Updated saved org with hostname: ${targetHostname} (both orgRecords and orgFavicons)`);
+                            } catch (e) {
+                                console.warn('Could not persist hostname update:', e);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Could not extract hostname from active tab:', e);
+                    }
+                }
+            }
+
+            // If applyToAll is true, only apply to tabs that match the SAME org (by hostname)
+            // This prevents cross-org contamination
+            let tabsToApply;
+            if (applyToAll && targetHostname) {
+                // Filter tabs to only those matching the target org's hostname
+                tabsToApply = sfTabs.filter(tab => {
+                    try {
+                        const tabHostname = new URL(tab.url).hostname;
+                        return tabHostname === targetHostname;
+                    } catch {
+                        return false;
+                    }
+                });
+                console.log(`📌 Applying favicon to ${tabsToApply.length} tabs matching hostname: ${targetHostname}`);
+            } else if (targetHostname) {
+                // CRITICAL FIX: Even when applyToAll is false, we must apply to tabs matching THIS org
+                // Don't use t.active because popup is open and no tab is "active"
+                // Instead, find tabs matching the target org's hostname
+                tabsToApply = sfTabs.filter(tab => {
+                    try {
+                        const tabHostname = new URL(tab.url).hostname;
+                        return tabHostname === targetHostname;
+                    } catch {
+                        return false;
+                    }
+                });
+                // If multiple tabs match, just apply to the first one (or all if applyToAll would be true)
+                if (tabsToApply.length > 1 && !applyToAll) {
+                    tabsToApply = [tabsToApply[0]];
+                }
+                console.log(`📌 Applying favicon to ${tabsToApply.length} tab(s) for hostname: ${targetHostname}`);
+            } else {
+                // No hostname to match - try to find active tab, else first SF tab
+                console.warn('⚠️ No hostname for org, trying active tab or first SF tab');
+                const activeTab = sfTabs.find(t => t.active);
+                tabsToApply = activeTab ? [activeTab] : (sfTabs.length > 0 ? [sfTabs[0]] : []);
+            }
+
+            for (const tab of tabsToApply) {
+                try {
+                    await chrome.tabs.sendMessage(tab.id, {
+                        action: 'updateFavicon',
+                        color, label, shape, orgId
+                    });
+                } catch (e) {
+                    try {
+                        await chrome.scripting.executeScript({
+                            target: { tabId: tab.id },
+                            func: this.injectFaviconUpdate,
+                            args: [color, label, shape]
+                        });
+                    } catch (e2) {}
+                }
+            }
+        } catch (e) {
+            console.warn('Error applying favicon to tabs:', e);
+        }
+    },
+
+    // Reset to applied state
+    resetToApplied: function() {
+        if (!this._appliedIconConfig) return;
+
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput) colorInput.value = this._appliedIconConfig.color || '#ff6b6b';
+        if (labelInput) labelInput.value = this._appliedIconConfig.label || '';
+
+        if (this._appliedIconConfig.shape) {
+            this.setSelectedShape(this._appliedIconConfig.shape, '-data');
+        }
+
+        // Update draft to match applied
+        this._draftIconConfig = { ...this._appliedIconConfig };
+
+        // Update visuals (all versions)
+        this.updateFaviconPreviewRadio('-data');
+        this.updateColorSwatchSelection(this._appliedIconConfig.color);
+        this.updateColorSwatchSelectionV4(this._appliedIconConfig.color);
+        this.updateColorSwatchSelectionV5(this._appliedIconConfig.color);
+        this.clearPresetSelection();
+        this.updateUnsavedIndicatorV2();
+        this.updateUnsavedIndicatorV4();
+        this.updateSaveButtonState();
+        this.updateSaveButtonStateV4();
+
+        // Reset change indicators
+        const draftCard = document.getElementById('preview-card-draft');
+        if (draftCard) draftCard.classList.remove('has-changes');
+        const changeDot = document.getElementById('draft-status-badge');
+        if (changeDot) changeDot.classList.remove('unsaved');
+
+        this.showFaviconStatus('Reset to applied settings.', 'success');
+    },
+
+    // Clear preset selection
+    clearPresetSelection: function() {
+        document.querySelectorAll('#preset-chips .preset-chip-v2').forEach(c => {
+            c.classList.remove('active');
+        });
+        document.querySelectorAll('#preset-chips .env-btn-v5').forEach(c => {
+            c.classList.remove('active');
+        });
+    },
+
+    // Update org saved status badge
+    updateOrgSavedStatus: function(isSaved) {
+        const statusContainer = document.getElementById('org-saved-status');
+        if (!statusContainer) return;
+
+        statusContainer.hidden = false;
+        statusContainer.innerHTML = isSaved
+            ? '<span class="status-badge saved">✓ Saved</span>'
+            : '<span class="status-badge not-saved">⚠ Not Saved</span>';
+    },
+
+    // Show/hide icon editor panel
+    showIconEditorPanel: function(show) {
+        const noOrgState = document.getElementById('no-org-selected-state');
+        const editorPanel = document.getElementById('icon-editor-panel');
+
+        if (noOrgState) noOrgState.hidden = show;
+        if (editorPanel) editorPanel.hidden = !show;
+    },
+
+    // Update draft config from form values
+    updateDraftConfig: function() {
+        const color = document.getElementById('favicon-color-data')?.value || '#ff6b6b';
+        const label = document.getElementById('favicon-label-data')?.value || '';
+        const shapeRadio = document.querySelector('input[name="favicon-shape-data"]:checked');
+        const shape = shapeRadio ? shapeRadio.value : 'circle';
+
+        this._draftIconConfig = { color, label, shape };
+    },
+
+    // Check if there are unsaved changes
+    hasUnsavedChanges: function() {
+        if (!this._draftIconConfig || !this._appliedIconConfig) return false;
+        return (
+            this._draftIconConfig.color !== this._appliedIconConfig.color ||
+            this._draftIconConfig.label !== this._appliedIconConfig.label ||
+            this._draftIconConfig.shape !== this._appliedIconConfig.shape
+        );
+    },
+
+    // Update unsaved changes indicator
+    updateUnsavedIndicator: function() {
+        const banner = document.getElementById('unsaved-changes-banner');
+        const previewBadge = document.getElementById('preview-state-badge');
+
+        const hasChanges = this.hasUnsavedChanges();
+
+        if (banner) {
+            banner.hidden = !hasChanges;
+        }
+        if (previewBadge) {
+            if (hasChanges) {
+                previewBadge.textContent = 'UNSAVED';
+                previewBadge.className = 'state-badge changed-badge';
+            } else {
+                previewBadge.textContent = 'PREVIEW';
+                previewBadge.className = 'state-badge preview-badge';
+            }
+        }
+    },
+
+    // Set preview background (light/dark)
+    setPreviewBackground: function(mode) {
+        const previewBoxes = document.querySelectorAll('.preview-box');
+        const lightBtn = document.getElementById('preview-bg-light');
+        const darkBtn = document.getElementById('preview-bg-dark');
+
+        previewBoxes.forEach(box => {
+            box.classList.toggle('dark-bg', mode === 'dark');
+        });
+
+        if (lightBtn) lightBtn.classList.toggle('active', mode === 'light');
+        if (darkBtn) darkBtn.classList.toggle('active', mode === 'dark');
+    },
+
+    // Apply a preset to the form
+    applyPreset: function(presetData) {
+        const { preset, color, label } = presetData;
+
+        // Update form values
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput && color) colorInput.value = color;
+        if (labelInput && label) labelInput.value = label;
+
+        // Update preset chip selection
+        document.querySelectorAll('#preset-chips .preset-chip').forEach(chip => {
+            chip.classList.toggle('active', chip.dataset.preset === preset);
+        });
+
+        // Update draft and preview
+        this.onIconConfigChange();
+    },
+
+    // Add current org to saved orgs
+    addCurrentOrg: async function() {
+        if (!this._currentOrgId || !this._currentOrgData) {
+            this.showFaviconStatus('No org detected. Please navigate to a Salesforce org.', 'error');
+            return { success: false, error: 'No org detected' };
+        }
+
+        try {
+            // Load existing saved orgs
+            const result = await chrome.storage.local.get('orgRecords');
+            let orgRecords = (result && result.orgRecords) || {};
+
+            const orgId = this._currentOrgId;
+            const org = this._currentOrgData;
+
+            // Check if this org already exists
+            if (orgRecords[orgId]) {
+                // Org already saved - just select it and show info message
+                this.showFaviconStatus('This org is already saved. Selecting it now.', 'info');
+                await this.loadSavedOrgs();
+                this.selectOrg(orgId);
+                return { success: true, action: 'selected', orgId: orgId };
+            }
+
+            // Get current hostname
+            let hostname = null;
+            try {
+                const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tabs[0]?.url && !tabs[0].url.startsWith('chrome-extension://')) {
+                    hostname = new URL(tabs[0].url).hostname;
+                }
+            } catch (e) {}
+
+            // Create new org record with default icon config
+            const envType = org.OrganizationType || (org.IsSandbox ? 'Sandbox' : 'Production');
+            console.log(`📋 Adding org: ${org.Name}, OrganizationType=${envType}`);
+
+            const defaultIconConfig = {
+                color: org.IsSandbox ? '#ffa500' : '#51cf66',
+                label: envType.substring(0, 3).toUpperCase(),
+                shape: 'circle'
+            };
+
+            orgRecords[orgId] = {
+                orgId: orgId,
+                orgName: org.Name,
+                displayName: org.Name,
+                instance: org.InstanceName,
+                environment: envType,
+                isSandbox: org.IsSandbox === true,
+                orgType: org.OrganizationType,
+                locale: org.DefaultLocaleSidKey,
+                language: org.LanguageLocaleKey,
+                timezone: org.TimeZoneSidKey,
+                createdDate: org.CreatedDate,
+                hostname: hostname,
+                lastSeenAt: new Date().toISOString(),
+                iconConfig: defaultIconConfig,
+                appliedIconConfig: defaultIconConfig
+            };
+
+            await chrome.storage.local.set({ orgRecords });
+
+            // Also save to legacy orgFavicons for backward compatibility
+            const faviconResult = await chrome.storage.local.get('orgFavicons');
+            let orgFavicons = (faviconResult && faviconResult.orgFavicons) || {};
+            const iconConfig = orgRecords[orgId].appliedIconConfig;
+            orgFavicons[orgId] = {
+                color: iconConfig.color,
+                label: iconConfig.label,
+                shape: iconConfig.shape,
+                orgName: org.Name,
+                hostname: hostname,
+                savedAt: new Date().toISOString()
+            };
+            await chrome.storage.local.set({ orgFavicons });
+
+            // Refresh the list and select the new org
+            await this.loadSavedOrgs();
+            this.selectOrg(orgId);
+
+            // Show success with org count
+            const orgCount = Object.keys(orgRecords).length;
+            this.showFaviconStatus(`Org "${org.Name}" saved! (${orgCount} org${orgCount > 1 ? 's' : ''} total)`, 'success');
+
+            // Hide save prompt and new org detected banner
+            const savePrompt = document.getElementById('save-org-prompt');
+            if (savePrompt) savePrompt.hidden = true;
+            this.hideNewOrgDetectedBanner();
+
+            return { success: true, action: 'added', orgId: orgId };
+
+        } catch (error) {
+            console.error('Error adding org:', error);
+            this.showFaviconStatus('Error saving org: ' + error.message, 'error');
+            return { success: false, error: error.message };
+        }
+    },
+
+    // ==========================================
+    // MULTI-ORG SUPPORT FUNCTIONS
+    // ==========================================
+
+    /**
+     * Check if an org is already saved
+     * @param {string} orgId - The org ID to check
+     * @returns {boolean} True if org is saved
+     */
+    isOrgSaved: function(orgId) {
+        return !!(this._savedOrgs && this._savedOrgs[orgId]);
+    },
+
+    /**
+     * Get org by hostname - useful for matching tabs to saved orgs
+     * @param {string} hostname - The hostname to search for
+     * @returns {Object|null} The org record or null
+     */
+    getOrgByHostname: function(hostname) {
+        if (!hostname || !this._savedOrgs) return null;
+
+        for (const orgId in this._savedOrgs) {
+            const org = this._savedOrgs[orgId];
+            if (org.hostname === hostname) {
+                return org;
+            }
+        }
+        return null;
+    },
+
+    /**
+     * Extract org key from hostname for grouping
+     * Handles various Salesforce URL patterns
+     * @param {string} hostname - The hostname to parse
+     * @returns {string} The org key
+     */
+    extractOrgKeyFromHostname: function(hostname) {
+        if (!hostname) return '';
+        // mycompany.my.salesforce.com -> mycompany
+        // mycompany--sandbox.sandbox.my.salesforce.com -> mycompany--sandbox
+        // mycompany.lightning.force.com -> mycompany
+        const match = hostname.match(/^([^.]+)/);
+        return match ? match[1] : hostname;
+    },
+
+    /**
+     * Detect all Salesforce orgs from open browser tabs
+     * Groups tabs by org hostname for multi-org scenarios
+     * @returns {Promise<Object>} Map of orgKey -> {hostname, tabs}
+     */
+    detectAllOpenOrgs: async function() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            const sfTabs = tabs.filter(tab =>
+                tab.url && (
+                    tab.url.includes('.salesforce.com') ||
+                    tab.url.includes('.force.com')
+                ) && !tab.url.startsWith('chrome-extension://')
+            );
+
+            const detectedOrgs = {};
+
+            for (const tab of sfTabs) {
+                try {
+                    const hostname = new URL(tab.url).hostname;
+                    const orgKey = this.extractOrgKeyFromHostname(hostname);
+
+                    if (!detectedOrgs[orgKey]) {
+                        detectedOrgs[orgKey] = {
+                            hostname: hostname,
+                            tabs: [],
+                            orgKey: orgKey
+                        };
+                    }
+                    detectedOrgs[orgKey].tabs.push(tab);
+                } catch (e) {
+                    // Invalid URL, skip
+                }
+            }
+
+            this._detectedOrgs = detectedOrgs;
+            return detectedOrgs;
+        } catch (error) {
+            console.warn('Error detecting open orgs:', error);
+            return {};
+        }
+    },
+
+    /**
+     * Refresh current org info from the active Salesforce tab
+     * Used to ensure we're showing the correct org when multiple are open
+     * @returns {Promise<Object>} Result object with success status
+     */
+    refreshCurrentOrgFromActiveTab: async function() {
+        try {
+            // Get active tab
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const activeTab = tabs[0];
+
+            if (!activeTab?.url ||
+                (!activeTab.url.includes('salesforce.com') && !activeTab.url.includes('force.com'))) {
+                return { success: false, error: 'Active tab is not a Salesforce page' };
+            }
+
+            // Refresh session from the active tab
+            if (PlatformHelper.refreshSessionFromTab) {
+                try { await PlatformHelper.refreshSessionFromTab(); } catch {}
+            }
+
+            // Check session
+            const session = await PlatformHelper.getSession();
+            if (!session || !session.isLoggedIn) {
+                return { success: false, error: 'Not connected' };
+            }
+
+            // Query org info
+            const result = await PlatformHelper.executeQuery(
+                'SELECT Id, Name, IsSandbox, InstanceName, OrganizationType FROM Organization LIMIT 1'
+            );
+
+            if (result && result.records && result.records.length > 0) {
+                const org = result.records[0];
+                this._currentOrgId = org.Id;
+                this._currentOrgName = org.Name;
+                this._currentOrgData = org;
+                this._currentOrgIsSandbox = org.IsSandbox === true;
+
+                // Update CacheManager
+                if (window.CacheManager) {
+                    window.CacheManager.setCurrentOrgId(org.Id);
+                }
+
+                return { success: true, org: org };
+            }
+
+            return { success: false, error: 'Could not fetch org info' };
+        } catch (error) {
+            console.warn('Error refreshing current org:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Show the "New Org Detected" banner with blinking animation
+     * Clicking on it navigates to the Data Explorer → Org & Favicon tab
+     * @param {Object} org - The detected org data
+     */
+    showNewOrgDetectedBanner: function(org) {
+        const banner = document.getElementById('new-org-detected');
+        if (!banner) {
+            console.warn('🆕 New org detected but banner element not found in DOM');
+            return;
+        }
+
+        // Update banner content with org name
+        const textEl = banner.querySelector('.new-org-text');
+        if (textEl) {
+            textEl.textContent = `New Org: ${org.Name || 'Unknown'}`;
+        }
+
+        // Add sandbox class for different styling
+        if (org.IsSandbox) {
+            banner.classList.add('sandbox');
+        } else {
+            banner.classList.remove('sandbox');
+        }
+
+        // Show the banner - ensure it's visible
+        banner.hidden = false;
+        banner.style.display = 'inline-flex'; // Force display in case CSS isn't applied
+
+        // Wire click handler (only once)
+        if (!banner._clickWired) {
+            const self = this;
+            banner.addEventListener('click', function() {
+                self.navigateToOrgFaviconTab();
+                self.hideNewOrgDetectedBanner();
+            });
+            banner._clickWired = true;
+        }
+
+        console.log(`🆕 New org detected and banner shown: ${org.Name} (${org.Id}), IsSandbox: ${org.IsSandbox}`);
+    },
+
+    /**
+     * Hide the "New Org Detected" banner
+     */
+    hideNewOrgDetectedBanner: function() {
+        const banner = document.getElementById('new-org-detected');
+        if (banner) {
+            banner.hidden = true;
+            banner.style.display = 'none';
+        }
+    },
+
+    /**
+     * Navigate to the Data Explorer → Org & Favicon tab
+     */
+    navigateToOrgFaviconTab: function() {
+        // Switch to Data Explorer main tab
+        const dataTabBtn = document.querySelector('[data-tab="data"]');
+        if (dataTabBtn) {
+            dataTabBtn.click();
+        }
+
+        // Switch to Org & Favicon sub-tab
+        setTimeout(() => {
+            const orgFaviconSubTab = document.querySelector('#tab-data [data-subtab="org-favicon"]');
+            if (orgFaviconSubTab) {
+                orgFaviconSubTab.click();
+            } else {
+                // Fallback: try to find by text content
+                const subTabs = document.querySelectorAll('#tab-data .sub-tab-button');
+                for (const btn of subTabs) {
+                    if (btn.textContent.includes('Org') || btn.textContent.includes('Favicon')) {
+                        btn.click();
+                        break;
+                    }
+                }
+            }
+        }, 50);
+    },
+
+    // Load saved orgs from storage
+    loadSavedOrgs: async function() {
+        try {
+            const result = await chrome.storage.local.get(['orgRecords', 'orgFavicons', 'selectedOrgId', 'draftIconConfig']);
+            let orgRecords = (result && result.orgRecords) || {};
+
+            // Migrate from legacy orgFavicons if needed
+            if (Object.keys(orgRecords).length === 0 && result.orgFavicons) {
+                orgRecords = this.migrateFromLegacyFavicons(result.orgFavicons);
+                await chrome.storage.local.set({ orgRecords });
+            }
+
+            this._savedOrgs = orgRecords;
+            this.renderSavedOrgsList();
+
+            // Restore selected org if it exists
+            const savedSelectedOrgId = result.selectedOrgId;
+            if (savedSelectedOrgId && orgRecords[savedSelectedOrgId]) {
+                this.selectOrg(savedSelectedOrgId);
+
+                // Restore draft config if it was saved
+                if (result.draftIconConfig) {
+                    this._draftIconConfig = result.draftIconConfig;
+                    const colorInput = document.getElementById('favicon-color-data');
+                    const labelInput = document.getElementById('favicon-label-data');
+                    if (colorInput) colorInput.value = result.draftIconConfig.color || '#ff6b6b';
+                    if (labelInput) labelInput.value = result.draftIconConfig.label || '';
+                    if (result.draftIconConfig.shape) {
+                        this.setSelectedShape(result.draftIconConfig.shape, '-data');
+                    }
+                    this.updateFaviconPreviewRadio('-data');
+                    this.updateColorSwatchSelection(result.draftIconConfig.color);
+                    this.updateUnsavedIndicatorV2();
+                    this.updateSaveButtonState();
+                }
+            }
+
+            // Also update the legacy saved favicons list for backward compatibility
+            this.loadSavedFavicons();
+
+        } catch (error) {
+            console.error('Error loading saved orgs:', error);
+        }
+    },
+
+    // Migrate from legacy orgFavicons format
+    migrateFromLegacyFavicons: function(orgFavicons) {
+        const orgRecords = {};
+
+        Object.entries(orgFavicons).forEach(([orgId, data]) => {
+            orgRecords[orgId] = {
+                orgId: orgId,
+                orgName: data.orgName || 'Unknown Org',
+                displayName: data.orgName || 'Unknown Org',
+                instance: null,
+                environment: 'unknown',
+                orgType: null,
+                hostname: data.hostname,
+                lastSeenAt: data.savedAt || new Date().toISOString(),
+                iconConfig: {
+                    color: data.color || '#ff6b6b',
+                    label: data.label || '',
+                    shape: data.shape || 'circle'
+                },
+                appliedIconConfig: {
+                    color: data.color || '#ff6b6b',
+                    label: data.label || '',
+                    shape: data.shape || 'circle'
+                }
+            };
+        });
+
+        return orgRecords;
+    },
+
+    // Render the saved orgs list
+    renderSavedOrgsList: function() {
+        const container = document.getElementById('saved-orgs-list');
+        if (!container) return;
+
+        const orgs = Object.values(this._savedOrgs);
+        const query = this._orgSearchQuery.toLowerCase();
+
+        // Detect layout version
+        const isV3 = container.classList.contains('saved-orgs-list-v3');
+        const isV4 = container.classList.contains('org-list-scroll');
+        const isV5 = container.classList.contains('org-list-scroll-v5');
+
+        // Filter by search query
+        const filteredOrgs = query
+            ? orgs.filter(org =>
+                (org.orgName || '').toLowerCase().includes(query) ||
+                (org.displayName || '').toLowerCase().includes(query) ||
+                (org.orgId || '').toLowerCase().includes(query) ||
+                (org.instance || '').toLowerCase().includes(query) ||
+                (org.environment || '').toLowerCase().includes(query)
+            )
+            : orgs;
+
+        if (filteredOrgs.length === 0) {
+            if (isV5) {
+                container.innerHTML = `<div class="empty-minimal-v5">${query ? 'No match' : 'No orgs saved'}</div>`;
+            } else if (isV4) {
+                container.innerHTML = `<div class="empty-minimal">${query ? 'No match' : 'No orgs saved'}</div>`;
+            } else if (isV3) {
+                container.innerHTML = `
+                    <div class="empty-state-compact">
+                        <span class="empty-icon-sm">📋</span>
+                        <span class="empty-text-sm">${query ? 'No match' : 'No orgs saved'}</span>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <div class="empty-text">${query ? 'No matching orgs' : 'No orgs saved yet'}</div>
+                        <div class="empty-hint">${query ? 'Try a different search term' : 'Navigate to a Salesforce org and click "Add Current Org"'}</div>
+                    </div>
+                `;
+            }
+            return;
+        }
+
+        // Sort: current org first, then by last seen
+        filteredOrgs.sort((a, b) => {
+            if (a.orgId === this._currentOrgId) return -1;
+            if (b.orgId === this._currentOrgId) return 1;
+            return new Date(b.lastSeenAt || 0) - new Date(a.lastSeenAt || 0);
+        });
+
+        let html = '';
+        filteredOrgs.forEach(org => {
+            const isCurrentOrg = org.orgId === this._currentOrgId;
+            const isSelected = org.orgId === this._selectedOrgId;
+            // Display the actual environment type as 3-letter abbreviation
+            const envLabel = org.environment ? org.environment.substring(0, 3).toUpperCase() : 'UNK';
+
+            if (isV4 || isV5) {
+                // V4/V5 minimal layout with remove button
+                html += `
+                    <div class="org-item ${isSelected ? 'selected' : ''} ${isCurrentOrg ? 'current' : ''}" 
+                         data-org-id="${org.orgId}">   
+                        <div class="org-item-icon" id="org-icon-${org.orgId}"></div>
+                        <div class="org-item-name">${org.displayName || org.orgName || 'Unknown'}</div>
+                        <div class="org-item-env">${envLabel}</div>
+                        <button class="org-item-remove" data-org-id="${org.orgId}" title="Remove org">×</button>
+                    </div>
+                `;
+            } else if (isV3) {
+                // V3 compact layout
+                html += `
+                    <div class="org-list-item-v3 ${isSelected ? 'selected' : ''} ${isCurrentOrg ? 'current-org' : ''}" 
+                         data-org-id="${org.orgId}">
+                        <div class="org-list-icon-v3" id="org-icon-${org.orgId}"></div>
+                        <div class="org-list-info-v3">
+                            <div class="org-list-name-v3">${org.displayName || org.orgName || 'Unknown'}</div>
+                            <div class="org-list-meta-v3">${envLabel}${org.instance ? ' · ' + org.instance : ''}</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // V2 layout
+                // Determine badge class based on sandbox status when available, or use environment name
+                const isSandbox = org.isSandbox === true;
+                const envBadgeClass = isSandbox ? 'sandbox' : 'production';
+                html += `
+                    <div class="org-list-item ${isSelected ? 'selected' : ''} ${isCurrentOrg ? 'current-org' : ''}" 
+                         data-org-id="${org.orgId}">
+                        <div class="org-list-icon" id="org-icon-${org.orgId}"></div>
+                        <div class="org-list-info">
+                            <div class="org-list-name">
+                                ${org.displayName || org.orgName || 'Unknown'}
+                                ${isCurrentOrg ? '<span class="current-badge" title="Current org">●</span>' : ''}
+                            </div>
+                            <div class="org-list-meta">
+                                <span class="org-type-badge ${envBadgeClass}">${envLabel}</span>
+                                ${org.instance ? `<span>${org.instance}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="org-list-actions">
+                            <button class="btn-rename" title="Rename" data-org-id="${org.orgId}">✎</button>
+                            <button class="btn-delete" title="Delete" data-org-id="${org.orgId}">×</button>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        container.innerHTML = html;
+
+        // Wire up event listeners for org list items (CSP compliant)
+        container.querySelectorAll('.org-list-item, .org-list-item-v3, .org-item').forEach(item => {
+            item.addEventListener('click', () => {
+                this.selectOrg(item.dataset.orgId);
+            });
+        });
+
+        // Wire up rename buttons (V2 only)
+        container.querySelectorAll('.btn-rename').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.promptRenameOrg(btn.dataset.orgId);
+            });
+        });
+
+        // Wire up delete buttons (V2 only)
+        container.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteOrg(btn.dataset.orgId);
+            });
+        });
+
+        // Wire up remove buttons (V4/V5)
+        container.querySelectorAll('.org-item-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteOrg(btn.dataset.orgId);
+            });
+        });
+
+        // Render icon previews for each org (High-DPI aware)
+        filteredOrgs.forEach(org => {
+            const iconEl = document.getElementById(`org-icon-${org.orgId}`);
+            if (iconEl) {
+                const canvas = document.createElement('canvas');
+                const isV4Icon = iconEl.classList.contains('org-item-icon');
+                const isV3Icon = iconEl.classList.contains('org-list-icon-v3');
+                const displaySize = isV4Icon ? 18 : (isV3Icon ? 20 : 24);
+
+                // High-DPI support: render at higher resolution for crisp icons
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = displaySize * dpr;
+                canvas.height = displaySize * dpr;
+                canvas.style.width = displaySize + 'px';
+                canvas.style.height = displaySize + 'px';
+
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr); // Scale context to match DPR
+
+                const iconConfig = org.appliedIconConfig || org.iconConfig || {};
+                this.drawFaviconShape(ctx, iconConfig.color || '#ccc', iconConfig.label || '', iconConfig.shape || 'circle', displaySize);
+                iconEl.appendChild(canvas);
+            }
+        });
+    },
+
+    // Select an org from the list
+    selectOrg: function(orgId) {
+        this._selectedOrgId = orgId;
+        const org = this._savedOrgs[orgId];
+
+        if (!org) {
+            console.warn('Org not found:', orgId);
+            return;
+        }
+
+        // Update list selection (V2, V3, V4)
+        document.querySelectorAll('.org-list-item, .org-list-item-v3, .org-item').forEach(item => {
+            item.classList.toggle('selected', item.dataset.orgId === orgId);
+        });
+
+        // Update editing org name in header
+        const editingOrgName = document.getElementById('editing-org-name');
+        if (editingOrgName) {
+            editingOrgName.textContent = org.displayName || org.orgName || 'Unknown';
+        }
+
+        // Update v5 preview org names
+        const previewLiveOrgName = document.getElementById('preview-live-org-name');
+        const previewDraftOrgName = document.getElementById('preview-draft-org-name');
+        const displayName = org.displayName || org.orgName || 'Unknown';
+        if (previewLiveOrgName) previewLiveOrgName.textContent = displayName;
+        if (previewDraftOrgName) previewDraftOrgName.textContent = displayName;
+
+        // Update env badge (V4, V5)
+        const envBadge = document.getElementById('org-env-badge');
+        if (envBadge) {
+            // Display the actual environment type (DEV, UAT, QA, SANDBOX, Production, etc)
+            const envDisplay = org.environment || 'Unknown';
+            const envShort = envDisplay.substring(0, 3).toUpperCase();
+            envBadge.textContent = envShort;
+            envBadge.className = 'env-badge env-badge-v5 ' + (org.environment || '').toLowerCase();
+        }
+
+        // Show live indicator
+        const liveIndicator = document.getElementById('live-indicator');
+        if (liveIndicator) {
+            liveIndicator.hidden = false;
+        }
+
+        // Show icon editor panel
+        this.showIconEditorPanel(true);
+
+        // Load icon config into form
+        const iconConfig = org.appliedIconConfig || org.iconConfig || {};
+        this._appliedIconConfig = { ...iconConfig };
+        this._draftIconConfig = { ...iconConfig };
+
+        // Populate form
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+
+        if (colorInput) colorInput.value = iconConfig.color || '#ff6b6b';
+        if (labelInput) labelInput.value = iconConfig.label || '';
+
+        if (iconConfig.shape) {
+            this.setSelectedShape(iconConfig.shape, '-data');
+        }
+
+        // Update color swatch selection (all versions)
+        this.updateColorSwatchSelection(iconConfig.color);
+        this.updateColorSwatchSelectionV3(iconConfig.color);
+        this.updateColorSwatchSelectionV4(iconConfig.color);
+        this.updateColorSwatchSelectionV5(iconConfig.color);
+
+        // Update both preview canvases
+        this.updateFaviconPreviewRadio('-data');
+        this.renderAppliedPreview();
+
+        // Clear preset selection (all versions)
+        this.clearPresetSelection();
+        document.querySelectorAll('#preset-chips .preset-chip-v3, #preset-chips .preset-btn, #preset-chips .env-btn-v5').forEach(c => {
+            c.classList.remove('active');
+        });
+
+        // Update org info panel and org summary
+        this.renderOrgInfoPanel(org);
+        this.updateOrgSummaryV4(org);
+
+        // Update indicators (all versions)
+        this.updateUnsavedIndicatorV2();
+        this.updateUnsavedIndicatorV3();
+        this.updateUnsavedIndicatorV4();
+        this.updateSaveButtonState();
+        this.updateSaveButtonStateV3();
+        this.updateSaveButtonStateV4();
+        this.updateOrgSavedStatus(true);
+
+
+        // Persist selected org ID for pop-in/pop-out state
+        chrome.storage.local.set({ selectedOrgId: orgId });
+    },
+
+    // Render the applied preview canvas (High-DPI aware)
+    renderAppliedPreview: function() {
+        const canvas = document.getElementById('favicon-applied-preview');
+        if (!canvas || !this._appliedIconConfig) return;
+
+        // High-DPI support
+        const displaySize = 32;
+        const dpr = window.devicePixelRatio || 1;
+
+        // Resize canvas for DPR if needed
+        if (canvas.width !== displaySize * dpr) {
+            canvas.width = displaySize * dpr;
+            canvas.height = displaySize * dpr;
+            canvas.style.width = displaySize + 'px';
+            canvas.style.height = displaySize + 'px';
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Reset transform and apply DPR scale
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, displaySize, displaySize);
+        this.drawFaviconShape(
+            ctx,
+            this._appliedIconConfig.color || '#ccc',
+            this._appliedIconConfig.label || '',
+            this._appliedIconConfig.shape || 'circle',
+            displaySize
+        );
+    },
+
+    // Render org info in the right column
+    renderOrgInfoPanel: function(org) {
+        const container = document.getElementById('org-info-container-data');
+        if (!container) return;
+
+        if (!org) {
+            container.innerHTML = `
+                <div class="not-selected-state">
+                    <div class="empty-icon">👈</div>
+                    <div class="empty-text">Select an org</div>
+                    <div class="empty-hint">Choose from saved orgs or add current org</div>
+                </div>
+            `;
+            return;
+        }
+
+        const envBadge = org.environment === 'production'
+            ? '<span style="background:#d3f9d8;color:#2b8a3e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">PRODUCTION</span>'
+            : org.environment === 'sandbox'
+                ? '<span style="background:#fff3bf;color:#e67700;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">SANDBOX</span>'
+                : '<span style="background:#e7f5ff;color:#1971c2;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">DEVELOPER</span>';
+
+        const fields = [
+            { label: 'Name', value: org.orgName },
+            { label: 'Org ID', value: `${org.orgId} <button class="copy-btn" data-copy="${org.orgId}" title="Copy">📋</button>` },
+            { label: 'Type', value: `${org.orgType || '-'} ${envBadge}` },
+            { label: 'Instance', value: org.instance || '-' },
+            { label: 'Language', value: org.language || '-' },
+            { label: 'Locale', value: org.locale || '-' },
+            { label: 'Timezone', value: org.timezone || '-' },
+            { label: 'Created', value: org.createdDate ? new Date(org.createdDate).toLocaleDateString() : '-' },
+            { label: 'Last Seen', value: org.lastSeenAt ? new Date(org.lastSeenAt).toLocaleString() : '-' }
+        ];
+
+        let html = '<div class="org-details-content">';
+        fields.forEach(f => {
+            html += `<span class="detail-label">${f.label}:</span>
+                <span class="detail-value">${f.value || '-'}</span>`;
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Wire up copy buttons (CSP compliant)
+        container.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const text = btn.dataset.copy;
+                navigator.clipboard.writeText(text).then(() => {
+                    this.showFaviconStatus('Copied!', 'success');
+                    btn.textContent = '✓';
+                    setTimeout(() => { btn.textContent = '📋'; }, 1500);
+                });
+            });
+        });
+
+        // Check if this org is saved
+        const isOrgSaved = !!this._savedOrgs[org.orgId];
+        const savePrompt = document.getElementById('save-org-prompt');
+        if (savePrompt) {
+            savePrompt.hidden = isOrgSaved;
+        }
+    },
+
+    // Prompt to rename org
+    promptRenameOrg: function(orgId) {
+        const org = this._savedOrgs[orgId];
+        if (!org) return;
+
+        const newName = prompt('Enter new display name:', org.displayName || org.orgName);
+        if (newName && newName.trim()) {
+            this.renameOrg(orgId, newName.trim());
+        }
+    },
+
+    // Rename an org
+    renameOrg: async function(orgId, displayName) {
+        try {
+            const result = await chrome.storage.local.get('orgRecords');
+            let orgRecords = (result && result.orgRecords) || {};
+
+            if (orgRecords[orgId]) {
+                orgRecords[orgId].displayName = displayName;
+                await chrome.storage.local.set({ orgRecords });
+                this._savedOrgs = orgRecords;
+                this.renderSavedOrgsList();
+
+                // Update editing org name if this org is selected (V2)
+                if (this._selectedOrgId === orgId) {
+                    const editingOrgName = document.getElementById('editing-org-name');
+                    if (editingOrgName) {
+                        editingOrgName.textContent = displayName;
+                    }
+                }
+
+                this.showFaviconStatus('Org renamed!', 'success');
+            }
+        } catch (error) {
+            console.error('Error renaming org:', error);
+            this.showFaviconStatus('Error renaming org', 'error');
+        }
+    },
+
+    // Delete an org
+    deleteOrg: async function(orgId) {
+        if (!confirm('Delete this saved org? This cannot be undone.')) return;
+
+        try {
+            const result = await chrome.storage.local.get(['orgRecords', 'orgFavicons']);
+            let orgRecords = (result && result.orgRecords) || {};
+            let orgFavicons = (result && result.orgFavicons) || {};
+
+            delete orgRecords[orgId];
+            delete orgFavicons[orgId];
+
+            await chrome.storage.local.set({ orgRecords, orgFavicons });
+            this._savedOrgs = orgRecords;
+
+            // Clear selection if we deleted the selected org
+            if (this._selectedOrgId === orgId) {
+                this._selectedOrgId = null;
+                this._appliedIconConfig = null;
+                this._draftIconConfig = null;
+
+                const editingBadge = document.getElementById('editing-org-badge');
+                if (editingBadge) editingBadge.hidden = true;
+
+                this.renderOrgInfoPanel(null);
+            }
+
+            this.renderSavedOrgsList();
+            this.loadSavedFavicons(); // Update legacy list too
+
+            this.showFaviconStatus('Org deleted', 'success');
+        } catch (error) {
+            console.error('Error deleting org:', error);
+            this.showFaviconStatus('Error deleting org', 'error');
+        }
+    },
+
+    // Render org info panel for current org that is NOT saved yet
+    renderOrgInfoPanelForCurrentOrg: function(org) {
+        const container = document.getElementById('org-info-container-data');
+        if (!container || !org) return;
+
+        const isSandbox = org.IsSandbox === true;
+        const envBadge = isSandbox
+            ? '<span style="background:#fff3bf;color:#e67700;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">SANDBOX</span>'
+            : '<span style="background:#d3f9d8;color:#2b8a3e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">PRODUCTION</span>';
+
+        // Add prominent "New Org Detected" alert at top
+        const alertColor = isSandbox ? '#ffa500' : '#ff6b6b';
+        const newOrgAlert = `
+            <div class="new-org-alert" style="
+                background: linear-gradient(135deg, ${alertColor} 0%, ${isSandbox ? '#ff8c00' : '#ee5a5a'} 100%);
+                color: white;
+                padding: 12px 16px;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                animation: newOrgAlertPulse 2s ease-in-out infinite;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+            ">
+                <span style="font-size: 24px;">🆕</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 14px;">New Org Detected!</div>
+                    <div style="font-size: 12px; opacity: 0.9;">${org.Name} • Not saved yet</div>
+                </div>
+                <button id="quick-save-org-btn" style="
+                    background: white;
+                    color: ${alertColor};
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    font-size: 12px;
+                    transition: transform 0.2s;
+                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    Save Org →
+                </button>
+            </div>
+        `;
+
+        const fields = [
+            { label: 'Name', value: org.Name },
+            { label: 'Org ID', value: `${org.Id} <button class="copy-btn" data-copy="${org.Id}" title="Copy">📋</button>` },
+            { label: 'Type', value: `${org.OrganizationType || '-'} ${envBadge}` },
+            { label: 'Instance', value: org.InstanceName || '-' },
+            { label: 'Language', value: org.LanguageLocaleKey || '-' },
+            { label: 'Locale', value: org.DefaultLocaleSidKey || '-' },
+            { label: 'Timezone', value: org.TimeZoneSidKey || '-' },
+            { label: 'Created', value: org.CreatedDate ? new Date(org.CreatedDate).toLocaleDateString() : '-' }
+        ];
+
+        let html = newOrgAlert + '<div class="org-details-content">';
+        fields.forEach(f => {
+            html += `<span class="detail-label">${f.label}:</span>
+                <span class="detail-value">${f.value || '-'}</span>`;
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Wire up quick save button
+        const quickSaveBtn = document.getElementById('quick-save-org-btn');
+        if (quickSaveBtn) {
+            quickSaveBtn.addEventListener('click', () => {
+                this.addCurrentOrg();
+            });
+        }
+
+        // Wire up copy buttons (CSP compliant)
+        container.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const text = btn.dataset.copy;
+                navigator.clipboard.writeText(text).then(() => {
+                    this.showFaviconStatus('Copied!', 'success');
+                    btn.textContent = '✓';
+                    setTimeout(() => { btn.textContent = '📋'; }, 1500);
+                });
+            });
+        });
+
+        // Update org saved status badge (V2)
+        this.updateOrgSavedStatus(false);
+
+        // Set up default icon config for preview
+        const defaultIconConfig = {
+            color: isSandbox ? '#ffa500' : '#51cf66',
+            label: isSandbox ? 'SBX' : 'PRD',
+            shape: 'circle'
+        };
+        this._appliedIconConfig = defaultIconConfig;
+        this._draftIconConfig = { ...defaultIconConfig };
+
+        // Update form with defaults
+        const colorInput = document.getElementById('favicon-color-data');
+        const labelInput = document.getElementById('favicon-label-data');
+        if (colorInput) colorInput.value = defaultIconConfig.color;
+        if (labelInput) labelInput.value = defaultIconConfig.label;
+        this.setSelectedShape(defaultIconConfig.shape, '-data');
+
+        // Update color swatch selection
+        this.updateColorSwatchSelection(defaultIconConfig.color);
+
+        // Update previews
+        this.updateFaviconPreviewRadio('-data');
+        this.renderAppliedPreview();
+
+        // Update editing org name (V2)
+        const editingOrgName = document.getElementById('editing-org-name');
+        if (editingOrgName) {
+            editingOrgName.textContent = org.Name + ' (unsaved)';
+        }
+
+        // Show icon editor panel
+        this.showIconEditorPanel(true);
+
+        // Update V2, V3, V4 indicators
+        this.updateUnsavedIndicatorV2();
+        this.updateUnsavedIndicatorV3();
+        this.updateUnsavedIndicatorV4();
+        this.updateSaveButtonState();
+        this.updateSaveButtonStateV3();
+        this.updateSaveButtonStateV4();
+    },
+
     // Wire events for Data Explorer tab (-data suffix) - uses radio buttons for shapes
     wireFaviconEventsDataExplorer: function(suffix) {
         const faviconColor = document.getElementById(`favicon-color${suffix}`);
@@ -355,11 +2472,25 @@ const DataExplorerHelper = {
 
         if (!preview) return;
 
+        // High-DPI support
+        const displaySize = 32;
+        const dpr = window.devicePixelRatio || 1;
+
+        // Resize canvas for DPR if needed
+        if (preview.width !== displaySize * dpr) {
+            preview.width = displaySize * dpr;
+            preview.height = displaySize * dpr;
+            preview.style.width = displaySize + 'px';
+            preview.style.height = displaySize + 'px';
+        }
+
         const ctx = preview.getContext('2d');
         if (!ctx) return;
 
-        ctx.clearRect(0, 0, preview.width, preview.height);
-        this.drawFaviconShape(ctx, color, label, shape);
+        // Reset transform and apply DPR scale
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, displaySize, displaySize);
+        this.drawFaviconShape(ctx, color, label, shape, displaySize);
     },
 
     // Apply favicon for radio-based shape selection
@@ -421,16 +2552,18 @@ const DataExplorerHelper = {
 
         if (!preview) return;
 
-        // Clear and render preview
+        // Clear and render preview (High-DPI aware)
         preview.innerHTML = '';
         const canvas = document.createElement('canvas');
-        canvas.width = 36;
-        canvas.height = 36;
-        canvas.style.width = '36px';
-        canvas.style.height = '36px';
+        const displaySize = 36;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = displaySize * dpr;
+        canvas.height = displaySize * dpr;
+        canvas.style.width = displaySize + 'px';
+        canvas.style.height = displaySize + 'px';
         const ctx = canvas.getContext('2d');
-        ctx.scale(36/32, 36/32);
-        this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape);
+        ctx.scale(dpr, dpr);
+        this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape, displaySize);
         preview.appendChild(canvas);
     },
 
@@ -475,6 +2608,7 @@ const DataExplorerHelper = {
             case 'sandbox-manager':
                 this.loadOrgInfo();
                 this.initFaviconPreview();
+                this.loadSavedOrgs(); // Load saved orgs for new 3-column layout
                 break;
             case 'user-manager':
                 this.loadCurrentUser();
@@ -505,23 +2639,71 @@ const DataExplorerHelper = {
         });
 
         try {
+            // CRITICAL: Clear previous org data BEFORE refreshing session
+            // This prevents showing stale org data when switching between orgs
+            const previousOrgId = this._currentOrgId;
+
             // IMPORTANT: Always refresh session from current window's tab to ensure correct org context
             // This prevents showing data from other browser windows
             if (PlatformHelper.refreshSessionFromTab) {
-                try { await PlatformHelper.refreshSessionFromTab(); } catch {}
+                try {
+                    await PlatformHelper.refreshSessionFromTab();
+                    // NOTE: Don't clear cache here - let the session refresh handle it
+                    // The refreshSessionFromTab function will clear cache only if org changes
+                } catch (e) {
+                    console.warn('Failed to refresh session from tab:', e);
+                }
             }
 
             // Check if we have a valid session first
             const session = await PlatformHelper.getSession();
             if (!session || !session.isLoggedIn) {
+                // Clear current org data when not connected
+                this._currentOrgId = null;
+                this._currentOrgName = null;
+                this._currentOrgData = null;
+
                 const notConnectedHtml = `
                     <div class="not-connected-message">
                         <div style="font-size: 24px; margin-bottom: 8px;">🔌</div>
                         <div style="font-weight: 600; margin-bottom: 4px;">Not Connected</div>
-                        <div style="font-size: 12px; color: #6c757d;">Please navigate to a Salesforce org to view organization info.</div>
+                        <div style="font-size: 12px; color: #6c757d; margin-bottom: 12px;">
+                            Please ensure you have an active Salesforce tab open and are logged in.
+                        </div>
+                        <button id="retry-connection-btn" style="
+                            background: linear-gradient(135deg, #4dabf7 0%, #228be6 100%);
+                            color: white;
+                            border: none;
+                            padding: 10px 20px;
+                            border-radius: 6px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-size: 13px;
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 6px;
+                        ">
+                            <span>🔄</span> Retry Connection
+                        </button>
+                        <div style="font-size: 11px; color: #adb5bd; margin-top: 12px;">
+                            Tip: Make sure your Salesforce tab is active, then click Retry.
+                        </div>
                     </div>
                 `;
                 containers.forEach(c => { c.innerHTML = notConnectedHtml; });
+
+                // Wire up retry button
+                const retryBtn = document.getElementById('retry-connection-btn');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', () => {
+                        // Force clear all caches before retry
+                        if (window.Utils && window.Utils.setInstanceUrlCache) {
+                            window.Utils.setInstanceUrlCache(null);
+                        }
+                        this.loadOrgInfo();
+                    });
+                }
+
                 // Still load saved favicons even if not connected
                 this.loadSavedFavicons();
                 return;
@@ -534,9 +2716,23 @@ const DataExplorerHelper = {
 
             if (result && result.records && result.records.length > 0) {
                 const org = result.records[0];
+
+                // CRITICAL: Check if org has changed
+                const orgChanged = previousOrgId && previousOrgId !== org.Id;
+                if (orgChanged) {
+                    console.log(`🔄 Org changed from ${previousOrgId} to ${org.Id}`);
+                    // Clear draft config when org changes to prevent mixing up configs
+                    this._draftIconConfig = null;
+                    this._appliedIconConfig = null;
+                    // Don't auto-select the previous org
+                    this._selectedOrgId = null;
+                }
+
                 // Store current org info
                 this._currentOrgId = org.Id;
                 this._currentOrgName = org.Name;
+                this._currentOrgData = org; // Store full org data for addCurrentOrg
+                this._currentOrgIsSandbox = org.IsSandbox === true;
 
                 // CRITICAL: Update CacheManager with current org ID to enable org-scoped caching
                 if (window.CacheManager) {
@@ -544,9 +2740,68 @@ const DataExplorerHelper = {
                 }
 
                 containers.forEach(c => this.renderOrgInfo(org, c));
-                // Load saved favicons list
+
+                // Load saved orgs (new 3-column layout)
+                await this.loadSavedOrgs();
+
+                console.log(`📋 Loaded org: ${org.Name} (${org.Id}), Saved orgs: ${Object.keys(this._savedOrgs).length}, Is current org saved: ${!!this._savedOrgs[org.Id]}`);
+
+                // Auto-select current org if it's saved and not already selected
+                if (this._savedOrgs[org.Id]) {
+                    console.log(`✅ Org ${org.Name} is already saved, selecting it`);
+
+                    // FIX: Update hostname if missing from saved org record
+                    if (!this._savedOrgs[org.Id].hostname) {
+                        try {
+                            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                            if (tabs[0]?.url && !tabs[0].url.startsWith('chrome-extension://')) {
+                                const hostname = new URL(tabs[0].url).hostname;
+                                if (hostname) {
+                                    this._savedOrgs[org.Id].hostname = hostname;
+                                    // Persist to storage - update BOTH orgRecords AND orgFavicons
+                                    const storageResult = await chrome.storage.local.get(['orgRecords', 'orgFavicons']);
+                                    let orgRecords = (storageResult && storageResult.orgRecords) || {};
+                                    let orgFavicons = (storageResult && storageResult.orgFavicons) || {};
+
+                                    // Update orgRecords
+                                    if (orgRecords[org.Id]) {
+                                        orgRecords[org.Id].hostname = hostname;
+                                    }
+
+                                    // CRITICAL: Also update orgFavicons (used by content.js for auto-apply)
+                                    if (orgFavicons[org.Id]) {
+                                        orgFavicons[org.Id].hostname = hostname;
+                                    }
+
+                                    await chrome.storage.local.set({ orgRecords, orgFavicons });
+                                    console.log(`📝 Updated saved org with missing hostname: ${hostname} (both orgRecords and orgFavicons)`);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Could not update hostname for saved org:', e);
+                        }
+                    }
+
+                    this.selectOrg(org.Id);
+                    // Hide new org notification since it's already saved
+                    this.hideNewOrgDetectedBanner();
+                } else {
+                    console.log(`🆕 Org ${org.Name} is NOT saved, showing new org banner`);
+                    // Current org is not saved - show it in the info panel with save prompt
+                    this._selectedOrgId = null;
+                    this.renderOrgInfoPanelForCurrentOrg(org);
+                    // Show new org detected notification banner with blinking
+                    this.showNewOrgDetectedBanner(org);
+                }
+
+                // Load saved favicons list (legacy)
                 this.loadSavedFavicons();
             } else {
+                // Clear current org data when query returns nothing
+                this._currentOrgId = null;
+                this._currentOrgName = null;
+                this._currentOrgData = null;
+
                 containers.forEach(c => {
                     c.innerHTML = '<div class="error-message">Could not retrieve organization information.</div>';
                 });
@@ -554,6 +2809,11 @@ const DataExplorerHelper = {
             }
         } catch (error) {
             console.error('Error loading org info:', error);
+            // Clear current org data on error
+            this._currentOrgId = null;
+            this._currentOrgName = null;
+            this._currentOrgData = null;
+
             const errorDetails = error.message || String(error);
             const isNotConnected = errorDetails.includes('Not connected') || errorDetails.includes('Missing session');
             const errorHtml = `<div class="error-message">
@@ -670,6 +2930,8 @@ const DataExplorerHelper = {
             // For Data Explorer (-data suffix), use radio-based update
             if (s === '-data') {
                 this.updateFaviconPreviewRadio(s);
+                // Also initialize the applied preview canvas for 3-column layout
+                this.renderAppliedPreview();
             } else {
                 this.renderFaviconPreview(color, label, shape, s);
             }
@@ -692,14 +2954,25 @@ const DataExplorerHelper = {
         const preview = document.getElementById(`favicon-preview${suffix}`);
         if (!preview) return;
 
+        // High-DPI support
+        const displaySize = 32;
+        const dpr = window.devicePixelRatio || 1;
+
+        // Resize canvas for DPR if needed
+        if (preview.width !== displaySize * dpr) {
+            preview.width = displaySize * dpr;
+            preview.height = displaySize * dpr;
+            preview.style.width = displaySize + 'px';
+            preview.style.height = displaySize + 'px';
+        }
+
         const ctx = preview.getContext('2d');
         if (!ctx) return;
 
-        // Clear canvas
-        ctx.clearRect(0, 0, preview.width, preview.height);
-
-        // Draw the selected shape with color
-        this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape);
+        // Reset transform and apply DPR scale
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, displaySize, displaySize);
+        this.drawFaviconShape(ctx, color || '#ff6b6b', label, shape, displaySize);
     },
 
     // Helper to get selected shape from the form (supports both button and radio-based)
@@ -788,38 +3061,55 @@ const DataExplorerHelper = {
         return preset ? preset.name : null;
     },
 
-    drawFaviconShape: function(ctx, color, label, shape = 'cloud') {
-        ctx.clearRect(0, 0, 32, 32);
+    drawFaviconShape: function(ctx, color, label, shape = 'cloud', displaySize = null) {
+        // Get actual canvas dimensions (or use displaySize for High-DPI rendering)
+        const canvas = ctx.canvas;
+        const w = displaySize || canvas.width;
+        const h = displaySize || canvas.height;
+        const size = Math.min(w, h);
+        const center = size / 2;
+
+        // Completely clear the canvas (use actual canvas dimensions)
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Reset all drawing state to prevent artifacts
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = 'transparent';
+        ctx.lineWidth = 0;
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 10;
         ctx.fillStyle = color;
 
         switch (shape) {
             case 'circle':
                 ctx.beginPath();
-                ctx.arc(16, 16, 14, 0, Math.PI * 2);
+                ctx.arc(center, center, size * 0.44, 0, Math.PI * 2);
                 ctx.fill();
                 break;
 
             case 'square':
-                ctx.fillRect(2, 2, 28, 28);
+                ctx.fillRect(size * 0.06, size * 0.06, size * 0.88, size * 0.88);
                 break;
 
             case 'rounded':
-                this.drawRoundedRect(ctx, 2, 2, 28, 28, 6);
+                this.drawRoundedRect(ctx, size * 0.06, size * 0.06, size * 0.88, size * 0.88, size * 0.19);
                 ctx.fill();
                 break;
 
             case 'diamond':
                 ctx.beginPath();
-                ctx.moveTo(16, 1);
-                ctx.lineTo(30, 16);
-                ctx.lineTo(16, 31);
-                ctx.lineTo(2, 16);
+                ctx.moveTo(center, size * 0.03);
+                ctx.lineTo(size * 0.94, center);
+                ctx.lineTo(center, size * 0.97);
+                ctx.lineTo(size * 0.06, center);
                 ctx.closePath();
                 ctx.fill();
                 break;
 
             case 'hexagon':
-                this.drawHexagon(ctx, 16, 16, 14);
+                this.drawHexagon(ctx, center, center, size * 0.44);
                 ctx.fill();
                 break;
 
@@ -827,11 +3117,11 @@ const DataExplorerHelper = {
             default:
                 // Draw Salesforce-style cloud shape
                 ctx.beginPath();
-                ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
-                ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
-                ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
-                ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
-                ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
+                ctx.arc(center, center * 1.125, size * 0.31, Math.PI * 0.5, Math.PI * 1.5);
+                ctx.arc(center * 0.625, center * 0.75, size * 0.19, Math.PI, Math.PI * 1.5);
+                ctx.arc(center, center * 0.5, size * 0.22, Math.PI * 1.2, Math.PI * 1.8);
+                ctx.arc(center * 1.375, center * 0.625, size * 0.19, Math.PI * 1.5, Math.PI * 0.3);
+                ctx.arc(center * 1.5, center * 1.125, size * 0.19, Math.PI * 1.5, Math.PI * 0.5);
                 ctx.closePath();
                 ctx.fill();
                 break;
@@ -840,10 +3130,15 @@ const DataExplorerHelper = {
         // Draw label text if provided
         if (label) {
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px Arial, sans-serif';
+            ctx.font = `bold ${Math.floor(size * 0.25)}px Arial, sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(label.substring(0, 3).toUpperCase(), 16, 16);
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 2;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.fillText(label.substring(0, 3).toUpperCase(), center, center);
+            ctx.shadowColor = 'transparent';
         }
     },
 
@@ -892,8 +3187,8 @@ const DataExplorerHelper = {
     },
 
     applyFaviconWithValues: async function(color, label, shape) {
-        // Determine which org to save for - editing org or current org
-        const targetOrgId = this._editingOrgId || this._currentOrgId;
+        // Determine which org to save for - selected org (new UI), editing org (legacy), or current org
+        const targetOrgId = this._selectedOrgId || this._editingOrgId || this._currentOrgId;
 
         if (!targetOrgId) {
             this.showFaviconStatus('Could not determine current org. Please refresh.', 'error');
@@ -972,6 +3267,32 @@ const DataExplorerHelper = {
             // Save back to storage
             await chrome.storage.local.set({ orgFavicons: orgFavicons });
 
+            // ALSO update the new orgRecords storage for 3-column layout
+            const orgRecordsResult = await chrome.storage.local.get('orgRecords');
+            let orgRecords = (orgRecordsResult && orgRecordsResult.orgRecords) || {};
+            if (orgRecords[targetOrgId]) {
+                orgRecords[targetOrgId].iconConfig = { color, label, shape };
+                orgRecords[targetOrgId].appliedIconConfig = { color, label, shape };
+                orgRecords[targetOrgId].lastSeenAt = new Date().toISOString();
+                await chrome.storage.local.set({ orgRecords });
+
+                // Update in-memory cache
+                this._savedOrgs = orgRecords;
+
+                // Update applied config state
+                this._appliedIconConfig = { color, label, shape };
+                this._draftIconConfig = { color, label, shape };
+
+                // Re-render the saved orgs list to show updated icon
+                this.renderSavedOrgsList();
+
+                // Update the applied preview
+                this.renderAppliedPreview();
+
+                // Clear unsaved indicator
+                this.updateUnsavedIndicator();
+            }
+
             // Verify save was successful
             const verifyResult = await chrome.storage.local.get('orgFavicons');
             console.log('Verified saved favicons:', Object.keys(verifyResult.orgFavicons || {}));
@@ -1002,36 +3323,52 @@ const DataExplorerHelper = {
                 );
 
                 if (sfTabs.length > 0) {
+                    // Check if "apply to all tabs" is enabled
+                    const applyAllToggle = document.getElementById('apply-all-tabs-toggle');
+                    const applyToAllTabs = applyAllToggle?.checked || false;
+
                     // Try the active SF tab first, or the first SF tab found
                     const activeTab = sfTabs.find(t => t.active) || sfTabs[0];
 
-                    // Only apply to tab if editing current org
+                    // Only apply to tab if editing current org or selected org matches
                     const isEditingCurrentOrg = !this._editingOrgId || this._editingOrgId === this._currentOrgId;
+                    const isSelectedOrgCurrent = this._selectedOrgId === this._currentOrgId;
 
-                    if (isEditingCurrentOrg) {
-                        try {
-                            await chrome.tabs.sendMessage(activeTab.id, {
-                                action: 'updateFavicon',
-                                color: color,
-                                label: label,
-                                shape: shape,
-                                orgId: targetOrgId
-                            });
-                            this.showFaviconStatus('Favicon saved & applied!', 'success');
-                        } catch (msgError) {
-                            // Content script might not be loaded, try scripting API
-                            console.warn('Content script not responding:', msgError.message);
+                    if (isEditingCurrentOrg || isSelectedOrgCurrent) {
+                        // Determine which tabs to apply to
+                        const tabsToApply = applyToAllTabs ? sfTabs : [activeTab];
+                        let successCount = 0;
+
+                        for (const tab of tabsToApply) {
                             try {
-                                await chrome.scripting.executeScript({
-                                    target: { tabId: activeTab.id },
-                                    func: this.injectFaviconUpdate,
-                                    args: [color, label, shape]
+                                await chrome.tabs.sendMessage(tab.id, {
+                                    action: 'updateFavicon',
+                                    color: color,
+                                    label: label,
+                                    shape: shape,
+                                    orgId: targetOrgId
                                 });
-                                this.showFaviconStatus('Favicon saved & applied!', 'success');
-                            } catch (scriptError) {
-                                console.warn('Scripting API failed:', scriptError.message);
-                                this.showFaviconStatus('Favicon saved. Refresh Salesforce page to see change.', 'success');
+                                successCount++;
+                            } catch (msgError) {
+                                // Content script might not be loaded, try scripting API
+                                try {
+                                    await chrome.scripting.executeScript({
+                                        target: { tabId: tab.id },
+                                        func: this.injectFaviconUpdate,
+                                        args: [color, label, shape]
+                                    });
+                                    successCount++;
+                                } catch (scriptError) {
+                                    console.warn('Scripting API failed for tab:', tab.id);
+                                }
                             }
+                        }
+
+                        if (successCount > 0) {
+                            const tabText = successCount > 1 ? `${successCount} tabs` : 'tab';
+                            this.showFaviconStatus(`Favicon saved & applied to ${tabText}!`, 'success');
+                        } else {
+                            this.showFaviconStatus('Favicon saved. Refresh Salesforce page to see change.', 'success');
                         }
                     } else {
                         // Editing a different org, just save
@@ -1068,7 +3405,18 @@ const DataExplorerHelper = {
 
         statusElements.forEach(status => {
             status.textContent = message;
-            status.className = `favicon-status ${type}`;
+            // Support V2, V3, V4, and V5 class names
+            const isV5 = status.classList.contains('status-msg-v5');
+            const isV3 = status.classList.contains('favicon-status-v3');
+
+            if (isV5) {
+                status.className = `status-msg-v5 ${type}`;
+            } else if (isV3) {
+                status.className = `favicon-status-v3 ${type}`;
+            } else {
+                status.className = `favicon-status status-msg ${type}`;
+            }
+
             status.hidden = false;
             status.style.display = 'block';
 
@@ -1190,6 +3538,38 @@ const DataExplorerHelper = {
     },
 
     resetFavicon: async function(suffix = '') {
+        // For the new 3-column layout (-data suffix), reset means revert to applied state
+        if (suffix === '-data' && this._selectedOrgId && this._appliedIconConfig) {
+            // Reset form to applied config
+            const colorInput = document.getElementById('favicon-color-data');
+            const labelInput = document.getElementById('favicon-label-data');
+
+            if (colorInput) colorInput.value = this._appliedIconConfig.color || '#ff6b6b';
+            if (labelInput) labelInput.value = this._appliedIconConfig.label || '';
+
+            if (this._appliedIconConfig.shape) {
+                this.setSelectedShape(this._appliedIconConfig.shape, '-data');
+            }
+
+            // Update draft to match applied
+            this._draftIconConfig = { ...this._appliedIconConfig };
+
+            // Update previews
+            this.updateFaviconPreviewRadio('-data');
+
+            // Clear unsaved indicator
+            this.updateUnsavedIndicator();
+
+            // Clear preset selection
+            document.querySelectorAll('#preset-chips .preset-chip').forEach(chip => {
+                chip.classList.remove('active');
+            });
+
+            this.showFaviconStatus('Reset to applied settings.', 'success');
+            return;
+        }
+
+        // Legacy behavior: delete from storage (for Settings tab)
         try {
             // Remove from saved list for current org only
             if (this._currentOrgId) {
@@ -1260,14 +3640,14 @@ const DataExplorerHelper = {
 
     loadSavedFavicons: async function() {
         // Support both Settings tab and Data Explorer tab containers
+        // Note: saved-favicons-list-data is legacy - new UI uses saved-orgs-list and renderSavedOrgsList
         const containers = [
-            document.getElementById('saved-favicons-list'),
-            document.getElementById('saved-favicons-list-data')
+            document.getElementById('saved-favicons-list')
         ].filter(Boolean);
 
         const orgSelects = [
-            document.getElementById('favicon-org-select'),
-            document.getElementById('favicon-org-select-data')
+            document.getElementById('favicon-org-select')
+            // Note: favicon-org-select-data is removed in the new 3-column layout
         ].filter(Boolean);
 
         try {
@@ -1331,17 +3711,21 @@ const DataExplorerHelper = {
 
                 container.innerHTML = html;
 
-                // Render previews for each item (using saved shape)
+                // Render previews for each item (using saved shape) - High-DPI aware
                 entries.forEach(([orgId, data]) => {
                     const previewId = `preview-${orgId}-${container.id}`;
                     const previewEl = document.getElementById(previewId);
                     if (previewEl) {
                         const canvas = document.createElement('canvas');
-                        canvas.width = 24;
-                        canvas.height = 24;
+                        const displaySize = 24;
+                        const dpr = window.devicePixelRatio || 1;
+                        canvas.width = displaySize * dpr;
+                        canvas.height = displaySize * dpr;
+                        canvas.style.width = displaySize + 'px';
+                        canvas.style.height = displaySize + 'px';
                         const ctx = canvas.getContext('2d');
-                        ctx.scale(24/32, 24/32);
-                        this.drawFaviconShape(ctx, data.color || '#ff6b6b', data.label, data.shape || 'cloud');
+                        ctx.scale(dpr, dpr);
+                        this.drawFaviconShape(ctx, data.color || '#ff6b6b', data.label, data.shape || 'cloud', displaySize);
                         previewEl.appendChild(canvas);
                     }
                 });
@@ -2051,6 +4435,26 @@ const DataExplorerHelper = {
     fetchRecordViaSoql: async function(recordId) {
         const keyPrefix = recordId.substring(0, 3);
 
+        // PROACTIVE CHECK: Check connection status BEFORE making any API calls
+        // This prevents the "Not connected to Salesforce, stopping SOQL attempts" warning
+        try {
+            const session = await PlatformHelper.getSession();
+            if (!session || !session.isLoggedIn) {
+                return {
+                    _objectName: this._keyPrefixMap[keyPrefix] || `Unknown (${keyPrefix}...)`,
+                    _fields: { Id: recordId },
+                    _error: 'Not connected to Salesforce. Please ensure you have an active Salesforce tab open and are logged in.'
+                };
+            }
+        } catch (sessionError) {
+            // If we can't even check session, assume not connected
+            return {
+                _objectName: this._keyPrefixMap[keyPrefix] || `Unknown (${keyPrefix}...)`,
+                _fields: { Id: recordId },
+                _error: 'Not connected to Salesforce. Please ensure you have an active Salesforce tab open and are logged in.'
+            };
+        }
+
         // Try to find object name from key prefix
         let objectName = this._keyPrefixMap[keyPrefix];
 
@@ -2073,6 +4477,16 @@ const DataExplorerHelper = {
                     }
                 }
             } catch (describeError) {
+                const errMsg = (describeError?.message || '').toLowerCase();
+                // If it's a connection error, don't try SOQL - return early with helpful message
+                if (errMsg.includes('not connected') || errMsg.includes('no session') || errMsg.includes('unauthorized')) {
+                    // Proactive check should have caught this, but handle gracefully as fallback
+                    return {
+                        _objectName: this._keyPrefixMap[keyPrefix] || `Unknown (${keyPrefix}...)`,
+                        _fields: { Id: recordId },
+                        _error: 'Not connected to Salesforce. Please ensure you have an active Salesforce tab open and are logged in.'
+                    };
+                }
                 console.warn('Could not fetch global describe:', describeError);
             }
         }
@@ -2133,7 +4547,19 @@ const DataExplorerHelper = {
                     };
                 }
             } catch (soqlError) {
-                const errMsg = soqlError?.message?.toLowerCase() || '';
+                const errMsg = (soqlError?.message || '').toLowerCase();
+
+                // If it's a connection error, stop immediately - no point trying more field sets
+                if (errMsg.includes('not connected') || errMsg.includes('no session') ||
+                    errMsg.includes('unauthorized') || errMsg.includes('invalid session')) {
+                    // Proactive check should have caught this, but handle gracefully as fallback
+                    return {
+                        _objectName: objectName,
+                        _fields: { Id: recordId },
+                        _error: 'Not connected to Salesforce. Please ensure you have an active Salesforce tab open and are logged in.'
+                    };
+                }
+
                 // If it's a field not found error, try with fewer fields
                 if (errMsg.includes('no such column') || errMsg.includes('invalid field') || errMsg.includes('doesn\'t exist')) {
                     console.warn(`SOQL failed with fields [${fieldsToQuery}], trying with fewer fields...`);
@@ -2141,7 +4567,6 @@ const DataExplorerHelper = {
                 }
                 // For other errors, log and continue to next field set
                 console.warn('SOQL fallback failed:', soqlError);
-                continue;
             }
         }
 
@@ -2189,6 +4614,29 @@ const DataExplorerHelper = {
                 <div class="error-message" style="margin-top:8px;">Platform helper not available. Please refresh the extension.</div>
             </div>`;
             return;
+        }
+
+        // PROACTIVE CHECK: Check connection status before making API calls
+        try {
+            const session = await PlatformHelper.getSession();
+            if (!session || !session.isLoggedIn) {
+                const keyPrefix = recordId.substring(0, 3);
+                const objectName = this._keyPrefixMap[keyPrefix] || `Unknown (${keyPrefix}...)`;
+                container.innerHTML = `<div class="record-detail-card">
+                    <div class="record-detail-row">
+                        <span class="record-detail-label">Object</span>
+                        <span class="record-detail-value">${objectName}</span>
+                    </div>
+                    <div class="record-detail-row">
+                        <span class="record-detail-label">ID</span>
+                        <span class="record-detail-value"><code>${recordId}</code></span>
+                    </div>
+                    <div class="info-message" style="margin-top:8px;">Not connected to Salesforce. Please ensure you have an active Salesforce tab open and are logged in.</div>
+                </div>`;
+                return;
+            }
+        } catch (sessionError) {
+            // Session check failed - continue anyway as API might still work
         }
 
         try {
@@ -3064,15 +5512,17 @@ const DataExplorerHelper = {
 
         } catch (e) {
             console.error('Error loading field history:', e);
-            const errorMsg = e.message || 'Unknown error';
+            const errorMsg = (e?.message || 'Unknown error').toLowerCase();
 
-            // Check for common errors
-            if (errorMsg.includes('does not exist') || errorMsg.includes('invalid') || errorMsg.includes('INVALID_TYPE')) {
+            // Check for connection errors first
+            if (errorMsg.includes('not connected') || errorMsg.includes('no session') || errorMsg.includes('unauthorized')) {
+                container.innerHTML = '<div class="info-note">Not connected to Salesforce. Please ensure you have an active Salesforce tab open.</div>';
+            } else if (errorMsg.includes('does not exist') || errorMsg.includes('invalid') || errorMsg.includes('invalid_type')) {
                 container.innerHTML = `<div class="info-note">Field history tracking is not enabled for ${objectName}.</div>`;
-            } else if (errorMsg.includes('INVALID_FIELD') || errorMsg.includes('No such column')) {
+            } else if (errorMsg.includes('invalid_field') || errorMsg.includes('no such column')) {
                 container.innerHTML = '<div class="info-note">Unable to query field history. The history object may have a different structure.</div>';
             } else {
-                container.innerHTML = `<div class="error-note">Error loading history: ${errorMsg}</div>`;
+                container.innerHTML = `<div class="error-note">Error loading history: ${e.message || 'Unknown error'}</div>`;
             }
         }
     },
@@ -3250,6 +5700,13 @@ const DataExplorerHelper = {
         container.innerHTML = '<div class="loading-note">Loading related records...</div>';
 
         try {
+            // Check connection status first to avoid unnecessary API calls
+            const session = await PlatformHelper.getSession();
+            if (!session || !session.isLoggedIn) {
+                container.innerHTML = '<div class="info-note">Not connected to Salesforce. Please ensure you have an active Salesforce tab open.</div>';
+                return;
+            }
+
             // Get object describe to find relationships
             const apiSel = document.getElementById('api-version');
             const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
@@ -3330,7 +5787,12 @@ const DataExplorerHelper = {
 
         } catch (e) {
             console.error('Error loading related records:', e);
-            container.innerHTML = `<div class="error-note">Error loading related records: ${e.message}</div>`;
+            const errMsg = (e?.message || '').toLowerCase();
+            if (errMsg.includes('not connected') || errMsg.includes('no session') || errMsg.includes('unauthorized')) {
+                container.innerHTML = '<div class="info-note">Not connected to Salesforce. Please ensure you have an active Salesforce tab open.</div>';
+            } else {
+                container.innerHTML = `<div class="error-note">Error loading related records: ${e.message}</div>`;
+            }
         }
     },
 
@@ -3425,6 +5887,13 @@ const DataExplorerHelper = {
         }
 
         try {
+            // Check connection status first to avoid unnecessary API calls
+            const session = await PlatformHelper.getSession();
+            if (!session || !session.isLoggedIn) {
+                itemsContainer.innerHTML = '<div class="info-note">Not connected to Salesforce.</div>';
+                return;
+            }
+
             // Query actual records (limit to 5 for preview)
             const nameField = await this.getNameFieldForObject(childObject);
             const query = `SELECT Id, ${nameField} FROM ${childObject} WHERE ${field} = '${parentId}' ORDER BY ${nameField} LIMIT 5`;
@@ -3586,6 +6055,7 @@ const DataExplorerHelper = {
             }
         } catch (e) {}
     }
+
 };
 
 // Expose globally

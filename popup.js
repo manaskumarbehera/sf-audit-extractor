@@ -92,24 +92,59 @@
             const query = encodeURIComponent('SELECT Id FROM Organization LIMIT 1');
             const url = `${instanceUrl}/services/data/v${apiVersion}/query?q=${query}`;
 
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Accept': 'application/json'
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.warn(`Failed to fetch org ID: ${response.status}`);
+                    return null;
                 }
-            });
 
-            if (!response.ok) {
-                console.warn(`Failed to fetch org ID: ${response.status}`);
-                return null;
-            }
+                const data = await response.json();
+                const orgId = data?.records?.[0]?.Id;
+                if (orgId) {
+                    console.log('✅ Fetched orgId from Salesforce:', orgId);
+                    return orgId;
+                }
+            } catch (directFetchError) {
+                // If TypeError (CORS/network issue), try via background script
+                if (directFetchError instanceof TypeError && directFetchError.message.includes('Failed to fetch')) {
+                    console.log('[popup] Direct fetch failed, trying via background script...');
+                    try {
+                        const response = await new Promise((resolve, reject) => {
+                            chrome.runtime.sendMessage({
+                                action: 'EXECUTE_SOQL',
+                                soql: 'SELECT Id FROM Organization LIMIT 1',
+                                apiVersion: `v${apiVersion}`,
+                                instanceUrl: instanceUrl,
+                                accessToken: accessToken
+                            }, (resp) => {
+                                if (chrome.runtime.lastError) {
+                                    reject(new Error(chrome.runtime.lastError.message));
+                                    return;
+                                }
+                                resolve(resp);
+                            });
+                        });
 
-            const data = await response.json();
-            const orgId = data?.records?.[0]?.Id;
-            if (orgId) {
-                console.log('✅ Fetched orgId from Salesforce:', orgId);
-                return orgId;
+                        if (response && (response.success || response.records)) {
+                            const orgId = response.records?.[0]?.Id;
+                            if (orgId) {
+                                console.log('✅ Fetched orgId from background script:', orgId);
+                                return orgId;
+                            }
+                        }
+                    } catch (bgError) {
+                        console.warn('Background script org ID fetch also failed:', bgError);
+                    }
+                }
+                throw directFetchError;
             }
         } catch (e) {
             console.warn('Error fetching org ID from Salesforce:', e);
@@ -162,9 +197,15 @@
         await loadSettingsHelper();
         try { window.SettingsHelper && window.SettingsHelper.injectFlexCss && window.SettingsHelper.injectFlexCss(); } catch {}
 
-        // IMPORTANT: Clear instance URL cache to ensure we get fresh data for THIS window's SF tab
-        // This prevents stale data from other browser windows being displayed
-        try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+        // NOTE: Don't clear instance URL cache unconditionally
+        // Only clear if we're in popup mode (not standalone) to allow fresh detection
+        // In standalone mode, we should preserve the session that was transferred
+        const isStandaloneOrTab = window.location.hash.includes('standalone') || window.location.hash.includes('tab');
+        if (!isStandaloneOrTab) {
+            // In popup mode, we want to detect the current SF tab
+            // But don't clear - let the detection process update the cache naturally
+            // try { Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null); } catch {}
+        }
 
         // CRITICAL: Detect and track current org
         try {
@@ -231,7 +272,7 @@
                                 .then(name => {
                                     if (name) {
                                         updateStatus(true, `Connected to ${name}`);
-                                        document.title = `${name} - TrackForcePro`;
+                                        document.title = `⚡ ${name} - TrackForcePro`;
                                     }
                                 })
                                 .catch(() => {});
@@ -276,7 +317,7 @@
                             updateStatus(true, orgName ? `Connected to ${orgName}` : 'Connected to Salesforce');
                             // Update title in standalone or tab mode
                             if (orgName && isStandaloneOrTabMode) {
-                                document.title = `${orgName} - TrackForcePro`;
+                                document.title = `⚡ ${orgName} - TrackForcePro`;
                             }
                         } catch {
                             updateStatus(true, 'Connected to Salesforce');
@@ -353,6 +394,9 @@
                 refreshSessionFromTab: async () => {
                     const before = getSess();
                     try {
+                        // NOTE: Don't clear cache before fetch - let it try with existing data first
+                        // Only clear cache if we detect an actual org change
+
                         const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
                         if (fresh && fresh.success && fresh.isLoggedIn) {
                             sessionInfo = fresh;
@@ -362,14 +406,30 @@
                                 if (prevUrl && nextUrl && prevUrl !== nextUrl) {
                                     // Org changed; clear instance URL cache to force refetch
                                     Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(null);
+                                    console.log('🔄 Org changed from', prevUrl, 'to', nextUrl);
                                 } else if (nextUrl) {
-                                    // Keep cache fresh
+                                    // Keep cache fresh with the current URL
                                     Utils.setInstanceUrlCache && Utils.setInstanceUrlCache(nextUrl);
                                 }
                             } catch {}
                             return fresh;
+                        } else {
+                            // Session refresh returned not logged in
+                            // DON'T clear the old session - it might still be usable for API calls
+                            // Just log a warning
+                            console.log('⚠️ Session refresh returned not logged in, keeping existing session for fallback');
+                            // Return the old session as fallback if available
+                            if (before && before.isLoggedIn) {
+                                return before;
+                            }
                         }
-                    } catch {}
+                    } catch (e) {
+                        // Session refresh failed - keep existing session as fallback
+                        console.warn('⚠️ Session refresh failed, keeping existing session:', e);
+                        if (before && before.isLoggedIn) {
+                            return before;
+                        }
+                    }
                     return null;
                 }
             });
@@ -389,6 +449,8 @@
                 refreshSessionFromTab: async () => {
                     const before = sessionInfo;
                     try {
+                        // NOTE: Don't clear cache before fetch - let it try with existing data first
+
                         const fresh = await sendMessageToSalesforceTab({ action: 'getSessionInfo' });
                         if (fresh && fresh.success && fresh.isLoggedIn) {
                             sessionInfo = fresh;
@@ -402,8 +464,20 @@
                                 }
                             } catch {}
                             return fresh;
+                        } else {
+                            // Keep existing session as fallback
+                            console.log('⚠️ Audit session refresh returned not logged in, keeping existing session');
+                            if (before && before.isLoggedIn) {
+                                return before;
+                            }
                         }
-                    } catch {}
+                    } catch (e) {
+                        // Keep existing session as fallback
+                        console.warn('⚠️ Audit session refresh failed, keeping existing session:', e);
+                        if (before && before.isLoggedIn) {
+                            return before;
+                        }
+                    }
                     return null;
                 }
             });
@@ -831,7 +905,10 @@
                 b.setAttribute('aria-selected', active ? 'true' : 'false');
             });
             const activeBtn = Array.from(buttons).find(b => b.dataset.tab === name);
-            if (headerTitle) headerTitle.textContent = (activeBtn?.textContent || 'Audit Trails').trim();
+            if (headerTitle) {
+                // Get text from .tab-text span to avoid including the emoji icon
+                headerTitle.textContent = activeBtn?.querySelector('.tab-text')?.textContent?.trim() || 'Audit Trails';
+            }
 
             // persist selection
             try { chrome.storage?.local?.set?.({ lastTab: name }); } catch {}

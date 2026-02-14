@@ -1,0 +1,30 @@
+PASS tests/favicon_application.test.js
+  Favicon Application and Reactivity
+    Favicon Save and UI Update
+      ✓ should update preview immediately when color is changed (9 ms)
+      ✓ should show success message after saving favicon (4 ms)
+      ✓ should refresh saved favicons list after save (3 ms)
+      ✓ should update preview canvas after save (1 ms)
+      ✓ should clear editing state after successful save (2 ms)
+    Favicon Status Display
+      ✓ should display success status message (2 ms)
+      ✓ should display error status message (1 ms)
+      ✓ should update both status elements if present (1 ms)
+    Favicon Shape Selection
+      ✓ should get selected shape from form (2 ms)
+      ✓ should set selected shape in form (1 ms)
+    Multi-Suffix Support
+      ✓ should handle favicon preview for Settings tab (no suffix) (1 ms)
+      ✓ should handle favicon preview for Data Explorer tab (-data suffix) (1 ms)
+      ✓ should reset favicon for both tabs (1 ms)
+    Chrome Storage Integration
+      ✓ should save favicon to chrome storage (1 ms)
+      ✓ should retrieve saved favicons from chrome storage (1 ms)
+    Favicon Reaction Chain
+      ✓ complete flow: change color → update preview → save → refresh list → show status (5 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       16 passed, 16 total
+Snapshots:   0 total
+Time:        0.522 s, estimated 1 s
+Ran all test suites matching /tests\/favicon_application.test.js/i.

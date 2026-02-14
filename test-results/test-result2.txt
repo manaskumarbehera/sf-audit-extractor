@@ -1,0 +1,47 @@
+FAIL tests/favicon_application.test.js
+  Favicon Application and Reactivity
+    Favicon Save and UI Update
+      ✓ should update preview immediately when color is changed (9 ms)
+      ✓ should show success message after saving favicon (4 ms)
+      ✓ should refresh saved favicons list after save (2 ms)
+      ✓ should update preview canvas after save (2 ms)
+      ✓ should clear editing state after successful save (2 ms)
+    Favicon Status Display
+      ✓ should display success status message (2 ms)
+      ✓ should display error status message (1 ms)
+      ✕ should update both status elements if present (2 ms)
+    Favicon Shape Selection
+      ✓ should get selected shape from form (2 ms)
+      ✓ should set selected shape in form (1 ms)
+    Multi-Suffix Support
+      ✓ should handle favicon preview for Settings tab (no suffix) (1 ms)
+      ✓ should handle favicon preview for Data Explorer tab (-data suffix) (2 ms)
+      ✓ should reset favicon for both tabs (1 ms)
+    Chrome Storage Integration
+      ✓ should save favicon to chrome storage (3 ms)
+      ✓ should retrieve saved favicons from chrome storage (1 ms)
+    Favicon Reaction Chain
+      ✓ complete flow: change color → update preview → save → refresh list → show status (1 ms)
+
+  ● Favicon Application and Reactivity › Favicon Status Display › should update both status elements if present
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "Test message"
+    Received: ""
+
+      270 |             // Both should be updated
+      271 |             if (status1) expect(status1.textContent).toBe('Test message');
+    > 272 |             if (status2) expect(status2.textContent).toBe('Test message');
+          |                                                      ^
+      273 |         });
+      274 |     });
+      275 |
+
+      at Object.toBe (tests/favicon_application.test.js:272:54)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 15 passed, 16 total
+Snapshots:   0 total
+Time:        0.564 s, estimated 1 s
+Ran all test suites matching /tests\/favicon_application.test.js/i.

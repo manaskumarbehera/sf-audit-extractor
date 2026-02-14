@@ -5,6 +5,36 @@
  * Tests that favicons are properly saved, applied, and reactive
  */
 
+// Mock canvas context since jsdom doesn't support it
+const mockContext2D = {
+    fillStyle: '',
+    fillRect: jest.fn(),
+    clearRect: jest.fn(),
+    beginPath: jest.fn(),
+    arc: jest.fn(),
+    fill: jest.fn(),
+    stroke: jest.fn(),
+    moveTo: jest.fn(),
+    lineTo: jest.fn(),
+    closePath: jest.fn(),
+    fillText: jest.fn(),
+    measureText: jest.fn(() => ({ width: 10 })),
+    save: jest.fn(),
+    restore: jest.fn(),
+    translate: jest.fn(),
+    scale: jest.fn(),
+    rotate: jest.fn(),
+    createLinearGradient: jest.fn(() => ({
+        addColorStop: jest.fn()
+    })),
+    createRadialGradient: jest.fn(() => ({
+        addColorStop: jest.fn()
+    }))
+};
+
+// Mock HTMLCanvasElement.getContext before tests run
+HTMLCanvasElement.prototype.getContext = jest.fn(() => mockContext2D);
+
 describe('Favicon Application and Reactivity', () => {
     let mockChrome;
     let mockDataExplorer;
@@ -33,10 +63,18 @@ describe('Favicon Application and Reactivity', () => {
             storage: {
                 local: {
                     get: jest.fn((keys, callback) => {
-                        callback({ orgFavicons: {} });
+                        // Handle both callback and promise-style
+                        const data = { orgFavicons: {} };
+                        if (typeof callback === 'function') {
+                            callback(data);
+                        }
+                        return Promise.resolve(data);
                     }),
                     set: jest.fn((data, callback) => {
-                        if (callback) callback();
+                        if (typeof callback === 'function') {
+                            callback();
+                        }
+                        return Promise.resolve();
                     })
                 }
             },
@@ -57,23 +95,28 @@ describe('Favicon Application and Reactivity', () => {
             _colorPresets: [],
 
             showFaviconStatus: jest.fn(function(message, type) {
-                const status = document.getElementById('favicon-status');
-                if (status) {
-                    status.textContent = message;
-                    status.className = `favicon-status ${type}`;
-                    status.hidden = false;
-                }
+                // Update both status elements (with and without -data suffix)
+                const suffixes = ['', '-data'];
+                suffixes.forEach(suffix => {
+                    const status = document.getElementById(`favicon-status${suffix}`);
+                    if (status) {
+                        status.textContent = message;
+                        status.className = `favicon-status ${type}`;
+                        status.hidden = false;
+                    }
+                });
             }),
 
             updateFaviconPreview: jest.fn(function(suffix = '') {
                 const color = document.getElementById(`favicon-color${suffix}`)?.value || '#ff6b6b';
-                const label = document.getElementById(`favicon-label${suffix}`)?.value || '';
-                // Simple preview update
+                // Simple preview update - use the mock context
                 const preview = document.getElementById(`favicon-preview${suffix}`);
                 if (preview && preview.getContext) {
                     const ctx = preview.getContext('2d');
-                    ctx.fillStyle = color;
-                    ctx.fillRect(0, 0, 32, 32);
+                    if (ctx) {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(0, 0, 32, 32);
+                    }
                 }
             }),
 

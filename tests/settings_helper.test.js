@@ -1238,7 +1238,9 @@ describe('Settings Helper - All Tabs with Sub-Settings', () => {
         expect(lmsItem.querySelector('.accordion-expand')).not.toBeNull();
     });
 
-    test('SF, Data, and Help tabs do NOT have expand buttons', async () => {
+
+
+    test('SF and Help tabs do NOT have expand buttons, but Data tab DOES (Display Settings)', async () => {
         SettingsHelper.ensureSettingsTabExists();
         await SettingsHelper.buildSettingsPanel();
 
@@ -1247,7 +1249,7 @@ describe('Settings Helper - All Tabs with Sub-Settings', () => {
         const helpItem = document.querySelector('.accordion-item[data-tab="help"]');
 
         expect(sfItem.querySelector('.accordion-expand')).toBeNull();
-        expect(dataItem.querySelector('.accordion-expand')).toBeNull();
+        expect(dataItem.querySelector('.accordion-expand')).not.toBeNull(); // Data tab now has Display Settings
         expect(helpItem.querySelector('.accordion-expand')).toBeNull();
     });
 
@@ -1259,11 +1261,13 @@ describe('Settings Helper - All Tabs with Sub-Settings', () => {
         const graphqlItem = document.querySelector('.accordion-item[data-tab="graphql"]');
         const platformItem = document.querySelector('.accordion-item[data-tab="platform"]');
         const lmsItem = document.querySelector('.accordion-item[data-tab="lms"]');
+        const dataItem = document.querySelector('.accordion-item[data-tab="data"]');
 
         expect(soqlItem.querySelector('.accordion-sub-settings')).not.toBeNull();
         expect(graphqlItem.querySelector('.accordion-sub-settings')).not.toBeNull();
         expect(platformItem.querySelector('.accordion-sub-settings')).not.toBeNull();
         expect(lmsItem.querySelector('.accordion-sub-settings')).not.toBeNull();
+        expect(dataItem.querySelector('.accordion-sub-settings')).not.toBeNull(); // Data tab has Display Settings
     });
 
     test('Platform and LMS settings each have 2 checkboxes', async () => {

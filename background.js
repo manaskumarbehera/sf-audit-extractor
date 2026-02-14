@@ -335,8 +335,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const currentTab = tabs[0];
                 const currentIndex = currentTab?.index ?? 0;
 
-                // Open popup.html as a new tab
-                const popupUrl = chrome.runtime.getURL('popup.html');
+                // Open popup.html as a new tab with #tab hash for proper title formatting
+                const popupUrl = chrome.runtime.getURL('popup.html#tab');
                 const newTab = await chrome.tabs.create({
                     url: popupUrl,
                     index: currentIndex + 1,
@@ -355,7 +355,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.action === 'openAsTab') {
         (async () => {
             try {
-                const popupUrl = chrome.runtime.getURL('popup.html');
+                // Open popup.html with #tab hash for proper title formatting
+                const popupUrl = chrome.runtime.getURL('popup.html#tab');
                 const newTab = await chrome.tabs.create({ url: popupUrl, active: true });
                 sendResponse({ success: true, tabId: newTab.id });
             } catch (err) {
@@ -888,7 +889,131 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 return await runGraphqlIntrospection(instanceUrl, { sessionId, accessToken, apiVersion });
             }
 
-            return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL'] };
+            // EXECUTE_SOQL - Proxy SOQL queries through background script to avoid CORS issues
+            if (is('EXECUTE_SOQL')) {
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+
+                let sessionId = msg?.sessionId || null;
+                let accessToken = msg?.accessToken || null;
+
+                if (!sessionId && !accessToken) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                    accessToken = sess.accessToken || sessionId;
+                }
+
+                if (!sessionId && !accessToken) {
+                    return { success: false, error: 'Salesforce session not found. Please log in.' };
+                }
+
+                const soql = msg?.soql || msg?.query || '';
+                if (!soql) return { success: false, error: 'SOQL query is required.' };
+
+                const apiVersion = msg?.apiVersion || (await getApiVersion());
+                const queryUrl = `${instanceUrl}/services/data/${apiVersion}/query?q=${encodeURIComponent(soql)}`;
+
+                try {
+                    const res = await fetch(queryUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken || sessionId}`,
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    if (!res.ok) {
+                        const txt = await res.text();
+                        let errorMsg = res.statusText;
+                        try {
+                            const json = JSON.parse(txt);
+                            if (Array.isArray(json) && json[0]?.message) {
+                                errorMsg = json[0].message;
+                            }
+                        } catch {}
+                        return { success: false, error: `API ${res.status}: ${errorMsg}` };
+                    }
+
+                    const data = await res.json();
+                    return { success: true, ...data };
+                } catch (fetchErr) {
+                    return { success: false, error: 'Fetch failed: ' + fetchErr.message };
+                }
+            }
+
+            // FETCH_API - Generic API fetch proxy through background script
+            if (is('FETCH_API')) {
+                const rawUrl = sanitizeUrl(msg.instanceUrl) || (sender?.tab?.url ? sanitizeUrl(sender.tab.url) : null) || lastInstanceUrl || (await findSalesforceOrigin());
+                const instanceUrl = normalizeApiBase(rawUrl);
+                if (!instanceUrl) return { success: false, error: 'Instance URL not detected.' };
+
+                let sessionId = msg?.sessionId || null;
+                let accessToken = msg?.accessToken || null;
+
+                if (!sessionId && !accessToken) {
+                    const sess = await getSalesforceSession(instanceUrl);
+                    sessionId = sess.sessionId || null;
+                    accessToken = sess.accessToken || sessionId;
+                }
+
+                if (!sessionId && !accessToken) {
+                    return { success: false, error: 'Salesforce session not found. Please log in.' };
+                }
+
+                const endpoint = msg?.endpoint || '';
+                if (!endpoint) return { success: false, error: 'API endpoint is required.' };
+
+                const apiUrl = endpoint.startsWith('http') ? endpoint : `${instanceUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+                const method = msg?.method || 'GET';
+                const body = msg?.body || null;
+
+                try {
+                    const fetchOpts = {
+                        method,
+                        headers: {
+                            'Authorization': `Bearer ${accessToken || sessionId}`,
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            ...(msg?.headers || {})
+                        }
+                    };
+
+                    if (body && method !== 'GET') {
+                        fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
+                    }
+
+                    const res = await fetch(apiUrl, fetchOpts);
+
+                    if (res.status === 204) {
+                        return { success: true, data: null };
+                    }
+
+                    if (!res.ok) {
+                        const txt = await res.text();
+                        let errorMsg = res.statusText;
+                        try {
+                            const json = JSON.parse(txt);
+                            if (Array.isArray(json) && json[0]?.message) {
+                                errorMsg = json[0].message;
+                            }
+                        } catch {}
+                        return { success: false, error: `API ${res.status}: ${errorMsg}`, status: res.status };
+                    }
+
+                    const contentType = res.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const data = await res.json();
+                        return { success: true, data };
+                    }
+                    const text = await res.text();
+                    return { success: true, data: text };
+                } catch (fetchErr) {
+                    return { success: false, error: 'Fetch failed: ' + fetchErr.message };
+                }
+            }
+
+            return { ok: false, error: 'Unknown action', action: raw, expected: ['GET_SESSION_INFO', 'FETCH_AUDIT_TRAIL', 'EXECUTE_SOQL', 'FETCH_API'] };
         } catch (e) {
             return { success: false, error: String(e) };
         }

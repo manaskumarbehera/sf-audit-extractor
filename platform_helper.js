@@ -1051,6 +1051,37 @@
 
   // --- Generic API Helpers (used by Data Explorer / other tabs) ---
 
+  // Helper to execute SOQL via background script (avoids CORS issues)
+  async function executeQueryViaBackground(soql, apiVersion, instanceUrl, accessToken) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({
+          action: 'EXECUTE_SOQL',
+          soql: soql,
+          apiVersion: `v${apiVersion}`,
+          instanceUrl: instanceUrl,
+          accessToken: accessToken
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || 'Background script error'));
+            return;
+          }
+          if (response && response.success) {
+            // Response contains the query result directly
+            resolve(response);
+          } else if (response && response.records) {
+            // Response is the query result
+            resolve(response);
+          } else {
+            reject(new Error(response?.error || 'Unknown error from background'));
+          }
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   async function genericExecuteQuery(soql) {
     return await withAuthRetry(async () => {
       if (!ensureSession()) throw new Error('Not connected');
@@ -1062,24 +1093,70 @@
       if (!baseUrl || !accessToken) throw new Error('Missing session details');
 
       const url = `${baseUrl}/services/data/v${apiVersion}/query?q=${encodeURIComponent(soql)}`;
-      // Use generic fetch with auth
-      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
 
-      // If unauthorized, throw specific error status so withAuthRetry catches it
-      if (res.status === 401 || res.status === 403) {
-           const err = new Error('Unauthorized');
-           err.status = res.status;
-           throw err; // withAuthRetry catches this
-      }
+      try {
+        // Try direct fetch first
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
 
-      if (!res.ok) {
-          const txt = await res.text();
-          let msg = res.statusText;
-          try { const json = JSON.parse(txt); if (Array.isArray(json) && json[0].message) msg = json[0].message; } catch {}
-          throw new Error(msg);
+        // If unauthorized, throw specific error status so withAuthRetry catches it
+        if (res.status === 401 || res.status === 403) {
+             const err = new Error('Unauthorized');
+             err.status = res.status;
+             throw err; // withAuthRetry catches this
+        }
+
+        if (!res.ok) {
+            const txt = await res.text();
+            let msg = res.statusText;
+            try { const json = JSON.parse(txt); if (Array.isArray(json) && json[0].message) msg = json[0].message; } catch {}
+            throw new Error(msg);
+        }
+        return await res.json();
+      } catch (directFetchError) {
+        // If TypeError (CORS/network issue), try via background script
+        if (directFetchError instanceof TypeError && directFetchError.message.includes('Failed to fetch')) {
+          console.log('[PlatformHelper] Direct fetch failed, trying via background script...');
+          try {
+            return await executeQueryViaBackground(soql, apiVersion, baseUrl, accessToken);
+          } catch (bgError) {
+            // If background also fails, throw the original error for better context
+            throw directFetchError;
+          }
+        }
+        throw directFetchError;
       }
-      return await res.json();
     }, 'SOQL Query');
+  }
+
+  // Helper to fetch API via background script (avoids CORS issues)
+  async function fetchApiViaBackground(endpoint, options, instanceUrl, accessToken) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({
+          action: 'FETCH_API',
+          endpoint: endpoint,
+          method: options.method || 'GET',
+          body: options.body,
+          headers: options.headers,
+          instanceUrl: instanceUrl,
+          accessToken: accessToken
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || 'Background script error'));
+            return;
+          }
+          if (response && response.success) {
+            resolve(response.data);
+          } else {
+            const err = new Error(response?.error || 'Unknown error from background');
+            if (response?.status) err.status = response.status;
+            reject(err);
+          }
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
 
   async function genericFetch(endpoint, options = {}) {
@@ -1101,27 +1178,41 @@
              }
          };
 
-         const res = await fetch(url, fetchOpts);
-         // Handle 204 No Content
-         if (res.status === 204) return null;
+         try {
+           const res = await fetch(url, fetchOpts);
+           // Handle 204 No Content
+           if (res.status === 204) return null;
 
-         // If unauthorized, throw specific error status so withAuthRetry catches it
-         if (res.status === 401 || res.status === 403) {
-             const err = new Error('Unauthorized');
-             err.status = res.status;
-             throw err; // withAuthRetry catches this
+           // If unauthorized, throw specific error status so withAuthRetry catches it
+           if (res.status === 401 || res.status === 403) {
+               const err = new Error('Unauthorized');
+               err.status = res.status;
+               throw err; // withAuthRetry catches this
+           }
+
+           if (!res.ok) {
+               const txt = await res.text();
+               let msg = res.statusText;
+               try { const json = JSON.parse(txt); if (Array.isArray(json) && json[0].message) msg = json[0].message; } catch {}
+               throw new Error(msg);
+           }
+
+           const ctype = res.headers.get('content-type');
+           if (ctype && ctype.includes('application/json')) return await res.json();
+           return await res.text();
+         } catch (directFetchError) {
+           // If TypeError (CORS/network issue), try via background script
+           if (directFetchError instanceof TypeError && directFetchError.message.includes('Failed to fetch')) {
+             console.log('[PlatformHelper] Direct API fetch failed, trying via background script...');
+             try {
+               return await fetchApiViaBackground(endpoint, options, baseUrl, accessToken);
+             } catch (bgError) {
+               // If background also fails, throw the original error for better context
+               throw directFetchError;
+             }
+           }
+           throw directFetchError;
          }
-
-         if (!res.ok) {
-             const txt = await res.text();
-             let msg = res.statusText;
-             try { const json = JSON.parse(txt); if (Array.isArray(json) && json[0].message) msg = json[0].message; } catch {}
-             throw new Error(msg);
-         }
-
-         const ctype = res.headers.get('content-type');
-         if (ctype && ctype.includes('application/json')) return await res.json();
-         return await res.text();
      }, 'API Request');
   }
 

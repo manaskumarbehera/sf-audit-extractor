@@ -1,0 +1,642 @@
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:173:30)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:173:30)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:148:34)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:148:34)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:148:34)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:148:34)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:196:33)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at _next (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at new Promise (<anonymous>)
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34) {
+      type: 'not implemented'
+    }
+
+      194 |         test('should update preview canvas after save', async () => {
+      195 |             const preview = document.getElementById('favicon-preview');
+    > 196 |             const ctx = preview.getContext('2d');
+          |                                 ^
+      197 |             const clearSpy = jest.spyOn(ctx, 'fillRect');
+      198 |
+      199 |             await mockDataExplorer.applyFaviconWithValues('#ff6b6b', 'PROD', 'circle');
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at getContext (tests/favicon_application.test.js:196:33)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at _next (tests/favicon_application.test.js:2:1)
+      at Object.<anonymous> (tests/favicon_application.test.js:2:1)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:148:34)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:148:34)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:271:30)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:271:30)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:89:22)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreviewRadio] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreviewRadio (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:277:30)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:89:22)
+      at Object.updateFaviconPreviewRadio (tests/favicon_application.test.js:277:30)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:111:22)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as resetFavicon] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.resetFavicon (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:283:30)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:111:22)
+      at Object.resetFavicon (tests/favicon_application.test.js:283:30)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:148:34)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:148:34)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:148:34)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:148:34)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  console.error
+    Error: Not implemented: HTMLCanvasElement.prototype.getContext (without installing the canvas npm package)
+        at module.exports (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+        at HTMLCanvasElementImpl.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+        at HTMLCanvasElement.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+        at Object.getContext (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:82:41)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:305:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:312:13)
+        at Object.mockConstructor [as updateFaviconPreview] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:102:19)
+        at Object.updateFaviconPreview (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:148:34)
+        at Generator.call (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at Generator._invoke [as next] (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at asyncGeneratorStep (/Users/manas/IdeaProjects/sf-audit-extractor/tests/favicon_application.test.js:2:1)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      type: 'not implemented'
+    }
+
+      80 |                 const preview = document.getElementById(`favicon-preview${suffix}`);
+      81 |                 if (preview && preview.getContext) {
+    > 82 |                     const ctx = preview.getContext('2d');
+         |                                         ^
+      83 |                     ctx.fillStyle = color;
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+
+      at VirtualConsole.<anonymous> (node_modules/@jest/environment-jsdom-abstract/build/index.js:87:23)
+      at module.exports (node_modules/jsdom/lib/jsdom/browser/not-implemented.js:12:26)
+      at HTMLCanvasElementImpl.getContext (node_modules/jsdom/lib/jsdom/living/nodes/HTMLCanvasElement-impl.js:42:5)
+      at HTMLCanvasElement.getContext (node_modules/jsdom/lib/jsdom/living/generated/HTMLCanvasElement.js:131:58)
+      at Object.getContext (tests/favicon_application.test.js:82:41)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:148:34)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+FAIL tests/favicon_application.test.js
+  Favicon Application and Reactivity
+    Favicon Save and UI Update
+      ✕ should update preview immediately when color is changed (20 ms)
+      ✕ should show success message after saving favicon (8 ms)
+      ✓ should refresh saved favicons list after save (4 ms)
+      ✕ should update preview canvas after save (6 ms)
+      ✕ should clear editing state after successful save (3 ms)
+    Favicon Status Display
+      ✓ should display success status message (2 ms)
+      ✓ should display error status message (2 ms)
+      ✕ should update both status elements if present (1 ms)
+    Favicon Shape Selection
+      ✓ should get selected shape from form (2 ms)
+      ✓ should set selected shape in form (1 ms)
+    Multi-Suffix Support
+      ✕ should handle favicon preview for Settings tab (no suffix) (2 ms)
+      ✕ should handle favicon preview for Data Explorer tab (-data suffix) (3 ms)
+      ✕ should reset favicon for both tabs (4 ms)
+    Chrome Storage Integration
+      ✓ should save favicon to chrome storage (2 ms)
+      ✓ should retrieve saved favicons from chrome storage (3 ms)
+    Favicon Reaction Chain
+      ✕ complete flow: change color → update preview → save → refresh list → show status (3 ms)
+
+  ● Favicon Application and Reactivity › Favicon Save and UI Update › should update preview immediately when color is changed
+
+    TypeError: Cannot set properties of null (setting 'fillStyle')
+
+      81 |                 if (preview && preview.getContext) {
+      82 |                     const ctx = preview.getContext('2d');
+    > 83 |                     ctx.fillStyle = color;
+         |                                  ^
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+      86 |             }),
+
+      at Object.<anonymous> (tests/favicon_application.test.js:83:34)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:173:30)
+
+  ● Favicon Application and Reactivity › Favicon Save and UI Update › should show success message after saving favicon
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      179 |             const result = await mockDataExplorer.applyFaviconWithValues('#ff6b6b', 'PROD', 'circle');
+      180 |
+    > 181 |             expect(result).toBe(true);
+          |                            ^
+      182 |             expect(mockDataExplorer.showFaviconStatus).toHaveBeenCalledWith(
+      183 |                 'Favicon saved & applied!',
+      184 |                 'success'
+
+      at toBe (tests/favicon_application.test.js:181:28)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  ● Favicon Application and Reactivity › Favicon Save and UI Update › should update preview canvas after save
+
+    Cannot use spyOn on a primitive value; null given
+
+      195 |             const preview = document.getElementById('favicon-preview');
+      196 |             const ctx = preview.getContext('2d');
+    > 197 |             const clearSpy = jest.spyOn(ctx, 'fillRect');
+          |                                   ^
+      198 |
+      199 |             await mockDataExplorer.applyFaviconWithValues('#ff6b6b', 'PROD', 'circle');
+      200 |
+
+      at ModuleMocker.spyOn (node_modules/@jest/environment-jsdom-abstract/node_modules/jest-mock/build/index.js:583:13)
+      at spyOn (tests/favicon_application.test.js:197:35)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at _next (tests/favicon_application.test.js:2:1)
+      at Object.<anonymous> (tests/favicon_application.test.js:2:1)
+
+  ● Favicon Application and Reactivity › Favicon Save and UI Update › should clear editing state after successful save
+
+    expect(received).toBeNull()
+
+    Received: "another-org"
+
+      208 |             await mockDataExplorer.applyFaviconWithValues('#ff6b6b', 'TEST', 'circle');
+      209 |
+    > 210 |             expect(mockDataExplorer._editingOrgId).toBeNull();
+          |                                                    ^
+      211 |         });
+      212 |     });
+      213 |
+
+      at toBeNull (tests/favicon_application.test.js:210:52)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+  ● Favicon Application and Reactivity › Favicon Status Display › should update both status elements if present
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "Test message"
+    Received: ""
+
+      239 |             // Both should be updated
+      240 |             if (status1) expect(status1.textContent).toBe('Test message');
+    > 241 |             if (status2) expect(status2.textContent).toBe('Test message');
+          |                                                      ^
+      242 |         });
+      243 |     });
+      244 |
+
+      at Object.toBe (tests/favicon_application.test.js:241:54)
+
+  ● Favicon Application and Reactivity › Multi-Suffix Support › should handle favicon preview for Settings tab (no suffix)
+
+    TypeError: Cannot set properties of null (setting 'fillStyle')
+
+      81 |                 if (preview && preview.getContext) {
+      82 |                     const ctx = preview.getContext('2d');
+    > 83 |                     ctx.fillStyle = color;
+         |                                  ^
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+      86 |             }),
+
+      at Object.<anonymous> (tests/favicon_application.test.js:83:34)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:271:30)
+
+  ● Favicon Application and Reactivity › Multi-Suffix Support › should handle favicon preview for Data Explorer tab (-data suffix)
+
+    TypeError: Cannot set properties of null (setting 'fillStyle')
+
+      81 |                 if (preview && preview.getContext) {
+      82 |                     const ctx = preview.getContext('2d');
+    > 83 |                     ctx.fillStyle = color;
+         |                                  ^
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+      86 |             }),
+
+      at Object.<anonymous> (tests/favicon_application.test.js:83:34)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:89:22)
+      at Object.updateFaviconPreviewRadio (tests/favicon_application.test.js:277:30)
+
+  ● Favicon Application and Reactivity › Multi-Suffix Support › should reset favicon for both tabs
+
+    TypeError: Cannot set properties of null (setting 'fillStyle')
+
+      81 |                 if (preview && preview.getContext) {
+      82 |                     const ctx = preview.getContext('2d');
+    > 83 |                     ctx.fillStyle = color;
+         |                                  ^
+      84 |                     ctx.fillRect(0, 0, 32, 32);
+      85 |                 }
+      86 |             }),
+
+      at Object.<anonymous> (tests/favicon_application.test.js:83:34)
+      at Object.updateFaviconPreview (tests/favicon_application.test.js:111:22)
+      at Object.resetFavicon (tests/favicon_application.test.js:283:30)
+
+  ● Favicon Application and Reactivity › Favicon Reaction Chain › complete flow: change color → update preview → save → refresh list → show status
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      318 |
+      319 |             // Verify all steps completed
+    > 320 |             expect(success).toBe(true);
+          |                             ^
+      321 |             expect(mockDataExplorer.loadSavedFavicons).toHaveBeenCalled();
+      322 |             expect(mockDataExplorer.updateFaviconPreview).toHaveBeenCalled();
+      323 |             expect(mockDataExplorer.showFaviconStatus).toHaveBeenCalledWith(
+
+      at toBe (tests/favicon_application.test.js:320:29)
+      at Generator.call (tests/favicon_application.test.js:2:1)
+      at Generator._invoke [as next] (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+      at asyncGeneratorStep (tests/favicon_application.test.js:2:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       9 failed, 7 passed, 16 total
+Snapshots:   0 total
+Time:        0.646 s, estimated 1 s
+Ran all test suites matching /tests\/favicon_application.test.js/i.

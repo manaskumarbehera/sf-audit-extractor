@@ -54,8 +54,8 @@ describe('Version Consistency', () => {
         expect(versionNumber).toBeGreaterThanOrEqual(10102);
     });
 
-    test('current version should be 1.1.12', () => {
-        expect(manifestVersion).toBe('1.1.12');
+    test('current version should be 1.1.13', () => {
+        expect(manifestVersion).toBe('1.1.13');
     });
 
     test('build output filename should match manifest version', () => {

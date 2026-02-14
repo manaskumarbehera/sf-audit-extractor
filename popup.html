@@ -36,6 +36,12 @@ File: `popup.html` (replace body content with this)
 
         <div class="tabs-right">
             <h1 id="header-title">Audit Trails</h1>
+            <!-- New Org Detected Notification - Blinking indicator -->
+            <div id="new-org-detected" class="new-org-detected-banner" hidden>
+                <span class="new-org-icon">🆕</span>
+                <span class="new-org-text">New Org Detected!</span>
+                <span class="new-org-action">Click to configure →</span>
+            </div>
             <div id="theme-indicator" class="theme-indicator" title="Current org theme">
                 <span class="theme-dot"></span>
                 <span class="theme-label"></span>
@@ -729,91 +735,203 @@ File: `popup.html` (replace body content with this)
                 </nav>
             </div>
 
-            <!-- Sub-tab: Org & Favicon (Sandbox Manager) -->
+            <!-- Sub-tab: Org & Favicon (Sandbox Manager) - Refactored Layout -->
             <div id="subtab-sandbox-manager" class="sub-tab-content" hidden aria-labelledby="sandbox-manager">
-                <div class="sandbox-favicon-grid">
-                    <!-- Left Column: Organization Info -->
-                    <div class="org-info-card">
-                        <div class="org-card-header">
-                            <span class="org-card-icon">🏢</span>
-                            <h3 class="org-card-title">Organization Info</h3>
-                            <button id="refresh-org-btn-data" class="icon-btn btn-sm" aria-label="Refresh" title="Refresh">⟲</button>
+                <div class="org-favicon-grid-v5">
+                    <!-- Column 1: Org List (compact) -->
+                    <div class="org-list-col-v5">
+                        <div class="col-header-v5">
+                            <span>Saved Orgs</span>
+                            <button id="add-current-org-btn" class="btn-add-v5" title="Add Current Org">+</button>
                         </div>
-                        <div id="org-info-container-data" class="org-details-grid">
-                            <div class="spinner">Loading organization info...</div>
+                        <input type="text" id="org-search-input" class="search-input-v5" placeholder="Search orgs..." aria-label="Search organizations" />
+                        <div id="saved-orgs-list" class="org-list-scroll-v5">
+                            <div class="empty-minimal-v5">No orgs saved yet</div>
                         </div>
                     </div>
 
-                    <!-- Right Column: Saved Favicons & Favicon Customization -->
-                    <div class="favicon-panels-container">
-                        <!-- Saved Org Favicons -->
-                        <div class="favicon-saved-card">
-                            <div class="org-card-header">
-                                <span class="org-card-icon">💾</span>
-                                <h3 class="org-card-title">Saved Favicons</h3>
-                            </div>
-                            <div class="favicon-card-body">
-                                <div id="saved-favicons-list-data" class="saved-favicons-list-compact">
-                                    <div class="placeholder-note">No saved favicons yet</div>
-                                </div>
+                    <!-- Column 2: Editor (main) -->
+                    <div class="editor-col-v5">
+                        <!-- Compact Header: Name + Badge + Live indicator -->
+                        <div class="editor-header-v5">
+                            <span id="editing-org-name" class="org-name-display-v5">—</span>
+                            <span id="org-env-badge" class="env-badge-v5"></span>
+                            <span id="live-indicator" class="live-badge-v5" hidden><span class="pulse-v5"></span>Currently Active</span>
+                        </div>
+
+                        <!-- Empty state (hidden when org selected) -->
+                        <div id="no-org-selected-state" class="empty-center-v5">
+                            <div class="empty-state-content">
+                                <span class="empty-icon">🏢</span>
+                                <span class="empty-hint-v5">Select an org from the list to customize its favicon</span>
+                                <button id="add-current-org-hero-btn" class="btn btn-primary btn-sm" style="margin-top: 12px;">+ Add Current Org</button>
                             </div>
                         </div>
 
-                        <!-- Favicon Customization - Redesigned -->
-                        <div class="favicon-customize-card">
-                            <div class="org-card-header">
-                                <span class="org-card-icon">🎨</span>
-                                <h3 class="org-card-title">Customize Favicon</h3>
+                        <!-- Editor Panel (shown when org selected) -->
+                        <div id="icon-editor-panel" class="editor-panel-v5" hidden>
+                            <!-- Enhanced Side-by-side previews with integated BG toggle -->
+                            <div class="preview-section-v5">
+                                <div class="preview-row-v5">
+                                    <div class="preview-box-v5 preview-live-v5" id="preview-card-live">
+                                        <div class="preview-label-v5">Current</div>
+                                        <div class="preview-container-v5">
+                                            <div class="preview-canvas-v5">
+                                                <canvas id="favicon-applied-preview" width="32" height="32"></canvas>
+                                            </div>
+                                            <div class="preview-badge-v5 badge-live">LIVE</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Controls moved inline/hidden by CSS -->
+
+                                    <div class="preview-box-v5 preview-edit-v5" id="preview-card-draft">
+                                        <div class="preview-label-v5">Editing</div>
+                                        <div class="preview-container-v5">
+                                            <div class="preview-canvas-v5">
+                                                <canvas id="favicon-preview-data" width="32" height="32"></canvas>
+                                            </div>
+                                            <div class="preview-badge-v5 badge-draft" id="preview-draft-badge">DRAFT</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="preview-org-name-v5" id="preview-draft-org-name">—</div>
                             </div>
-                            <div class="favicon-card-body">
-                                <!-- Org Selector -->
-                                <div class="favicon-org-selector">
-                                    <select id="favicon-org-select-data" class="form-select">
-                                        <option value="current">Current Org</option>
-                                    </select>
-                                </div>
 
-                                <!-- Editor Layout: Preview + Controls -->
-                                <div class="favicon-editor-layout">
-                                    <!-- Large Preview -->
-                                    <div class="favicon-preview-box">
-                                        <canvas id="favicon-preview-data" width="32" height="32"></canvas>
+                            <!-- Environment Type Section -->
+                            <div class="editor-section-v5">
+                                <div class="section-label-v5">Environment Type</div>
+                                <div id="preset-chips" class="env-segmented-control-v5">
+                                    <button type="button" class="env-btn-v5" data-preset="DEV" data-color="#339af0" data-label="DEV">DEV</button>
+                                    <button type="button" class="env-btn-v5" data-preset="UAT" data-color="#ffa500" data-label="UAT">UAT</button>
+                                    <button type="button" class="env-btn-v5 env-prod" data-preset="PROD" data-color="#e03131" data-label="PRD">PROD</button>
+                                    <button type="button" class="env-btn-v5" data-preset="QA" data-color="#9775fa" data-label="QA">QA</button>
+                                    <button type="button" class="env-btn-v5" data-preset="TRN" data-color="#20c997" data-label="TRN">TRN</button>
+                                    <button type="button" class="env-btn-v5" data-preset="SBX" data-color="#ff6b6b" data-label="SBX">SBX</button>
+                                </div>
+                            </div>
+
+                            <!-- Color Picker Section (single row) -->
+                            <div class="color-section-v5">
+                                <span class="section-label-v5">Tab Color</span>
+                                <input type="color" id="favicon-color-data" value="#ff6b6b" class="color-picker-v5" title="Custom Color" />
+                                <div id="favicon-color-presets-data" class="swatches-v5">
+                                    <button type="button" class="swatch-v5" data-color="#e03131" style="background:#e03131" title="Red"></button>
+                                    <button type="button" class="swatch-v5" data-color="#ff6b6b" style="background:#ff6b6b" title="Coral"></button>
+                                    <button type="button" class="swatch-v5" data-color="#ffa500" style="background:#ffa500" title="Orange"></button>
+                                    <button type="button" class="swatch-v5" data-color="#ffd43b" style="background:#ffd43b" title="Yellow"></button>
+                                    <button type="button" class="swatch-v5" data-color="#51cf66" style="background:#51cf66" title="Green"></button>
+                                    <button type="button" class="swatch-v5" data-color="#20c997" style="background:#20c997" title="Teal"></button>
+                                    <button type="button" class="swatch-v5" data-color="#339af0" style="background:#339af0" title="Blue"></button>
+                                    <button type="button" class="swatch-v5" data-color="#9775fa" style="background:#9775fa" title="Purple"></button>
+                                </div>
+                            </div>
+
+                            <!-- Icon Shape Section (single row) -->
+                            <div class="shape-section-v5">
+                                <span class="section-label-v5">Shape</span>
+                                <div id="favicon-shape-options-data" class="shapes-v5">
+                                    <label class="shape-opt-v5"><input type="radio" name="favicon-shape-data" value="circle" checked /><span title="Circle">●</span></label>
+                                    <label class="shape-opt-v5"><input type="radio" name="favicon-shape-data" value="square" /><span title="Square">■</span></label>
+                                    <label class="shape-opt-v5"><input type="radio" name="favicon-shape-data" value="rounded" /><span title="Rounded Square">▢</span></label>
+                                    <label class="shape-opt-v5"><input type="radio" name="favicon-shape-data" value="diamond" /><span title="Diamond">◆</span></label>
+                                    <label class="shape-opt-v5"><input type="radio" name="favicon-shape-data" value="hexagon" /><span title="Hexagon">⬡</span></label>
+                                </div>
+                            </div>
+
+                            <!-- Label Input Section (single row) -->
+                            <div class="label-section-v5">
+                                <span class="section-label-v5">Badge Label</span>
+                                <input type="text" id="favicon-label-data" maxlength="3" placeholder="DEV" class="input-label-v5" />
+                                <span class="label-hint-v5">Max 3 chars</span>
+                                <label class="apply-all-v5">
+                                    <input type="checkbox" id="apply-all-tabs-toggle" />
+                                    <span>Apply to all tabs</span>
+                                </label>
+                            </div>
+
+                            <!-- New Location: Preview BG Controls -->
+                            <div class="bg-section-inline-v5">
+                                <span class="section-label-v5">Preview BG</span>
+                                <div class="preview-bg-controls-inline">
+                                    <button type="button" id="preview-bg-light" class="bg-btn-icon-inline active" title="Light Background">☀️</button>
+                                    <button type="button" id="preview-bg-dark" class="bg-btn-icon-inline" title="Dark Background">🌙</button>
+                                </div>
+                            </div>
+
+
+                            <!-- Action Bar -->
+                            <div class="actions-row-v5">
+                                <button id="reset-favicon-btn-data" class="btn-v5 btn-secondary-v5">Reset to Default</button>
+                                <button id="save-org-icon-btn" class="btn-v5 btn-primary-v5" disabled>Save & Apply</button>
+                            </div>
+
+                            <!-- Status Message (inline feedback) -->
+                            <div id="favicon-status-data" class="status-msg-v5" hidden></div>
+                        </div>
+
+                        <!-- Unsaved indicator (subtle) -->
+                        <div id="unsaved-changes-banner" class="unsaved-strip-v5" hidden>
+                            <span class="unsaved-dot-v5"></span>
+                            <span>You have unsaved changes</span>
+                            <button type="button" id="banner-save-btn" class="btn-xs-v5">Save Now</button>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Org Details Card -->
+                    <div class="info-col-v5">
+                        <div class="org-details-card-v5">
+                            <div class="org-card-header-v5">
+                                <span class="org-card-icon-v5">🏢</span>
+                                <span class="org-card-title-v5">Org Details</span>
+                                <button id="refresh-org-btn-data" class="btn-icon-v5" title="Refresh">⟲</button>
+                            </div>
+                            <div id="org-info-container-data" class="org-card-body-v5">
+                                <div class="info-row-v5">
+                                    <span class="info-icon-v5">📛</span>
+                                    <span class="info-key-v5">Name</span>
+                                    <span class="info-val-v5" id="summary-org-name">—</span>
+                                </div>
+                                <div class="info-row-v5">
+                                    <span class="info-icon-v5">🏷️</span>
+                                    <span class="info-key-v5">Type</span>
+                                    <span class="info-val-v5" id="summary-org-type">—</span>
+                                </div>
+                                <div class="info-row-v5">
+                                    <span class="info-icon-v5">🌐</span>
+                                    <span class="info-key-v5">Instance</span>
+                                    <span class="info-val-v5" id="summary-instance">—</span>
+                                </div>
+                                <div class="info-row-v5">
+                                    <span class="info-icon-v5">⚡</span>
+                                    <span class="info-key-v5">API</span>
+                                    <span class="info-val-v5" id="summary-api-version">—</span>
+                                </div>
+                                <div class="info-row-v5">
+                                    <span class="info-icon-v5">🌍</span>
+                                    <span class="info-key-v5">Locale</span>
+                                    <span class="info-val-v5" id="summary-locale">—</span>
+                                </div>
+                                <div id="org-info-expanded" class="info-extra-v5" hidden>
+                                    <div class="info-row-v5">
+                                        <span class="info-icon-v5">🆔</span>
+                                        <span class="info-key-v5">Org ID</span>
+                                        <span class="info-val-v5" id="summary-org-id">—</span>
                                     </div>
-
-                                    <!-- Controls -->
-                                    <div class="favicon-editor-controls">
-                                        <!-- Color + Label Row -->
-                                        <div class="favicon-inputs-grid">
-                                            <input type="color" id="favicon-color-data" value="#ff6b6b" title="Pick color" />
-                                            <input type="text" id="favicon-label-data" maxlength="3" placeholder="DEV" />
-                                        </div>
-
-                                        <!-- Color Presets -->
-                                        <div id="favicon-color-presets-data" class="favicon-color-presets">
-                                            <button type="button" class="color-preset" data-color="#ff6b6b" title="Red" style="background:#ff6b6b;"></button>
-                                            <button type="button" class="color-preset" data-color="#ffa500" title="Orange" style="background:#ffa500;"></button>
-                                            <button type="button" class="color-preset" data-color="#ffd43b" title="Yellow" style="background:#ffd43b;"></button>
-                                            <button type="button" class="color-preset" data-color="#51cf66" title="Green" style="background:#51cf66;"></button>
-                                            <button type="button" class="color-preset" data-color="#339af0" title="Blue" style="background:#339af0;"></button>
-                                            <button type="button" class="color-preset" data-color="#9775fa" title="Purple" style="background:#9775fa;"></button>
-                                        </div>
-
-                                        <!-- Shape Options -->
-                                        <div id="favicon-shape-options-data" class="favicon-shapes-grid">
-                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="circle" checked /><span title="Circle">●</span></label>
-                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="square" /><span title="Square">■</span></label>
-                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="rounded" /><span title="Rounded">▢</span></label>
-                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="diamond" /><span title="Diamond">◆</span></label>
-                                            <label class="shape-opt"><input type="radio" name="favicon-shape-data" value="hexagon" /><span title="Hexagon">⬡</span></label>
-                                        </div>
+                                    <div class="info-row-v5">
+                                        <span class="info-icon-v5">📅</span>
+                                        <span class="info-key-v5">Created</span>
+                                        <span class="info-val-v5" id="summary-created">—</span>
+                                    </div>
+                                    <div class="info-row-v5">
+                                        <span class="info-icon-v5">👁️</span>
+                                        <span class="info-key-v5">Last Seen</span>
+                                        <span class="info-val-v5" id="summary-last-seen">—</span>
                                     </div>
                                 </div>
-
-                                <!-- Action Buttons -->
-                                <div class="favicon-btn-row">
-                                    <button id="apply-favicon-btn-data" class="btn btn-primary">✓ Apply</button>
-                                    <button id="reset-favicon-btn-data" class="btn btn-secondary">↺ Reset</button>
-                                </div>
+                            </div>
+                            <div class="org-card-footer-v5">
+                                <button type="button" id="show-more-org-info" class="btn-link-v5">Show More ▾</button>
                             </div>
                         </div>
                     </div>
@@ -1161,6 +1279,81 @@ File: `popup.html` (replace body content with this)
                         </div>
                     </div>
                 </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title">📏 Layout Widths (Org & Favicon)</h3>
+                    <p class="settings-note">Adjust column sizes. The middle column (Editor) automatically fills remaining space.</p>
+
+                    <!-- Visual Preview -->
+                    <div id="layout-preview-box" style="
+                        display: flex;
+                        height: 60px;
+                        border: 1px solid var(--border-color);
+                        border-radius: 6px;
+                        margin-bottom: 12px;
+                        overflow: hidden;
+                        font-size: 11px;
+                        font-weight: 500;
+                        text-align: center;
+                        color: #555;
+                    ">
+                        <div id="preview-col-saved" style="background: #e3fafc; border-right: 1px solid #dee2e6; padding-top: 20px; transition: width 0.1s;">Saved Orgs</div>
+                        <div id="preview-col-editor" style="background: #fff; flex: 1; padding-top: 20px;">Editor</div>
+                        <div id="preview-col-org" style="background: #f8f9fa; border-left: 1px solid #dee2e6; padding-top: 20px; transition: width 0.1s;">Org Info</div>
+                    </div>
+
+                    <div class="settings-grid settings-widths-grid" style="grid-template-columns: 1fr; gap: 12px;">
+                        <div class="setting-item width-setting" style="display: grid; grid-template-columns: 100px 1fr 40px; align-items: center; gap: 8px;">
+                            <label class="setting-label">Saved Orgs</label>
+                            <input type="range" id="setting-width-saved" min="15" max="60" value="25" step="1" />
+                            <span class="range-val" id="val-width-saved">25%</span>
+                        </div>
+                        <div class="setting-item width-setting" style="display: grid; grid-template-columns: 100px 1fr 40px; align-items: center; gap: 8px;">
+                            <label class="setting-label">Org Info</label>
+                            <input type="range" id="setting-width-org" min="15" max="40" value="20" step="1" />
+                            <span class="range-val" id="val-width-org">20%</span>
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                             <button id="btn-reset-widths" class="btn btn-secondary btn-xs">Reset to Defaults</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3 class="settings-section-title">📏 Layout Widths (User Manager)</h3>
+                    <p class="settings-note">Adjust the left column size. The right column fills remaining space.</p>
+
+                    <!-- Visual Preview -->
+                    <div id="layout-preview-box-user" style="
+                        display: flex;
+                        height: 60px;
+                        border: 1px solid var(--border-color);
+                        border-radius: 6px;
+                        margin-bottom: 12px;
+                        overflow: hidden;
+                        font-size: 11px;
+                        font-weight: 500;
+                        text-align: center;
+                        color: #555;
+                    ">
+                        <div id="preview-col-user-left" style="background: #e3fafc; border-right: 1px solid #dee2e6; padding-top: 20px; transition: width 0.1s;">Current User</div>
+                        <div id="preview-col-user-right" style="background: #fff; flex: 1; padding-top: 20px;">Manager Panels</div>
+                    </div>
+
+                    <div class="settings-grid settings-widths-grid" style="grid-template-columns: 1fr; gap: 12px;">
+                        <div class="setting-item width-setting" style="display: grid; grid-template-columns: 100px 1fr 40px; align-items: center; gap: 8px;">
+                            <label class="setting-label">Left Col</label>
+                            <input type="range" id="setting-width-user-left" min="20" max="60" value="35" step="1" />
+                            <span class="range-val" id="val-width-user-left">35%</span>
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                             <button id="btn-reset-widths-user" class="btn btn-secondary btn-xs">Reset to Defaults</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="settings-section">
                     <h3 class="settings-section-title">📋 Feature Visibility</h3>
                     <p class="settings-note">Toggle tabs on/off based on your workflow</p>
@@ -1179,7 +1372,7 @@ File: `popup.html` (replace body content with this)
                         </div>
                         <div class="about-title-section">
                             <h2 class="about-title">TrackForcePro</h2>
-                            <span class="about-version">Version 1.1.12</span>
+                            <span class="about-version">Version 1.1.13</span>
                             <p class="about-tagline">⚡ Your Salesforce Development & Admin Companion</p>
                         </div>
                     </div>
@@ -1312,7 +1505,7 @@ File: `popup.html` (replace body content with this)
                         </div>
                         <div class="about-title-section">
                             <h2 class="about-title">TrackForcePro</h2>
-                            <span class="about-version">Version 1.1.12</span>
+                            <span class="about-version">Version 1.1.13</span>
                             <p class="about-tagline">⚡ Your Salesforce Development & Admin Companion</p>
                         </div>
                     </div>
@@ -1448,9 +1641,8 @@ File: `popup.html` (replace body content with this)
 <script src="graphql_helper.js"></script>
 <script src="data_explorer_helper.js"></script>
 <script src="settings_helper.js"></script>
+<script src="layout_settings.js"></script>
 <script type="module" src="popup.js"></script>
 </body>
 </html>
-
-
 

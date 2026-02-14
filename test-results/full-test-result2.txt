@@ -1,0 +1,3242 @@
+  console.log
+    Data Explorer tests loaded
+
+      at Object.log (tests/data_explorer.test.js:3702:9)
+
+  console.log
+    [TrackForcePro] declarativeContent API not available, using fallback
+
+      at log (background.js:37:21)
+
+PASS tests/data_explorer.test.js
+  Favicon Storage Tests
+    Multiple Org Favicon Storage
+      ✓ should store favicon for a single org (7 ms)
+      ✓ should store multiple org favicons without overwriting (1 ms)
+      ✓ should update existing org favicon without affecting others
+      ✓ should delete specific org favicon without affecting others (1 ms)
+    Favicon Data Validation
+      ✓ should store complete favicon data structure
+      ✓ should handle empty label
+      ✓ should handle special characters in org name
+  Organization ID Validation
+    ✓ should validate 15-character org ID
+    ✓ should validate 18-character org ID
+    ✓ should reject invalid org IDs (1 ms)
+  Salesforce URL Detection
+    ✓ should detect lightning URLs
+    ✓ should detect classic URLs
+    ✓ should detect setup URLs
+    ✓ should reject non-Salesforce URLs
+    ✓ should handle invalid URLs (1 ms)
+  Favicon Color Presets
+    ✓ should have valid hex color codes
+    ✓ should have unique color values
+    ✓ should have exactly 6 preset colors
+    ✓ should have descriptive names for each preset (53 ms)
+    Preset Color Selection
+      ✓ should identify preset colors correctly (11 ms)
+      ✓ should be case-insensitive for preset matching
+      ✓ should return false for non-preset colors (1 ms)
+      ✓ should get preset name by color
+      ✓ should return null for unknown color names (10 ms)
+      ✓ should handle case-insensitive color name lookup
+    Preset Color UI
+      ✓ preset buttons should have correct data attributes
+      ✓ selecting preset should update color input value
+      ✓ color input change should update preset selection (1 ms)
+    Preset Color Suggestions
+      ✓ Production orgs should suggest red color
+      ✓ Sandbox orgs should suggest green color
+    Preset Storage Integration
+      ✓ should store preset color in favicon data
+      ✓ should preserve preset color when loading saved favicon
+  Tab Filtering for Favicon Application
+    ✓ should filter Salesforce tabs correctly (1 ms)
+    ✓ should exclude extension pages
+  Record ID Extraction
+    ✓ should extract ID from Lightning record URL
+    ✓ should extract ID from query parameter
+    ✓ should return null for URL without ID
+    ✓ should extract 15-character ID
+    ✓ should handle query param with additional params
+    ✓ should reject IDs with invalid length (1 ms)
+  User Search Functionality
+    ✓ should escape special characters in search term
+    ✓ should build correct SOQL query for user search (1 ms)
+  Language Locale Keys
+    ✓ should have valid locale key format (1 ms)
+    ✓ should have unique values (2 ms)
+  Canvas Drawing for Favicon
+    ✓ should create canvas with correct dimensions
+    ✓ should get 2D context
+  Organization Info Display
+    ✓ should format sandbox status badge correctly
+    ✓ should format production status badge correctly
+    ✓ should format date correctly (38 ms)
+  Error Handling
+    ✓ should handle storage get failure gracefully
+    ✓ should handle missing org ID
+  Session State Handling
+    ✓ should detect not-connected state when session is null
+    ✓ should detect not-connected state when isLoggedIn is false (1 ms)
+    ✓ should detect connected state when isLoggedIn is true
+    ✓ should show not-connected message structure
+    ✓ should handle session with userId but no isLoggedIn
+  Extension Page Filtering
+    ✓ should identify extension URLs
+    ✓ should exclude extension pages from Salesforce tab list
+    ✓ should not attempt to message extension pages
+    ✓ should find active Salesforce tab when popup is standalone
+  Content Script Connection Errors
+    ✓ should identify "Could not establish connection" error
+    ✓ should handle sendMessage rejection gracefully (1 ms)
+    ✓ should provide fallback when content script unavailable
+    ✓ should show success message even when live update fails
+  Favicon Status Messages
+    ✓ should show appropriate message for different scenarios
+    ✓ should include org name when deleting favicon
+    Success Messages
+      ✓ should show saved & applied message
+      ✓ should show pending application message (1 ms)
+      ✓ should show removal confirmation
+      ✓ should show saved & applied message
+      ✓ should show pending application message
+      ✓ should show removal confirmation
+      ✓ should show saved & applied message (1 ms)
+      ✓ should show pending application message
+      ✓ should show removal confirmation
+      ✓ should show saved & applied message
+      ✓ should show pending application message
+      ✓ should show removal confirmation
+    Error Messages
+      ✓ should show org detection error
+      ✓ should format error with details
+      ✓ should show org detection error
+      ✓ should format error with details
+      ✓ should show org detection error
+      ✓ should format error with details
+      ✓ should show org detection error (1 ms)
+      ✓ should format error with details
+    Status Display Behavior
+      ✓ should auto-hide status after timeout (1 ms)
+      ✓ should auto-hide status after timeout (47 ms)
+      ✓ should auto-hide status after timeout
+      ✓ should auto-hide status after timeout
+  API Call Error Handling
+    ✓ should handle "Not connected" error from PlatformHelper
+    ✓ should differentiate connection errors from API errors
+  Saved Favicons Loading Without Connection
+    ✓ should load saved favicons even when not connected (1 ms)
+    ✓ should show saved favicons list regardless of connection
+  Org ID Storage Key Handling
+    ✓ should use org ID as unique key
+    ✓ should not overwrite when adding new org
+    ✓ should handle typeof check for storage object
+  Favicon Edit Mode Tests
+    loadExistingFaviconOrSuggest behavior
+      ✓ should detect existing favicon and enter edit mode
+      ✓ should return empty when no existing favicon for org
+      ✓ should auto-suggest SBX for sandbox when no existing favicon
+      ✓ should not auto-suggest for production when no existing favicon (2 ms)
+      ✓ should preserve existing label when editing (not auto-suggest)
+      ✓ should populate both color and label from existing favicon
+      ✓ should handle empty storage gracefully
+      ✓ should handle null orgFavicons in storage (1 ms)
+    Edit indicator display logic
+      ✓ should show edit indicator when existing favicon found
+      ✓ should hide edit indicator for new favicon
+  Favicon Shape Tests
+    Shape Storage
+      ✓ should store favicon with shape property
+      ✓ should store different shapes for different orgs
+      ✓ should default to cloud shape for favicons without shape property
+    Shape Validation
+      ✓ should accept valid shape: cloud
+      ✓ should accept valid shape: circle
+      ✓ should accept valid shape: square
+      ✓ should accept valid shape: rounded (1 ms)
+      ✓ should accept valid shape: diamond
+      ✓ should accept valid shape: hexagon
+      ✓ should have exactly 6 valid shapes
+      ✓ should reject invalid shape value by using default
+    Shape Drawing Functions
+      ✓ should call arc for circle shape
+      ✓ should call fillRect for square shape
+      ✓ should call quadraticCurveTo for rounded shape (1 ms)
+      ✓ should call lineTo for diamond shape
+      ✓ should call lineTo 6 times for hexagon shape
+      ✓ should draw label text on shape
+      ✓ should truncate label to 3 characters
+      ✓ should draw cloud shape with multiple arcs (1 ms)
+      ✓ should set correct fill color
+      ✓ should handle empty label without drawing text
+      ✓ should uppercase label before drawing
+    Shape Migration/Backwards Compatibility
+      ✓ should handle favicon data without shape field
+      ✓ should preserve existing shape when updating other fields
+      ✓ should migrate legacy favicons on load (1 ms)
+    Shape with Different Colors
+      ✓ should render cloud shape correctly
+      ✓ should render circle shape correctly
+      ✓ should render square shape correctly
+      ✓ should render rounded shape correctly
+      ✓ should render diamond shape correctly
+      ✓ should render hexagon shape correctly
+      ✓ should accept color #ff6b6b
+      ✓ should accept color #51cf66
+      ✓ should accept color #339af0
+      ✓ should accept color #fcc419
+      ✓ should accept color #9775fa
+      ✓ should accept color #ff922b
+      ✓ should combine any shape with any color (2 ms)
+    Shape Canvas Coordinates
+      ✓ circle should be centered at (16, 16) with radius 14
+      ✓ square should have 2px padding from edges (1 ms)
+      ✓ diamond points should be symmetric
+      ✓ hexagon should have 6 vertices (1 ms)
+  Advanced Favicon Features
+    Favicon Hostname Association
+      ✓ should store hostname with favicon
+      ✓ should match favicon by hostname when org ID unavailable
+      ✓ should extract base org from hostname
+    Favicon Timestamp Tracking
+      ✓ should store savedAt timestamp (1 ms)
+      ✓ should update savedAt on modification
+    Multiple Tab Favicon Application
+      ✓ should filter Salesforce tabs from all tabs
+      ✓ should prefer active Salesforce tab
+  User Manager Extended Tests
+    User Search Query Building
+      ✓ should build SOQL query for name search
+      ✓ should escape single quotes in search term
+      ✓ should handle empty search term
+      ✓ should trim whitespace from search term
+    User Profile Selection
+      ✓ should load profiles for dropdown (1 ms)
+      ✓ should validate profile ID format
+    User Role Selection
+      ✓ should include "No Role" option
+      ✓ should sort roles alphabetically (1 ms)
+    User Update Validation
+      ✓ should require user selection before update
+      ✓ should validate user ID format
+  Record Search Extended Tests
+    Record ID Validation
+      ✓ should identify 500 prefix as Case
+      ✓ should identify 001 prefix as Account
+      ✓ should identify 003 prefix as Contact (1 ms)
+      ✓ should identify 006 prefix as Opportunity
+      ✓ should identify 00Q prefix as Lead
+      ✓ should identify 00D prefix as Organization
+      ✓ should accept 15-character record ID
+      ✓ should accept 18-character record ID
+      ✓ should reject invalid record IDs
+    URL Record ID Extraction
+      ✓ should extract ID from Lightning record URL
+      ✓ should extract ID from Lightning with custom object
+      ✓ should extract ID from Lightning edit URL
+      ✓ should extract ID from Lightning related list URL (1 ms)
+      ✓ should extract ID from sObject URL pattern
+      ✓ should extract ID from query parameter
+      ✓ should extract ID from recordId query parameter
+      ✓ should extract 15-char ID from Classic URL
+      ✓ should extract 18-char ID from Classic URL
+      ✓ should return null for home page
+      ✓ should return null for setup pages
+      ✓ should handle malformed URLs gracefully (1 ms)
+    Object Type Identification
+      ✓ should identify object type from key prefix
+  Organization Info Display Tests
+    Org Type Detection
+      ✓ should identify sandbox org
+      ✓ should identify production org
+      ✓ should format org type with sandbox indicator
+      ✓ should identify sandbox org
+      ✓ should identify production org
+      ✓ should format org type with sandbox indicator
+      ✓ should identify sandbox org
+      ✓ should identify production org
+      ✓ should format org type with sandbox indicator
+      ✓ should identify sandbox org
+      ✓ should identify production org
+      ✓ should format org type with sandbox indicator
+    Instance Name Display
+      ✓ should display instance name
+      ✓ should handle missing instance name
+      ✓ should display instance name (1 ms)
+      ✓ should handle missing instance name
+      ✓ should display instance name
+      ✓ should handle missing instance name
+      ✓ should display instance name
+      ✓ should handle missing instance name
+    Trial Expiration Display
+      ✓ should show trial expiration for trial orgs
+      ✓ should not show trial expiration for non-trial orgs
+      ✓ should format trial expiration date
+      ✓ should show trial expiration for trial orgs
+      ✓ should not show trial expiration for non-trial orgs
+      ✓ should format trial expiration date
+      ✓ should show trial expiration for trial orgs
+      ✓ should not show trial expiration for non-trial orgs
+      ✓ should format trial expiration date
+      ✓ should show trial expiration for trial orgs
+      ✓ should not show trial expiration for non-trial orgs
+      ✓ should format trial expiration date
+  Chrome Storage Edge Cases
+    Storage Quota Handling
+      ✓ should handle storage quota exceeded
+      ✓ should handle storage quota exceeded (11 ms)
+      ✓ should handle storage quota exceeded
+      ✓ should handle storage quota exceeded
+    Concurrent Storage Access
+      ✓ should handle concurrent reads
+      ✓ should handle concurrent reads
+      ✓ should handle concurrent reads (1 ms)
+      ✓ should handle concurrent reads
+    Storage Data Integrity
+      ✓ should preserve data structure on read/write cycle
+      ✓ should preserve data structure on read/write cycle
+      ✓ should preserve data structure on read/write cycle
+      ✓ should preserve data structure on read/write cycle
+  Record Lookup Merged Feature Tests
+    Record ID Validation
+      ✓ should accept valid 15-character ID (1 ms)
+      ✓ should accept valid 18-character ID
+      ✓ should reject invalid IDs
+      ✓ should accept valid 15-character ID (1 ms)
+      ✓ should accept valid 18-character ID
+      ✓ should reject invalid IDs (4 ms)
+      ✓ should accept valid 15-character ID (1 ms)
+      ✓ should accept valid 18-character ID
+      ✓ should reject invalid IDs
+    URL Record ID Extraction
+      ✓ should extract ID from Lightning record URL
+      ✓ should extract ID from Lightning with custom object
+      ✓ should extract ID from Lightning edit URL
+      ✓ should extract ID from Lightning related list URL
+      ✓ should extract ID from sObject URL pattern
+      ✓ should extract ID from query parameter
+      ✓ should extract ID from recordId query parameter
+      ✓ should extract 15-char ID from Classic URL (1 ms)
+      ✓ should extract 18-char ID from Classic URL
+      ✓ should return null for home page
+      ✓ should return null for setup pages
+      ✓ should handle malformed URLs gracefully
+      ✓ should extract ID from Lightning record URL (1 ms)
+      ✓ should extract ID from Lightning with custom object
+      ✓ should extract ID from Lightning edit URL
+      ✓ should extract ID from Lightning related list URL
+      ✓ should extract ID from sObject URL pattern
+      ✓ should extract ID from query parameter
+      ✓ should extract ID from recordId query parameter
+      ✓ should extract 15-char ID from Classic URL
+      ✓ should extract 18-char ID from Classic URL
+      ✓ should return null for home page
+      ✓ should return null for setup pages (1 ms)
+      ✓ should handle malformed URLs gracefully
+      ✓ should extract ID from Lightning record URL
+      ✓ should extract ID from Lightning with custom object
+      ✓ should extract ID from Lightning edit URL
+      ✓ should extract ID from Lightning related list URL (1 ms)
+      ✓ should extract ID from sObject URL pattern (1 ms)
+      ✓ should extract ID from query parameter
+      ✓ should extract ID from recordId query parameter
+      ✓ should extract 15-char ID from Classic URL
+      ✓ should extract 18-char ID from Classic URL
+      ✓ should return null for home page
+      ✓ should return null for setup pages
+      ✓ should handle malformed URLs gracefully
+    Object Type Identification
+      ✓ should identify object type from key prefix
+      ✓ should identify object type from key prefix
+      ✓ should identify object type from key prefix (1 ms)
+  Error Handling Tests
+    Error Message Extraction
+      ✓ should handle string error
+      ✓ should handle Error object (1 ms)
+      ✓ should handle Error object without message
+      ✓ should handle object with message property
+      ✓ should handle object with error property
+      ✓ should handle Salesforce error format with errorCode
+      ✓ should handle Salesforce error format with only errorCode
+      ✓ should handle body.message format
+      ✓ should handle statusText format
+      ✓ should handle array format
+      ✓ should handle null
+      ✓ should handle undefined
+      ✓ should handle empty object
+      ✓ should handle non-string message property
+      ✓ should handle empty string message
+    User-Friendly Error Messages
+      ✓ should handle "Not connected" error (1 ms)
+      ✓ should handle 401 error
+      ✓ should handle 403 error
+      ✓ should handle 404 error
+      ✓ should handle INVALID_SESSION error
+      ✓ should handle insufficient access error
+      ✓ should pass through unknown errors unchanged
+      ✓ should handle non-string input
+  Vertical History Item Tests
+    History Item Display
+      ✓ should format history item with display name
+      ✓ should use truncated ID when no display name
+      ✓ should format time ago correctly
+    History Selection
+      ✓ should track selected record ID
+      ✓ should update search input on selection
+    SOQL Fallback for Record Lookup
+      Key Prefix Mapping
+        ✓ should map 001 prefix to Account
+        ✓ should map 003 prefix to Contact
+        ✓ should map 500 prefix to Case
+        ✓ should map 00Q prefix to Lead
+        ✓ should map 005 prefix to User
+      SOQL Fallback Response Format
+        ✓ should convert SOQL response to compatible format
+        ✓ should handle unknown key prefix gracefully
+      Field Value Extraction
+        ✓ should extract value from UI API format
+        ✓ should extract value from SOQL format (direct value)
+        ✓ should handle null field values
+        ✓ should handle undefined field values
+      404 Error Detection
+        ✓ should detect "not found" error (1 ms)
+        ✓ should detect 404 status code in error
+        ✓ should detect "does not support" error for UI API
+        ✓ should not trigger fallback for other errors
+
+  console.log
+    [TrackForcePro] declarativeContent setup failed (Edge browser): declarativeContent is not available
+
+      at log (background.js:54:17)
+
+  console.warn
+    [TrackForcePro] Failed to update badge: Error: Badge update failed
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/tests/edge_browser_compatibility.test.js:396:23)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-mock/build/index.js:397:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-mock/build/index.js:404:13)
+        at Object.mockConstructor [as setBadgeText] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-mock/build/index.js:148:19)
+        at setBadgeText (/Users/manas/IdeaProjects/sf-audit-extractor/background.js:96:23)
+        at onUpdatedHandler (/Users/manas/IdeaProjects/sf-audit-extractor/tests/edge_browser_compatibility.test.js:403:17)
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/expect/build/toThrowMatchers.js:74:11)
+        at Object.throwingMatcher [as toThrow] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/expect/build/index.js:320:21)
+        at Object.toThrow (/Users/manas/IdeaProjects/sf-audit-extractor/tests/edge_browser_compatibility.test.js:407:20)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      101 |         }
+      102 |     } catch (err) {
+    > 103 |         console.warn('[TrackForcePro] Failed to update badge:', err);
+          |                 ^
+      104 |     }
+      105 | });
+      106 |
+
+      at warn (background.js:103:17)
+      at onUpdatedHandler (tests/edge_browser_compatibility.test.js:403:17)
+      at Object.<anonymous> (node_modules/expect/build/toThrowMatchers.js:74:11)
+      at Object.throwingMatcher [as toThrow] (node_modules/expect/build/index.js:320:21)
+      at Object.toThrow (tests/edge_browser_compatibility.test.js:407:20)
+
+  console.log
+    [TrackForcePro] declarativeContent API not available, using fallback
+
+      at log (background.js:37:21)
+
+PASS tests/edge_browser_compatibility.test.js
+  Edge Browser Compatibility
+    Test Case 1: Extension Icon Visibility
+      ✓ should handle missing declarativeContent API gracefully (64 ms)
+      ✓ should show badge when navigating to Salesforce page (1 ms)
+      ✓ should clear badge when navigating away from Salesforce
+    Test Case 2: Tab Activation Icon Update
+      ✓ should update icon when switching to Salesforce tab (1 ms)
+      ✓ should disable icon when switching to non-Salesforce tab
+      ✓ should handle chrome.runtime.lastError gracefully
+    Test Case 3: Background Service Worker
+      ✓ should initialize without errors (1 ms)
+      ✓ should have message handlers registered
+      ✓ should survive storage.local errors
+    Test Case 4: Content Script Communication
+      ✓ should handle CONTENT_READY message (102 ms)
+      ✓ should handle GET_SESSION_INFO message (52 ms)
+      ✓ should handle LMS_CHECK_AVAILABILITY message (52 ms)
+    Test Case 5: Storage API Compatibility
+      ✓ should persist settings using chrome.storage.local (1 ms)
+      ✓ should retrieve settings using chrome.storage.local.get
+      ✓ should handle storage quota exceeded
+    Test Case 6: API Version Management
+      ✓ should fetch API version from storage (1 ms)
+      ✓ should handle missing API version with default
+      ✓ should normalize API version format
+    Test Case 7: Error Handling
+      ✓ should catch declarativeContent errors (1 ms)
+      ✓ should handle badge update failures (63 ms)
+      ✓ should handle tab.get errors gracefully (1 ms)
+      ✓ should log warnings for badge failures
+    Test Case 8: Multi-Domain Support
+      ✓ should recognize .my.salesforce.com domain
+      ✓ should recognize .force.com domain
+      ✓ should recognize .lightning.force.com domain
+      ✓ should recognize .salesforce-setup.com domain
+    Test Case 9: Icon Enable/Disable
+      ✓ should enable icon on Salesforce pages
+      ✓ should not disable icon when navigating to non-SF page via onUpdated
+      ✓ should disable icon on non-SF pages via onActivated
+    Test Case 10: Edge-Specific Fallbacks
+      ✓ should work when declarativeContent is completely unavailable (1 ms)
+      ✓ should log when using fallback mode (1 ms)
+      ✓ should provide fallback via onUpdated and onActivated (1 ms)
+  Edge Browser Performance
+    ✓ should not cause excessive API calls (1 ms)
+    ✓ should not leak memory with repeated badge updates (1 ms)
+
+  console.log
+    Content script favicon tests loaded
+
+      at Object.log (tests/content_favicon.test.js:1119:9)
+
+PASS tests/content_favicon.test.js
+  Salesforce Host Detection
+    ✓ should detect salesforce.com hosts (1 ms)
+    ✓ should detect force.com hosts
+    ✓ should detect salesforce-setup.com hosts
+    ✓ should reject non-Salesforce hosts (1 ms)
+  Favicon Canvas Drawing
+    ✓ should draw cloud with color
+    ✓ should draw cloud with label
+    ✓ should truncate label to 3 characters
+    ✓ should uppercase the label
+  Favicon Application
+    ✓ should create new link element for favicon (1 ms)
+    ✓ should generate data URL from canvas
+  Message Handling
+    ✓ should handle updateFavicon message
+    ✓ should handle resetFavicon message
+    ✓ should handle getSessionInfo message
+  Org ID Detection Methods
+    ✓ should attempt multiple detection methods
+    ✓ should try oid cookie for org ID
+    ✓ should validate org ID length from cookie
+    ✓ should handle timeout in background API call (103 ms)
+    ✓ should fallback to next method if current one fails
+  Storage Auto-Apply on Load
+    ✓ should check for saved favicons on page load (1 ms)
+    ✓ should not apply favicon if no saved settings
+    ✓ should apply correct favicon for matching org ID
+  Robust Storage Handling
+    ✓ should handle null orgFavicons gracefully
+    ✓ should handle undefined orgFavicons gracefully
+    ✓ should validate orgFavicons is an object before use (1 ms)
+  Org ID Detection Fallback Chain
+    ✓ should try multiple methods to detect org ID
+    ✓ should return null when all detection methods fail
+  Message Listener Error Handling
+    ✓ should handle runtime.lastError
+    ✓ should not throw when sendResponse is not a function (23 ms)
+  Top Frame Detection
+    ✓ should only update favicon in top frame
+    ✓ should skip favicon update in iframes
+  Original Favicon Preservation
+    ✓ should store original favicon before modification (1 ms)
+    ✓ should not overwrite stored original favicon
+    ✓ should restore original favicon on reset (11 ms)
+  Favicon Persistence on Page Refresh
+    ✓ should have multiple retry attempts for favicon application
+    ✓ should check storage for saved favicons on load (1 ms)
+    ✓ should skip if no saved favicons exist
+    ✓ should match org ID with saved favicon settings (1 ms)
+    ✓ should return null for non-matching org ID
+  Retry Logic for Favicon Application
+    ✓ should stop retrying after successful application (1 ms)
+    ✓ should continue all attempts if application keeps failing
+  Root Cause: Content Script Isolation - Org ID Detection Failure
+    ✓ should understand that content scripts cannot access page globals directly (1 ms)
+    ✓ should have fallback to hostname-based lookup when org ID detection fails
+    ✓ should extract org ID from URL query parameters if present (1 ms)
+    ✓ should normalize hostname for matching (remove subdomains) (1 ms)
+  Fix: Hostname-based Favicon Lookup
+    ✓ should save hostname along with org ID when saving favicon (1 ms)
+    ✓ should try multiple lookup strategies in order (1 ms)
+    ✓ should handle storage errors gracefully during favicon application
+  CRITICAL: Prevent Silent Favicon Apply Failures
+    tryApplyFavicon should never silently return false
+      ✓ should NOT check isExtensionContextValid before storage access
+      ✓ should log when storage access fails
+      ✓ should log the hostname when applyFaviconOnLoad starts
+      ✓ should log each attempt number
+    Storage access error handling
+      ✓ should catch and log storage errors instead of crashing
+      ✓ should return false (not throw) when storage is inaccessible
+    Logging requirements for debugging
+      ✓ should log saved favicon count
+      ✓ should log current hostname for comparison
+      ✓ should log each saved favicon for debugging (1 ms)
+      ✓ should log which strategy matched
+      ✓ should log when no match is found
+    applyFaviconOnLoad entry point logging
+      ✓ should log immediately when function is called
+      ✓ should log when skipping due to already applied
+      ✓ should log success message when favicon is applied
+      ✓ should log failure message after all attempts exhausted
+  Regression: Silent isExtensionContextValid check
+    ✓ BUG FIX: tryApplyFavicon must not have early isExtensionContextValid check (1 ms)
+    ✓ REQUIREMENT: Every return false must be preceded by a log statement
+
+  console.log
+    Popup pop out/in tests loaded
+
+      at Object.log (tests/popup_popout.test.js:627:9)
+
+  console.log
+    GraphQL UI Fixes tests loaded
+
+      at Object.log (tests/graphql_ui_fixes.test.js:2770:9)
+
+  console.log
+    [GraphQL] Filter button wired successfully
+
+      at log (graphql_helper.js:2655:17)
+
+PASS tests/popup_popout.test.js
+  Pop Out / Pop In Logic
+    Standalone Mode Detection
+      ✓ should detect standalone mode from URL hash (1 ms)
+      ✓ should return false for empty or missing hash
+    APP_POP_GET Message Handling
+      ✓ should return popped state from background (1 ms)
+      ✓ should handle already popped state
+      ✓ should handle runtime errors gracefully
+    APP_POP_SET Message Handling
+      ✓ should set popped state to true (pop out)
+      ✓ should set popped state to false (pop in)
+      ✓ should include session when popping out (1 ms)
+    Button State Updates
+      ✓ should update button to show pop-in icon when popped
+      ✓ should update button to show pop-out icon when not popped (1 ms)
+      ✓ should always show pop-in icon in standalone mode
+    Window Close Behavior
+      ✓ should close popup after successful pop out (103 ms)
+      ✓ should close standalone window on pop in
+      ✓ should not close popup if message fails (1 ms)
+    Standalone Window Behavior
+      ✓ should open standalone window with correct URL
+      ✓ should handle pop in from standalone correctly (1 ms)
+    Session Transfer
+      ✓ should transfer session data when popping out
+      ✓ should not include session when popping in (1 ms)
+    Button Disabled State
+      ✓ should disable button during message processing
+      ✓ should re-enable button after message completes (1 ms)
+      ✓ should re-enable button even on error
+    SVG Icon Generation
+      ✓ should generate pop-out SVG with correct attributes
+      ✓ should generate pop-in SVG with correct attributes (1 ms)
+  Background Window Management
+    openAppWindow Function
+      ✓ should create window with correct dimensions
+      ✓ should focus existing window if already open (1 ms)
+      ✓ should handle window creation failure
+    Window Removal on Pop In
+      ✓ should remove window when popping in (1 ms)
+      ✓ should handle window removal failure gracefully (1 ms)
+    Blinking Hand Pointer Animation
+      ✓ should add popout-blinking class when clicking popout button (2 ms)
+      ✓ should remove popout-blinking class after popout completes
+      ✓ should remove blinking class even if popout fails (1 ms)
+      ✓ blinking class should be added for pop-in action in standalone mode
+      ✓ should handle rapid clicks - class state remains consistent
+      ✓ should integrate with message handling flow (52 ms)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] Using on-demand object introspection (only object-specific metadata cached)
+
+      at log (graphql_helper.js:1277:16)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] Filter button wired successfully
+
+      at log (graphql_helper.js:2655:17)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] Using on-demand object introspection (only object-specific metadata cached)
+
+      at log (graphql_helper.js:1277:16)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+PASS tests/soql_builder.test.js
+  ✓ composeQueryFromBuilder builds basic SELECT/WHERE/ORDER/LIMIT (1 ms)
+  ✓ composeQueryFromBuilder includes lookup fields
+  ✓ composeQueryFromBuilder includes subqueries (6 ms)
+  ✓ composeQueryFromBuilder combines fields, lookups, and subqueries (1 ms)
+  ✓ defaultBuilderState includes empty lookups and subqueries arrays (3 ms)
+  ✓ cloneBuilderState preserves lookups and subqueries
+  ✓ tryImportQueryToBuilder parses fields, filters, order, and limit (1 ms)
+  ✓ tryImportQueryToBuilder separates lookup fields from regular fields (1 ms)
+  Object dropdown Tooling API toggle
+    ✓ REST mode excludes Tooling objects (ApexClass, ApexTrigger, etc) (40 ms)
+    ✓ Tooling mode shows Tooling objects (ApexClass, ApexTrigger, etc) (4 ms)
+    ✓ toggling Tooling API off restores SObject list without Tooling objects (14 ms)
+  SOQL tabs functionality
+    ✓ tabs bar renders with at least one tab (1 ms)
+    ✓ tabs remain visible when builder toggle is enabled (4 ms)
+    ✓ clicking add tab button creates a new tab (7 ms)
+  Lookup and Subquery UI
+    ✓ lookup picker toggle shows/hides on button click (3 ms)
+    ✓ subquery picker toggle shows/hides on button click (9 ms)
+    ✓ lookup chips are rendered when lookups are in state (9 ms)
+    ✓ subquery chips are rendered when subqueries are in state (11 ms)
+    ✓ multiple lookups from same relationship are preserved (1 ms)
+  tryImportQueryToBuilder lookup parsing
+    ✓ separates simple fields from lookup fields (2 ms)
+    ✓ handles multiple lookups from same relationship (1 ms)
+    ✓ handles lookups from different relationships
+    ✓ handles nested lookups (multi-level relationships)
+    ✓ preserves lookups when re-importing query with existing lookups (1 ms)
+  quoteIdentifier for relationship paths
+    ✓ composeQueryFromBuilder does not quote simple relationship paths
+    ✓ composeQueryFromBuilder handles multi-level relationship paths (2 ms)
+  Builder state persistence with lookups
+    ✓ cloneBuilderState deep copies lookups array (1 ms)
+    ✓ cloneBuilderState deep copies subqueries array
+  Clear button behavior
+    ✓ clear button clears query textarea (2 ms)
+    ✓ clear button preserves guided builder enabled state (4 ms)
+    ✓ clear button does not reset builder fields and lookups (6 ms)
+    ✓ clear button clears results area (10 ms)
+  Run and Clear button placement
+    ✓ Run button exists in DOM (1 ms)
+    ✓ Clear button exists in DOM
+  Field validation
+    ✓ validateFieldForBuilder identifies valid field
+    ✓ validateFieldForBuilder identifies valid field case-insensitively
+    ✓ validateFieldForBuilder identifies child relationship name as not a valid field
+    ✓ validateFieldForBuilder identifies child SObject name as child relationship
+    ✓ validateFieldForBuilder identifies Contacts as child relationship (1 ms)
+    ✓ validateFieldForBuilder identifies Contact (child object) as child relationship
+    ✓ validateFieldForBuilder identifies unknown field
+    ✓ validateFieldForBuilder identifies reference field as valid
+    ✓ validateFieldForBuilder with BillingLatitude (actual field from error)
+    ✓ validateFieldForBuilder with CleanStatus (actual field from error)
+  Field validation prevents invalid SOQL
+    ✓ composeQueryFromBuilder with valid fields produces correct SOQL
+    ✓ child relationships should be in subqueries, not fields (1 ms)
+
+PASS tests/lms_publish.test.js
+  LmsHelper publish functionality
+    loadChannels
+      ✓ fetches LMS channels successfully (83 ms)
+      ✓ handles fetch failure gracefully (6 ms)
+      ✓ skips loading if already loaded and not forced (1 ms)
+      ✓ logs error when not connected to Salesforce (4 ms)
+      ✓ logs error when session exists but not logged in (3 ms)
+      ✓ shows note when LMS is not available on Lightning page (59 ms)
+      ✓ handles null response from LMS_FETCH_CHANNELS (4 ms)
+      ✓ handles exception during channel loading (5 ms)
+    handleModalPublish
+      ✓ publishes message successfully (5 ms)
+      ✓ publishes message with note in response (6 ms)
+      ✓ handles publish failure (7 ms)
+      ✓ provides Lightning tip when error mentions Lightning (3 ms)
+      ✓ rejects invalid JSON payload (6 ms)
+      ✓ rejects array payload (3 ms)
+      ✓ rejects null payload (3 ms)
+      ✓ requires channel selection (3 ms)
+      ✓ handles empty payload textarea (5 ms)
+      ✓ handles whitespace-only payload (6 ms)
+      ✓ handles exception during publish (7 ms)
+      ✓ restores button state after publish (6 ms)
+      ✓ uses developerName when fullName is missing (2 ms)
+    checkLmsAvailability
+      ✓ returns availability status (3 ms)
+      ✓ handles non-Lightning page (1 ms)
+      ✓ handles exception and returns false
+      ✓ passes instanceUrl from session (1 ms)
+    appendLog
+      ✓ adds log entries with correct type badges (2 ms)
+      ✓ includes expandable details when data provided (1 ms)
+      ✓ handles string data in details (1 ms)
+      ✓ handles non-stringifiable data (1 ms)
+      ✓ removes placeholder on first entry (1 ms)
+      ✓ includes timestamp in message (1 ms)
+      ✓ scrolls log to bottom (35 ms)
+    UI interactions
+      ✓ copy button does nothing with empty payload (15 ms)
+      ✓ refresh button loads channels (55 ms)
+      ✓ clear log button clears the log (4 ms)
+      ✓ openPublishModal populates channel name and payload (1 ms)
+      ✓ closePublishModal hides modal
+      ○ skipped copy button copies payload to clipboard
+      ○ skipped copy button handles clipboard failure with fallback
+    sample payload generation
+      ✓ generates default payload when no fields
+      ✓ generates number for count fields (1 ms)
+      ✓ generates ID for id fields
+      ✓ generates ISO date for date fields
+      ✓ generates URL for url fields
+      ✓ generates Sample for other fields
+      ✓ skips empty field names
+  LMS background handler
+    LMS_PUBLISH
+      ✓ routes to content script (2 ms)
+      ✓ returns error when no Salesforce tab found
+      ✓ requires channel name
+      ✓ handles runtime.lastError (1 ms)
+      ✓ handles no response from content script
+    LMS_CHECK_AVAILABILITY
+      ✓ routes to content script (1 ms)
+      ✓ returns false when no Salesforce tab
+  LMS instanceUrl-based tab finding
+    LMS_PUBLISH with instanceUrl from session
+      ✓ uses instanceUrl to find matching Salesforce tab (1 ms)
+      ✓ prefers Lightning page when multiple tabs match instanceUrl (1 ms)
+      ✓ normalizes lightning.force.com to my.salesforce.com for matching
+      ✓ falls back to any SF tab when instanceUrl does not match any tab (1 ms)
+      ✓ works without instanceUrl (backward compatibility) (1 ms)
+    LMS_CHECK_AVAILABILITY with instanceUrl from session
+      ✓ uses instanceUrl to find matching Salesforce tab (1 ms)
+    Multi-org scenario handling
+      ✓ correctly identifies tab for specific org when multiple orgs are open (2 ms)
+  LmsHelper passes instanceUrl from session
+    ✓ handleModalPublish includes instanceUrl from session (9 ms)
+    ✓ checkLmsAvailability includes instanceUrl from session (1 ms)
+    ✓ handles null session gracefully (1 ms)
+    ✓ handles session without instanceUrl gracefully (1 ms)
+  Standalone mode session restoration
+    ✓ session should be preserved when transferred to standalone window
+    ✓ session instanceUrl should be passed to LMS_PUBLISH in standalone mode
+    ✓ hasRestoredSession is false when session is null
+    ✓ hasRestoredSession is false when not logged in
+    ✓ hasRestoredSession is false when instanceUrl is missing
+    ✓ isStandaloneOrTabMode detection
+  Edge cases and error handling
+    ✓ handles missing DOM elements gracefully (1 ms)
+    ✓ handles channels array with undefined/null entries
+    ✓ handles very long channel names (1 ms)
+    ✓ handles special characters in payload (1 ms)
+    ✓ handles Unicode in payload (1 ms)
+    ✓ handles deeply nested payload
+    ✓ handles empty response from background (1 ms)
+  Content script isolation and URL-based Lightning detection
+    URL-based Lightning page detection
+      ✓ detects Lightning Experience URL with /lightning/ path (1 ms)
+      ✓ detects Lightning Experience URL with lightning.force.com hostname
+      ✓ rejects Classic UI URLs
+      ✓ rejects Setup URLs without lightning path
+      ✓ rejects Visualforce URLs
+    Content script cannot access window.$A (isolated world)
+      ✓ demonstrates that content scripts run in isolated world
+      ✓ old buggy detection always fails in content script (2 ms)
+      ✓ new URL-based detection works in content script
+    handleLmsPublish URL validation
+      ✓ allows publish on Lightning page with /lightning/ path (1 ms)
+      ✓ allows publish on lightning.force.com domain
+      ✓ rejects publish on Classic UI page
+      ✓ rejects publish on Visualforce page (1 ms)
+      ✓ rejects publish without channel name
+      ✓ includes pageUrl in error response
+    checkLmsAvailability fallback behavior
+      ✓ returns isLightningPage true for Lightning URLs (1 ms)
+      ✓ returns isLightningPage false for non-Lightning URLs
+      ✓ always includes note about fallback detection
+      ✓ always returns success true even in fallback
+    Standalone/new tab mode LMS publishing
+      ✓ standalone mode uses instanceUrl to find correct SF tab (1 ms)
+      ✓ background.js finds Lightning tab matching instanceUrl (1 ms)
+      ✓ content script on found tab uses URL-based check, not $A check (1 ms)
+    Bridge script runs in page context with $A access
+      ✓ injected bridge script CAN access window.$A
+      ✓ bridge script provides accurate Aura detection
+  LMS error messages and user guidance
+    ✓ provides helpful error for Classic UI pages
+    ✓ error includes page URL for debugging
+    ✓ bridge timeout provides useful error
+    ✓ bridge failure error suggests Lightning page (1 ms)
+  Regression tests: LMS from standalone/new tab
+    ✓ REGRESSION: Publishing should not fail with "requires Lightning page" on actual Lightning page
+    ✓ REGRESSION: Standalone mode should preserve session with instanceUrl
+    ✓ REGRESSION: instanceUrl should be passed to LMS_PUBLISH message
+    ✓ REGRESSION: Background should find Lightning tab, not any SF tab (1 ms)
+
+  console.log
+    Generated query: query { uiapi { query { Account(first: 50, orderBy: { BillingStreet: { order: ASC } }) { edges { node { Id Active__c { value } AccountBrands { edges { node { Id } } } Tasks { edges { node { Id } } } } } pageInfo { endCursor hasNextPage } } } } }
+
+      at Object.log (tests/graphql_builder.test.js:1740:13)
+
+  console.log
+    [GraphQL] addFilterRow called, current filters: 0
+
+      at Object.log [as addFilterRow] (graphql_helper.js:2529:13)
+
+  console.log
+    [GraphQL] Added new filter, total: 1
+
+      at Object.log [as addFilterRow] (graphql_helper.js:2533:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+PASS tests/graphql_builder.test.js
+  ✓ composeQueryFromBuilder builds GraphQL query with where/order/limit/offset (8 ms)
+  ✓ tryImportQueryToBuilder parses object, fields, filters, order, and pagination (6 ms)
+  ✓ enabling builder shows panel and writes composed query (42 ms)
+  ✓ run GraphQL sends variables and renders result (39 ms)
+  ✓ run mutation passes variables and renders response (18 ms)
+  ✓ background error renders error block (8 ms)
+  ✓ clear button wipes rendered results (5 ms)
+  ✓ invalid variables blocks run and surfaces error (11 ms)
+  ✓ imports UI API query with edges/node/value and after cursor (1 ms)
+  ✓ imports orderBy with keyed order object (1 ms)
+  ✓ auto-template fills UI API shape when builder disabled (1 ms)
+  ✓ pageInfo apply sets after cursor (4 ms)
+  formatGraphQL
+    ✓ formats single-line query with proper indentation (1 ms)
+    ✓ formats nested query with proper indentation
+    ✓ preserves string literals
+    ✓ handles arguments in parentheses
+    ✓ returns original if input is empty
+    ✓ handles mutation queries (1 ms)
+    ✓ handles subscription queries
+    ✓ preserves single quotes in strings
+    ✓ handles complex where clauses
+    ✓ handles fragments
+    ✓ handles deeply nested queries
+  formatJSON
+    ✓ formats compact JSON with indentation (1 ms)
+    ✓ formats nested JSON
+    ✓ returns original if invalid JSON
+    ✓ handles arrays
+    ✓ handles empty object
+    ✓ handles empty array
+    ✓ handles null value
+    ✓ handles boolean values (1 ms)
+    ✓ handles numeric values
+    ✓ handles special characters in strings
+    ✓ handles deeply nested structures
+    ✓ handles array of objects
+    ✓ returns empty string for empty input
+    ✓ returns original for whitespace-only input (4 ms)
+  smartFormat
+    ✓ auto-detects and formats JSON
+    ✓ auto-detects and formats GraphQL (1 ms)
+    ✓ respects explicit type parameter (1 ms)
+    ✓ auto-detects JSON starting with array bracket
+    ✓ auto-detects mutation as GraphQL
+    ✓ auto-detects subscription as GraphQL
+    ✓ handles null input
+    ✓ handles undefined input
+    ✓ handles empty string (1 ms)
+    ✓ returns original for non-JSON non-GraphQL content
+  run button validation
+    ✓ button disabled when query is empty
+    ✓ button enabled when valid query exists
+    ✓ button disabled when variables are invalid JSON
+    ✓ button enabled when both query and variables are valid
+    ✓ button stays on builder screen after successful query (3 ms)
+    ✓ button enabled with whitespace-only variables
+    ✓ button enabled with valid empty JSON object as variables
+    ✓ button enabled with valid JSON array as variables
+    ✓ button disabled with query containing only whitespace
+    ✓ button disabled when variables have trailing comma (invalid JSON)
+    ✓ button enabled with complex nested variables (1 ms)
+  Clear button behavior
+    ✓ clear button clears results area (2 ms)
+    ✓ clear button clears query textarea (2 ms)
+    ✓ clear button clears variables textarea (5 ms)
+    ✓ clear button preserves builder enabled state (9 ms)
+    ✓ clear button does not reset builder fields and filters (8 ms)
+    ✓ clear button updates pageInfo UI (7 ms)
+    ✓ clear button updates run button state (3 ms)
+    ✓ clear button preserves relatedObjects in builder state (3 ms)
+    ✓ clear button clears both query and variables simultaneously (1 ms)
+    ✓ clear button works multiple times in succession (6 ms)
+    ✓ clear button preserves pagination settings in builder state (2 ms)
+  Run and Clear button placement
+    ✓ Run button exists in DOM
+    ✓ Clear button exists in DOM
+  Builder state persistence
+    ✓ setBuilderState and getBuilderState work correctly
+    ✓ defaultBuilderState returns expected structure (1 ms)
+    ✓ builder state preserves filters array (1 ms)
+    ✓ builder state preserves pagination settings (2 ms)
+    ✓ builder state preserves orderBy settings (1 ms)
+    ✓ builder state handles null orderBy (1 ms)
+    ✓ builder state handles empty filters array
+    ✓ builder state handles empty fields array (1 ms)
+    ✓ builder state handles includePageInfo setting (11 ms)
+    ✓ getBuilderState returns a clone, not the original
+    ✓ setBuilderState handles partial state updates
+    ✓ builder state preserves relatedObjects
+    ✓ defaultBuilderState always returns a new object (1 ms)
+    ✓ builder state handles complex filter values (8 ms)
+  Query composition edge cases
+    ✓ composeQueryFromBuilder generates valid GraphQL with all options (1 ms)
+    ✓ composeQueryFromBuilder handles empty filters
+    ✓ composeQueryFromBuilder handles offset parameter
+    ✓ composeQueryFromBuilder handles after cursor
+    ✓ composeQueryFromBuilder includes pageInfo when enabled (1 ms)
+    ✓ composeQueryFromBuilder excludes pageInfo when disabled
+    ✓ composeQueryFromBuilder returns empty string without object
+    ✓ composeQueryFromBuilder handles object with only whitespace
+    ✓ composeQueryFromBuilder defaults to Id field when fields array is empty (2 ms)
+    ✓ composeQueryFromBuilder handles multiple filters of different types
+    ✓ composeQueryFromBuilder handles orderBy descending (1 ms)
+    ✓ composeQueryFromBuilder handles orderBy ascending
+    ✓ composeQueryFromBuilder generates valid UI API format
+  Query import edge cases
+    ✓ tryImportQueryToBuilder handles standard GraphQL query
+    ✓ tryImportQueryToBuilder handles UI API format (1 ms)
+    ✓ tryImportQueryToBuilder handles where clause
+    ✓ tryImportQueryToBuilder handles multiple filters (1 ms)
+    ✓ tryImportQueryToBuilder handles IN operator
+    ✓ tryImportQueryToBuilder handles gt (greater than) operator
+    ✓ tryImportQueryToBuilder handles lt (less than) operator
+    ✓ tryImportQueryToBuilder handles empty query gracefully
+    ✓ tryImportQueryToBuilder handles null query gracefully
+    ✓ tryImportQueryToBuilder preserves limit from first parameter (1 ms)
+    ✓ tryImportQueryToBuilder preserves offset parameter
+    ✓ tryImportQueryToBuilder preserves after cursor
+  Composite Query (Related Objects)
+    ✓ defaultBuilderState includes empty relatedObjects array
+    ✓ composeQueryFromBuilder includes related objects in selection
+    ✓ composeQueryFromBuilder handles multiple related objects (1 ms)
+    ✓ composeQueryFromBuilder works without related objects
+    ✓ builder state preserves relatedObjects array
+    ✓ cloneBuilderState deep copies relatedObjects
+    ✓ composeQueryFromBuilder handles related object with single field
+    ✓ composeQueryFromBuilder handles related object with empty fields array (1 ms)
+    ✓ composeQueryFromBuilder handles related object with null fields
+    ✓ composeQueryFromBuilder handles three or more related objects
+    ✓ related objects do not affect filters or orderBy
+    ✓ builder state with relatedObjects survives setBuilderState/getBuilderState cycle
+    ✓ composeQueryFromBuilder excludes fields that are also related object relationships (1 ms)
+    ✓ composeQueryFromBuilder handles all fields being related objects
+    ✓ composeQueryFromBuilder handles mixed fields - some are relationships, some are not
+    ✓ composeQueryFromBuilder preserves Id field even when filtered (1 ms)
+    ✓ generated query produces valid GraphQL syntax without duplicate braces
+    ✓ composeQueryFromBuilder with empty relatedObjects does not filter fields
+    ✓ composeQueryFromBuilder with 2 related objects generates valid query structure (51 ms)
+    ✓ composeQueryFromBuilder field after related object has correct structure (3 ms)
+    ✓ tryImportQueryToBuilder handles query with related objects (1 ms)
+    ✓ tryImportQueryToBuilder handles query with multiple related objects (1 ms)
+  Multiple Filters AND/OR Grouping
+    ✓ multiple filters on different fields use AND grouping by default
+    ✓ multiple filters on SAME field use AND grouping to avoid duplicate keys
+    ✓ single filter does not use AND grouping
+    ✓ filterLogic can be set to OR for multiple filters
+  IS NULL / IS NOT NULL Operators
+    ✓ IS NULL operator generates eq: null without quotes (5 ms)
+    ✓ IS NOT NULL operator generates ne: null without quotes
+    ✓ value field is ignored for IS NULL operator
+  Lookup vs Child Relationship Handling
+    ✓ child relationships use edges/node pattern (1 ms)
+    ✓ lookup (parent) relationships do NOT use edges/node pattern
+    ✓ mixed lookup and child relationships in same query
+  Builder State Includes filterLogic
+    ✓ defaultBuilderState includes filterLogic set to "and"
+    ✓ filterLogic persists through state clone
+  NOT IN Operator
+    ✓ NOT IN operator generates nin with array
+  Response Record Count Display
+    ✓ extractRecordCount finds edges in UI API response
+  Empty and Incomplete Filters
+    ✓ filters with empty field are ignored in query (1 ms)
+    ✓ filters with empty operator are ignored
+  Related Object isLookup Persistence
+    ✓ relatedObjects preserve isLookup flag in state
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    DataExplorerHelper: All data reset
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:76:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-c
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 0 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-c
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to dev-org-id
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 2 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+PASS tests/favicon_application.test.js
+  Favicon Application and Reactivity
+    Favicon Save and UI Update
+      ✓ should update preview immediately when color is changed (13 ms)
+      ✓ should show success message after saving favicon (25 ms)
+      ✓ should refresh saved favicons list after save (2 ms)
+      ✓ should update preview canvas after save (2 ms)
+      ✓ should clear editing state after successful save (1 ms)
+    Favicon Status Display
+      ✓ should display success status message (5 ms)
+      ✓ should display error status message (1 ms)
+      ✓ should update both status elements if present (1 ms)
+    Favicon Shape Selection
+      ✓ should get selected shape from form (11 ms)
+      ✓ should set selected shape in form (3 ms)
+    Multi-Suffix Support
+      ✓ should handle favicon preview for Settings tab (no suffix) (6 ms)
+      ✓ should handle favicon preview for Data Explorer tab (-data suffix) (6 ms)
+      ✓ should reset favicon for both tabs (1 ms)
+    Chrome Storage Integration
+      ✓ should save favicon to chrome storage (1 ms)
+      ✓ should retrieve saved favicons from chrome storage (5 ms)
+    Favicon Reaction Chain
+      ✓ complete flow: change color → update preview → save → refresh list → show status (9 ms)
+
+  console.log
+    CacheManager: Set org to prod-org-id
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to dev-org-id
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Set org to org-a
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    CacheManager: Set org to org-b
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    CacheManager: Cleared 0 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    CacheManager initialized
+
+      at eval (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:304:11)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    CacheManager: Set org to client-1-org
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    Cleared 1 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    Cleared 1 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → sandbox-001
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: sandbox-001 → prod-001
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org sandbox-001
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    CacheManager: Set org to client-2-org
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    CacheManager: Set org to client-3-org
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+          at Array.forEach (<anonymous>)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: prod-001 → sandbox-001
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    CacheManager: Cleared 1 cache items
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:40:25)
+
+  console.log
+    Cleared 1 cache items for org prod-001
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:173:15)
+
+  console.log
+    CacheManager: Set org to client-1-org
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:24:25)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: sandbox-001 → dev-org
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org sandbox-001
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: dev-org → staging-org
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 1
+
+      at Object.log [as renderFilters] (graphql_helper.js:2057:13)
+
+  console.log
+    Cleared 1 cache items for org dev-org
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: staging-org → dev-org
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    DataExplorerHelper: All data reset
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:76:25)
+
+  console.log
+    Cleared 1 cache items for org staging-org
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    DataExplorerHelper: All data reset
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:76:25)
+
+  console.log
+    DataExplorerHelper: Initialized
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:83:25)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: dev-org → sensitive-orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org dev-org
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    DataExplorerHelper: All data reset
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:76:25)
+
+  console.log
+    DataExplorerHelper: Initialized
+
+      at Object.log (tests/cache_isolation_comprehensive.test.js:83:25)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: sensitive-orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org sensitive-orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → sensitive-orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_switch.test.js:19:1), <anonymous>:131:15)
+
+PASS tests/cache_isolation_comprehensive.test.js
+  Cache Isolation on Org Switch
+    Cache Clearing on Org Switch
+      ✓ should clear all caches when switching organizations (6 ms)
+      ✓ should reset DataExplorerHelper when switching orgs (2 ms)
+      ✓ should reset initialization flag when switching orgs
+    Recent Records Isolation
+      ✓ should not show recent records from different org (6 ms)
+      ✓ should isolate recent records per organization (8 ms)
+    Record History Isolation
+      ✓ should clear record history on org switch (1 ms)
+      ✓ should not mix record history from different orgs (3 ms)
+    Favicon Data Isolation
+      ✓ should clear favicon cache on org switch (2 ms)
+    Multi-Organization Switching
+      ✓ should handle rapid org switching without data leakage (24 ms)
+      ✓ should track current org correctly through multiple switches (8 ms)
+    Real-World Scenarios
+      ✓ scenario: Developer with Dev and Prod orgs (36 ms)
+      ✓ scenario: User logs out and back in with different org (1 ms)
+      ✓ scenario: Support analyst accessing client orgs (30 ms)
+    DataExplorerHelper Integration
+      ✓ should reset all data on initialization (3 ms)
+      ✓ should not re-initialize if already initialized for same org (1 ms)
+
+PASS tests/cache_org_switch.test.js
+  Organization Switch Cache Management
+    Recent Records Isolation
+      ✓ should clear recent records when switching orgs (8 ms)
+      ✓ should isolate recent records per org when actively used (3 ms)
+    Record History Isolation
+      ✓ should not leak record history between orgs (3 ms)
+    Sandbox vs Production Isolation
+      ✓ should keep sandbox and production separate (10 ms)
+    Real-World Workflows
+      ✓ Developer working in multiple orgs throughout day (5 ms)
+      ✓ Should prevent accidental data leakage on quick org switch (2 ms)
+
+  console.log
+    CacheManager initialized
+
+      at eval (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:304:11)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+PASS tests/platform_helper.test.js
+  PlatformHelper cometd handshake failure
+    ✓ surface API version mandatory error detail on handshake (68 ms)
+    ✓ retry handshake on 401 authentication invalid error (1 ms)
+    ✓ fail after retry if auth error persists (2 ms)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [GraphQL] renderFilters called, filters count: 0
+
+      at log (graphql_helper.js:2057:13)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 3 cache items for org org1
+
+      at Object.clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 2 cache items for org org1
+
+      at Object.clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 2 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 2 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org3
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at Object.clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org3 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org3
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+PASS tests/soql_export.test.js
+  SOQL Export - flattenRecord
+    ✓ should flatten simple record and remove attributes (14 ms)
+    ✓ should flatten nested related object
+    ✓ should handle null values
+    ✓ should handle deeply nested objects
+  SOQL Export - getExportHeaders
+    ✓ should extract headers from records
+    ✓ should exclude attributes key (1 ms)
+    ✓ should return empty array for empty records
+    ✓ should return unique headers only
+  SOQL Export - escapeCSVField
+    ✓ should return empty string for null/undefined
+    ✓ should not escape simple strings (4 ms)
+    ✓ should escape strings with commas (2 ms)
+    ✓ should escape strings with double quotes
+    ✓ should escape strings with newlines
+    ✓ should handle numbers (1 ms)
+    ✓ should handle boolean values (1 ms)
+    ✓ should escape complex strings with multiple special chars
+  SOQL Export - recordsToJson
+    ✓ should convert records to JSON string (2 ms)
+    ✓ should remove attributes from JSON output
+    ✓ should flatten nested objects in JSON (1 ms)
+    ✓ should produce valid JSON (1 ms)
+    ✓ should format JSON with indentation (1 ms)
+  SOQL Export - recordsToCsv
+    ✓ should convert records to CSV with comma delimiter
+    ✓ should convert records to TSV with tab delimiter
+    ✓ should return empty string for empty records
+    ✓ should handle records with null values
+    ✓ should escape special characters in CSV
+    ✓ should flatten nested objects in CSV
+    ✓ should include all columns even if some records lack fields (1 ms)
+  SOQL Export - Integration Tests
+    ✓ should handle full Salesforce response format
+    ✓ should produce consistent output for same data
+    ✓ should handle large record sets efficiently (2 ms)
+  SOQL Export - Edge Cases
+    ✓ should handle empty string values
+    ✓ should handle special unicode characters (1 ms)
+    ✓ should handle boolean and numeric values correctly
+    ✓ should handle array values (subquery results)
+    ✓ should handle records with only Id field
+  SOQL Export - Clipboard Operations
+    ✓ should call clipboard API with correct JSON content (1 ms)
+    ✓ should call clipboard API with correct CSV content
+  SOQL Export - File Download
+    ✓ should create blob URL for download
+    ✓ should generate correct filename format
+    ✓ should generate JSON filename correctly
+  SOQL Export - Status Messages
+    ✓ should generate success message for JSON copy
+    ✓ should generate success message for CSV copy
+    ✓ should generate success message for download
+    ✓ should generate error message for failed copy
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 2 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+PASS tests/multiwindow_session.test.js
+  Multi-Window Session Isolation
+    findSalesforceTab
+      ✓ should return active SF tab from current window (19 ms)
+      ✓ should NOT return SF tab from different window when current window has SF tab (1 ms)
+      ✓ should return inactive SF tab from current window if no active SF tab
+      ✓ should return active SF tab from any window if current window has no SF tabs (1 ms)
+      ✓ should return null if no SF tabs exist
+      ✓ should handle multiple SF tabs in current window - prefer active
+      ✓ should handle Lightning domain
+    Window Context Isolation
+      ✓ Window 1 should get Window 1 SF tab, Window 2 should get Window 2 SF tab (1 ms)
+      ✓ should isolate sessions between 4 different org windows
+  Instance URL Cache Clearing
+    ✓ should clear cache when null is passed
+    ✓ clearing cache ensures fresh data on next popup open (1 ms)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 2 cache items and session storage
+
+      at clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cache version incremented to 2
+
+      at Object.invalidateAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:246:13)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.warn
+    Invalid orgId provided
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:189:17)
+      at Object.setCurrentOrgId (tests/cache_manager.test.js:411:42)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+PASS tests/connection_error_handling.test.js
+  Connection Error Handling
+    fetchRecordViaSoql Connection Errors
+      ✓ should return friendly error when global describe fails with "Not connected" (2 ms)
+      ✓ should return friendly error when SOQL query fails with "Not connected" (2 ms)
+      ✓ should return friendly error when SOQL query fails with "no session" (3 ms)
+      ✓ should return friendly error when SOQL query fails with "unauthorized" (5 ms)
+      ✓ should return friendly error when SOQL query fails with "invalid session" (8 ms)
+      ✓ should still return object name when connection fails but key prefix known (1 ms)
+      ✓ should return Unknown for unknown key prefix when not connected (1 ms)
+    loadFieldHistory Connection Errors
+      ✓ should show friendly message when "Not connected" (2 ms)
+      ✓ should show friendly message when "no session" (9 ms)
+      ✓ should show friendly message when "unauthorized" (1 ms)
+      ✓ should show actual error for non-connection errors (3 ms)
+    loadRelatedRecords Connection Errors
+      ✓ should show friendly message when "Not connected" (1 ms)
+      ✓ should show friendly message when "no session" (1 ms)
+      ✓ should show friendly message when "unauthorized" (3 ms)
+      ✓ should show actual error for non-connection errors (4 ms)
+    extractRecordIdFromUrl
+      ✓ should extract ID from Lightning record URL (14 ms)
+      ✓ should extract 18-character ID (4 ms)
+      ✓ should return null for non-record URLs (1 ms)
+    Key Prefix Mapping
+      ✓ should identify Account from 001 prefix (14 ms)
+      ✓ should identify Contact from 003 prefix (1 ms)
+      ✓ should identify Opportunity from 006 prefix
+      ✓ should identify Lead from 00Q prefix (1 ms)
+      ✓ should identify Case from 500 prefix (1 ms)
+      ✓ should identify User from 005 prefix (3 ms)
+    Successful Record Fetch
+      ✓ should return record data on successful SOQL query (1 ms)
+      ✓ should return note when record not found (1 ms)
+
+PASS tests/graphql_ui_fixes.test.js
+  A. Critical UI Bugs (Must-Fix)
+    Issue 1: Abstract GraphQL internals (edges/node/value)
+      ✓ should filter out GraphQL wrapper fields from field list (20 ms)
+      ✓ should display logical field names in UI, not GraphQL structure (8 ms)
+      ✓ should transform field results to remove GraphQL wrappers (1 ms)
+    Issue 2: Prevent duplicate filter entries
+      ✓ should detect duplicate filter fields
+      ✓ should wrap duplicate filters in AND block when composing query (1 ms)
+      ✓ should support AND/OR filter logic toggle
+    Issue 3: Filter rows should only be created on explicit click
+      ✓ should not auto-create filter rows on builder enable (45 ms)
+      ✓ should create filter row only when "Add Filter" button is clicked (8 ms)
+      ✓ should not have empty filter rows after clearing (7 ms)
+    Issue 4: Object name display should match selected object
+      ✓ should display selected object name in header (10 ms)
+      ✓ should update header when object changes (1 ms)
+      ✓ should show placeholder when no object selected (3 ms)
+    Issue 5: Empty results should show meaningful message
+      ✓ should show record count when results are returned
+      ✓ should show "0 records" message for empty results (1 ms)
+      ✓ should not show raw {} for empty object response
+  B. UI/UX Design Mismatches
+    Issue 6: Real-time field filtering
+      ✓ should filter fields list as user types (1 ms)
+      ✓ should be case-insensitive when filtering (1 ms)
+      ✓ should show all fields when search is cleared (1 ms)
+    Issue 7: Progressive disclosure of advanced options
+      ✓ should have collapsible sections (1 ms)
+      ✓ should have Fields and Filters open by default (1 ms)
+      ✓ should have Order By, Pagination, and Related Objects collapsed by default
+    Issue 8: Pagination UI should match query variables
+      ✓ should sync limit input with builder state (1 ms)
+      ✓ should use "first" parameter in GraphQL query for limit
+      ✓ should properly handle offset parameter
+      ✓ should properly handle after cursor for pagination (1 ms)
+    Issue 9: Clear vs Remove icons should be distinct
+      ✓ should have tooltips on action buttons
+      ✓ should have distinct icons for different actions (1 ms)
+    Issue 10: Dropdown positioning should be constrained
+      ✓ should have max-height on select elements (3 ms)
+      ✓ should have proper overflow handling on builder panel (1 ms)
+  C. Query Builder Interaction Issues
+    Issue 11: Inline validation with visual feedback
+      ✓ should validate empty object selection
+      ✓ should validate empty fields array (1 ms)
+      ✓ should validate filter with empty field name
+      ✓ should set builder status based on validation state
+      ✓ validateFilterRow should return error for empty field
+      ✓ validateFilterRow should return error for missing operator (2 ms)
+      ✓ validateFilterRow should return error for missing value (non-null operator) (1 ms)
+      ✓ validateFilterRow should pass for IS NULL without value (2 ms)
+      ✓ validateFilterRow should pass for IS NOT NULL without value (1 ms)
+      ✓ validateFilterRow should pass for complete valid filter
+      ✓ renderFilters should add filter-error class for invalid filters (8 ms)
+      ✓ renderFilters should add input-error class to empty field inputs (16 ms)
+      ✓ renderFilters should set data-error attribute with error message (4 ms)
+      ✓ validateBuilderState should detect incomplete filters (3 ms)
+    Issue 12: Operator tooltips with examples
+      ✓ should have explanation for LIKE operator
+      ✓ should generate correct GraphQL operators (1 ms)
+      ✓ getFilterOperatorTooltip should return description for = operator
+      ✓ getFilterOperatorTooltip should return description for LIKE operator
+      ✓ getFilterOperatorTooltip should return description for IN operator
+      ✓ getFilterOperatorTooltip should return description for IS NULL operator (1 ms)
+      ✓ getFilterOperatorTooltip should return description for IS NOT NULL operator
+      ✓ getFilterOperatorTooltip should return all standard operators (2 ms)
+      ✓ renderFilters should add title attribute to operator select (4 ms)
+      ✓ renderFilters should add title attribute to each operator option (7 ms)
+    Issue 13: Dedicated null operators
+      ✓ should have IS NULL operator option (2 ms)
+      ✓ should hide value input when IS NULL operator is selected (1 ms)
+      ✓ should generate correct query for IS NULL filter (2 ms)
+      ✓ renderFilters should hide value input for IS NULL operator (86 ms)
+      ✓ renderFilters should show value input for regular operators (10 ms)
+      ✓ renderFilters should hide value input for IS NOT NULL operator (18 ms)
+      ✓ validateFilterRow should not require value for IS NULL (1 ms)
+      ✓ validateFilterRow should not require value for IS NOT NULL (1 ms)
+    Issue 14: Disable sorting on unsupported field types
+      ✓ should identify textarea fields as unsortable (1 ms)
+      ✓ should warn when sorting by unsortable field
+      ✓ should not warn when sorting by sortable field
+      ✓ should warn when sorting by base64 field (1 ms)
+      ✓ getCurrentObjectFieldsMetadata should return current metadata (1 ms)
+      ✓ validateBuilderState should use currentObjectFieldsMetadata for orderBy validation
+      ✓ unsortable types should include textarea, base64, and blob (1 ms)
+  D. Results & Export UX Problems
+    Issue 15: Table view for results
+      ✓ should have table view toggle button
+      ✓ should have results table element
+      ✓ should extract records from GraphQL response for table (9 ms)
+      ✓ renderResultsAsTable should generate valid HTML table (1 ms)
+      ✓ renderResultsAsTable should auto-generate columns from records if not provided
+      ✓ renderResultsAsTable should handle empty records
+      ✓ renderResultsAsTable should escape HTML in values (1 ms)
+      ✓ renderResultsAsTable should handle nested value objects
+      ✓ toggleResultsView should switch between JSON and table views (1 ms)
+    Issue 16: Auto-generate table columns from selected fields
+      ✓ should use builder fields as table columns (1 ms)
+      ✓ generateTableColumns should filter out GraphQL wrapper fields (1 ms)
+      ✓ should handle fields with { value } wrapper in results
+    Issue 17: Visible export buttons
+      ✓ should have CSV export button
+      ✓ should have JSON export button
+      ✓ should have Copy results button (1 ms)
+      ✓ exportResultsAsCSV should generate valid CSV
+      ✓ exportResultsAsCSV should escape commas in values
+      ✓ exportResultsAsCSV should escape quotes in values
+      ✓ exportResultsAsCSV should handle null values (1 ms)
+      ✓ exportResultsAsCSV should auto-generate columns if not provided
+      ✓ exportResultsAsJSON should format JSON with indentation
+      ✓ handleExportCSV should set status message when no results
+      ✓ handleExportJSON should set status message when no results (1 ms)
+  E. Visual & Layout Issues
+    Issue 18: Collapsible sections with item counts
+      ✓ should show field count in section header (1 ms)
+      ✓ should show filter count in section header
+      ✓ should only count filters with field names in count (3 ms)
+      ✓ should show related objects count
+      ✓ should have collapsible details elements for sections (1 ms)
+      ✓ Fields and Filters sections should be open by default (1 ms)
+    Issue 19: Query readiness status indicator
+      ✓ should show "Ready" when query is valid (2 ms)
+      ✓ should show "Error" when no object selected (1 ms)
+      ✓ should show "Error" when no fields selected (4 ms)
+      ✓ should show "Warning" for incomplete filters (1 ms)
+      ✓ should show "Info" when builder is disabled
+      ✓ updateQueryStatusBadge should update status element
+      ✓ should disable Run button when query is invalid (1 ms)
+      ✓ should enable Run button when query is valid
+    Issue 20: Visual summary toggle for query preview
+      ✓ should have visual summary element
+      ✓ generateVisualSummary should produce human-readable summary (1 ms)
+      ✓ generateVisualSummary should handle OR filter logic
+      ✓ generateVisualSummary should handle IS NULL operators
+      ✓ generateVisualSummary should truncate many fields
+      ✓ generateVisualSummary should truncate many filters
+      ✓ generateVisualSummary should include OFFSET when non-zero
+      ✓ generateVisualSummary should not include OFFSET when zero
+      ✓ generateVisualSummary should show message when no object selected
+      ✓ updateVisualSummary should update summary element
+      ✓ should have tabs for Query, Variables, Summary views (5 ms)
+  F. Pop-In / Pop-Out (Extension Window) Bugs
+    Issue 21: Window size persistence with minimum constraints
+      ✓ should persist window size to storage (1 ms)
+      ✓ should restore window size on pop-out (5 ms)
+      ✓ should enforce minimum window width of 800
+      ✓ should enforce minimum window height of 600 (1 ms)
+      ✓ should use default size when no stored size exists (2 ms)
+    Issue 22: Full builderState persistence during pop-in/pop-out
+      ✓ should persist full builder state including fields, filters, and pagination (1 ms)
+      ✓ should restore builder state after pop-in (3 ms)
+      ✓ should preserve related objects in builder state (2 ms)
+      ✓ should use window.__pendingBuilderState for state transfer (1 ms)
+    Issue 23: Prevent double rendering
+      ✓ should have loading state during transition
+      ✓ should track initialization to prevent double init
+    Issue 24: Session transfer before APP_POP_SET message
+      ✓ should persist session info with pop-out including instanceUrl (1 ms)
+      ✓ should capture session BEFORE sending APP_POP_SET message
+      ✓ should clear consumed appSession after restoration (1 ms)
+    Issue 25: Multi-window session isolation by windowId and instanceUrl
+      ✓ should key session storage by instanceUrl
+      ✓ should isolate sessions for different orgs
+      ✓ should also key builderState by instanceUrl (1 ms)
+      ✓ should track which tab/org is connected
+    Issue 26: Preserve UI interaction state
+      ✓ should persist scroll position
+    Issue 27: Focus restoration
+      ✓ should track last focused element (1 ms)
+    Issue 28: Consistent styling with standalone mode classes
+      ✓ should use same CSS classes in both modes (5 ms)
+      ✓ should add standalone-mode class to tab pane in pop-out (1 ms)
+      ✓ should add standalone-expanded class to panels in pop-out (1 ms)
+    Issue 29: Mode indicator and standalone detection
+      ✓ should have window mode badge element
+      ✓ should detect standalone mode from URL hash
+      ✓ renderScreens should detect standalone mode via hash (1 ms)
+      ✓ should show mode badge only in standalone mode
+    Issue 30: Auto-save builder state
+      ✓ should auto-save builder state on changes (5 ms)
+      ✓ should save state before pop-in closes window (9 ms)
+    Issue 31: Single-instance pop-out enforcement
+      ✓ should track existing window ID (1 ms)
+      ✓ should focus existing window instead of creating new
+    Issue 32: Centralized query execution
+      ✓ should execute queries via background script (1 ms)
+    Issue 33: Docked width presets
+      ✓ should have reasonable default width
+    Issue 34: Smooth transitions
+      ✓ should have transition state message
+    Issue 35: Window reset option
+      ✓ should have reset window size option
+      ✓ should reset to default size when stored size is cleared (1 ms)
+  G. High-Impact UI Improvements
+    Issue 36: Guided vs Expert mode toggle
+      ✓ should have builder toggle for guided mode
+      ✓ should show visual builder in guided mode (43 ms)
+      ✓ should allow raw query editing in expert mode (7 ms)
+    Issue 37: Smart defaults
+      ✓ should auto-select Id field by default (4 ms)
+      ✓ should default limit to 50
+      ✓ should include pageInfo by default (1 ms)
+      ✓ should auto-include Name field when available
+    Issue 38: Schema-aware intelligence
+      ✓ should suggest common filters based on object
+      ✓ should hide impossible field combinations (1 ms)
+      ✓ should validate field types for filter operators
+  Integration Tests
+    ✓ full query builder flow (1 ms)
+    ✓ query import and re-export roundtrip (3 ms)
+    ✓ builder state persistence across sessions (1 ms)
+  H. Beta Banner
+    ✓ should have beta banner element in GraphQL tab (3 ms)
+    ✓ should have beta banner icon (1 ms)
+    ✓ should have beta banner title
+    ✓ should have beta banner message (1 ms)
+    ✓ should have report issue action button
+    ✓ should have dismiss button (1 ms)
+    ✓ dismiss button should hide the banner when clicked
+    ✓ should persist dismissed state to storage
+    ✓ should restore dismissed state from storage (2 ms)
+
+  console.warn
+    Error reading cache for key1: SyntaxError: Unexpected token 'o', "not valid json {" is not valid JSON
+        at JSON.parse (<anonymous>)
+        at Object.getCache (eval at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/tests/cache_manager.test.js:49:1), <anonymous>:43:27)
+        at getCache (/Users/manas/IdeaProjects/sf-audit-extractor/tests/cache_manager.test.js:423:44)
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/expect/build/toThrowMatchers.js:74:11)
+        at Object.throwingMatcher [as toThrow] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/expect/build/index.js:320:21)
+        at Object.toThrow (/Users/manas/IdeaProjects/sf-audit-extractor/tests/cache_manager.test.js:425:14)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)
+        at Object.worker (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/testWorker.js:106:12)
+
+      at Object.getCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:52:15)
+      at getCache (tests/cache_manager.test.js:423:44)
+      at Object.<anonymous> (node_modules/expect/build/toThrowMatchers.js:74:11)
+      at Object.throwingMatcher [as toThrow] (node_modules/expect/build/index.js:320:21)
+      at Object.toThrow (tests/cache_manager.test.js:425:14)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+PASS tests/org_favicon_v2.test.js
+  Org & Favicon V2 - 3 Column Layout
+    Multi-Org Save and Retrieval
+      ✓ should save multiple orgs independently (97 ms)
+      ✓ should maintain separate icon configs for each org (78 ms)
+      ✓ should delete org without affecting others (27 ms)
+      ✓ should handle search filtering across multiple orgs (8 ms)
+    Draft vs Applied State Management
+      ✓ should show "Up to date" when draft equals applied (6 ms)
+      ✓ should show "Unsaved Changes" when draft differs from applied (48 ms)
+      ✓ should detect color change as unsaved (6 ms)
+      ✓ should detect label change as unsaved (5 ms)
+      ✓ should detect shape change as unsaved (15 ms)
+      ✓ should reset draft to applied on reset button (11 ms)
+    Save Button State Management
+      ✓ should disable save button when no changes (5 ms)
+      ✓ should enable save button when changes detected (4 ms)
+      ✓ should show "Save Org + Icon" for unsaved org (5 ms)
+      ✓ should show "Save Changes" for existing org (14 ms)
+    State Persistence (Pop-in/Pop-out)
+      ✓ should persist selectedOrgId to storage (15 ms)
+      ✓ should persist draftIconConfig on change (20 ms)
+      ✓ should restore selectedOrgId on loadSavedOrgs (3 ms)
+      ✓ should restore draftIconConfig on loadSavedOrgs (6 ms)
+      ✓ should clear draftIconConfig after successful save (28 ms)
+    Preset Selection and Application
+      ✓ should update form values when preset selected (16 ms)
+      ✓ should mark selected preset as active (3 ms)
+      ✓ should deactivate other presets when new one selected (3 ms)
+      ✓ should trigger unsaved changes when preset applied (18 ms)
+      ✓ should apply all 7 presets correctly (5 ms)
+    Color Swatch Selection
+      ✓ should update color input when swatch clicked (12 ms)
+      ✓ should trigger config change on swatch selection (21 ms)
+    Legacy Favicon Migration
+      ✓ should migrate orgFavicons to orgRecords format (2 ms)
+      ✓ should trigger migration when orgRecords empty but orgFavicons exists (3 ms)
+    CSP Compliance (No Inline Handlers)
+      ✓ should wire org list items without inline onclick (23 ms)
+      ✓ should wire delete buttons without inline onclick (7 ms)
+      ✓ org list item click should call selectOrg via addEventListener (3 ms)
+    Error Handling
+      ✓ should show error when adding org with no current org (8 ms)
+      ✓ should show error when saving with no org selected (3 ms)
+      ✓ should handle storage errors gracefully (83 ms)
+    UI State Management
+      ✓ should hide editor panel when no org selected (27 ms)
+      ✓ should show editor panel when org selected (2 ms)
+      ✓ should update editing org name when org selected (3 ms)
+      ✓ should show saved status badge when org is saved (2 ms)
+      ✓ should show not-saved status badge when org is not saved (2 ms)
+    Edge Cases
+      ✓ should handle org with missing iconConfig (13 ms)
+      ✓ should handle empty search query (3 ms)
+      ✓ should handle special characters in search (20 ms)
+      ✓ should handle very long org names (6 ms)
+      ✓ should clear preset selection on reset (8 ms)
+    Integration Tests
+      ✓ full workflow: add org, customize, save, switch org, verify (5 ms)
+      ✓ workflow with preset, modify, save (6 ms)
+    Unsaved Changes Banner
+      ✓ should show banner when draft differs from applied (2 ms)
+      ✓ should hide banner when draft equals applied (12 ms)
+      ✓ banner save button should trigger saveOrgAndIcon (24 ms)
+      ✓ banner should have correct structure (2 ms)
+    Applied Summary Display
+      ✓ should display applied icon label (19 ms)
+      ✓ should display applied icon color (6 ms)
+      ✓ should show dash when no label applied (3 ms)
+      ✓ should show "No icon applied" when no config exists (2 ms)
+      ✓ applied summary section should be visible when org selected (2 ms)
+    Linear Flow UI (Applied → Draft → Save)
+      ✓ should have applied summary section before editing section (11 ms)
+      ✓ applied summary should show "Live in browser" badge (2 ms)
+      ✓ editing section should be primary/larger than applied summary (2 ms)
+      ✓ save action should update both draft badge and banner (17 ms)
+    Connection Error Early Exit
+      ✓ should stop SOQL attempts when not connected (40 ms)
+      ✓ should return friendly error message for connection issues (2 ms)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → dev-org-id
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: dev-org-id → prod-org-id
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 2 cache items for org dev-org-id
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: prod-org-id → dev-org-id
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 2 cache items for org prod-org-id
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+PASS tests/data_explorer_tabs.test.js
+  Data Explorer Tab Structure
+    Sub-tab Order
+      ✓ Record Scanner should be the first sub-tab in Data Explorer (4 ms)
+      ✓ Record Scanner should be active by default (3 ms)
+      ✓ User Manager should be the second sub-tab (3 ms)
+      ✓ Data Explorer should have exactly 2 sub-tabs
+    Settings Tab Structure
+      ✓ Settings should have Org & Favicon sub-tab (22 ms)
+      ✓ Org & Favicon should be the default active sub-tab in Settings (3 ms)
+      ✓ Settings should have Display sub-tab (9 ms)
+      ✓ Settings should have About sub-tab (3 ms)
+      ✓ Settings should have exactly 3 sub-tabs (8 ms)
+    Sandbox Manager Removal from Data Explorer
+      ✓ Sandbox Manager should NOT be in Data Explorer tabs (1 ms)
+    Sub-tab Content Containers
+      ✓ Record Scanner content should exist and be active (1 ms)
+      ✓ User Manager content should exist and be hidden by default (2 ms)
+      ✓ Settings Org content should exist (4 ms)
+
+  console.log
+    CacheManager initialized
+
+      at eval (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:304:11)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: dev-org-id → org-1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org dev-org-id
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org-1 → org-2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org-1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: 00Da0000000001 → 00Da0000000002
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org-2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org-2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 1 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_manager.test.js:49:1), <anonymous>:131:15)
+
+PASS tests/cache_manager.test.js
+  CacheManager
+    Basic Cache Operations
+      ✓ should set and get cache (2 ms)
+      ✓ should return null for non-existent cache (1 ms)
+      ✓ should remove cache (1 ms)
+      ✓ should handle various data types (1 ms)
+    Organization Scoping
+      ✓ should isolate cache by organization (33 ms)
+      ✓ should clear cache when switching organizations (16 ms)
+      ✓ should get cache from specific org without switching (11 ms)
+    Cache Expiration (TTL)
+      ✓ should expire cache based on TTL (3 ms)
+      ✓ should not expire cache before TTL (1 ms)
+      ✓ should handle cache without TTL (infinite)
+    Clear Operations
+      ✓ should clear all caches for current org (1 ms)
+      ✓ should clear cache for specific org (1 ms)
+      ✓ should clear all caches across all orgs (15 ms)
+      ✓ should not clear other org caches when clearing one (4 ms)
+    Recent Records Cache Use Case
+      ✓ should not share recent records between orgs (7 ms)
+      ✓ should clear recent records when switching orgs (6 ms)
+    Record History Cache Use Case
+      ✓ should isolate record history by org (2 ms)
+    Cache Statistics
+      ✓ should report accurate cache statistics (4 ms)
+    Cache Invalidation
+      ✓ should invalidate all caches (38 ms)
+    Error Handling
+      ✓ should handle invalid org IDs gracefully (1 ms)
+      ✓ should handle corrupted cache data (51 ms)
+      ✓ should handle missing localStorage gracefully (3 ms)
+    Real World Scenarios
+      ✓ Scenario: User switches between Dev and Prod orgs (19 ms)
+      ✓ Scenario: User logs out and logs back in (17 ms)
+      ✓ Scenario: Multiple records access in record scanner (4 ms)
+
+  console.log
+    Cleared 0 cache items for org 00Da0000000001
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: 00Da0000000002 → 00Da0000000001
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org 00Da0000000002
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: 00Da0000000001 → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org 00Da0000000001
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → orgC
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    🔥 FORCING CACHE CLEAR on app startup
+
+      at log (popup.js:125:17)
+
+  console.log
+    🧹 Cleared 0 localStorage cache items
+
+      at log (popup.js:141:25)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgC → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgC
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgA → orgB
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgA
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    🔥 FORCING CACHE CLEAR on app startup
+
+      at log (popup.js:125:17)
+
+  console.log
+    🧹 Cleared 0 localStorage cache items
+
+      at log (popup.js:141:25)
+
+PASS tests/popup_title.test.js
+  Popup Title Logic
+    ✓ sets title to "[OrgName] - TrackForcePro" when in standalone mode and session is restored (42 ms)
+    ✓ does NOT update title if not in standalone mode (15 ms)
+
+PASS tests/url_helper.test.js
+  normalizeApiBase
+    ✓ normalizes {
+  input: 'https://org.lightning.force.com',
+  expected: 'https://org.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org--sb.sandbox.lightning.force.com',
+  expected: 'https://org--sb.sandbox.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.develop.lightning.force.com',
+  expected: 'https://org.develop.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.scratch.lightning.force.com',
+  expected: 'https://org.scratch.my.salesforce.com'
+} (1 ms)
+    ✓ normalizes {
+  input: 'https://org.visual.force.com',
+  expected: 'https://org.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.vf.force.com',
+  expected: 'https://org.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.force.com',
+  expected: 'https://org.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.salesforce-setup.com',
+  expected: 'https://org.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.my.salesforce-setup.com',
+  expected: 'https://org.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.my.my.salesforce.com',
+  expected: 'https://org.my.salesforce.com'
+}
+    ✓ normalizes {
+  input: 'https://org.my.salesforce.com',
+  expected: 'https://org.my.salesforce.com'
+}
+
+  console.log
+    Background script tests loaded
+
+      at Object.log (tests/background_org.test.js:521:9)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: orgB → dev-org-id
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org orgB
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 2 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: dev-org-id → prod-org-id
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org dev-org-id
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 2 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: prod-org-id → dev-org-id
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org prod-org-id
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: dev-org-id → org1
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org dev-org-id
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 1 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org1 → org2
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org1
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+  console.log
+    Cleared 0 cache items and session storage
+
+      at Object.clearAllCaches (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:173:15)
+
+  console.log
+    [CacheManager] Org switch detected in setCurrentOrgId: org2 → orgA
+
+      at Object.setCurrentOrgId (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:199:17)
+
+  console.log
+    Cleared 0 cache items for org org2
+
+      at clearOrgCache (eval at Object.<anonymous> (tests/cache_org_detection.test.js:18:1), <anonymous>:131:15)
+
+PASS tests/cache_org_detection.test.js
+  Organization Detection and Cache Clearing
+    App Launch Scenarios
+      ✓ should detect org change and clear cache on app relaunch (17 ms)
+      ✓ should NOT clear cache if same org detected on relaunch (5 ms)
+    Multiple Rapid App Launches from Different Orgs
+      ✓ should clear cache each time org changes (25 ms)
+    Favicon Switching with Org Changes
+      ✓ should clear favicon cache on org switch (5 ms)
+    Recent Records with Org Changes
+      ✓ should not show recent records from previous org (3 ms)
+    Real-World User Scenario
+      ✓ User has multiple orgs open - switching between them (31 ms)
+    Edge Cases
+      ✓ should handle null/undefined org IDs gracefully (2 ms)
+      ✓ should handle same org ID set multiple times (2 ms)
+
+PASS tests/popup_tab_mode.test.js
+  Tab Mode Feature
+    Tab Mode Detection
+      ✓ should detect tab mode from URL hash #tab (1 ms)
+      ✓ should detect standalone mode from URL hash #standalone
+      ✓ should return false for empty or missing hash
+      ✓ should differentiate between tab and standalone modes
+    APP_TAB_OPEN Message Handling
+      ✓ should send APP_TAB_OPEN message for single-click (1 ms)
+      ✓ should include session when opening tab (53 ms)
+      ✓ should include builder state when opening tab (4 ms)
+      ✓ should handle APP_TAB_OPEN failure gracefully (2 ms)
+    Single-Click vs Shift+Click Behavior
+      ✓ should use APP_TAB_OPEN for single-click (no shift)
+      ✓ should use APP_POP_SET for shift+click
+      ✓ should correctly determine action based on event
+    Tab Creation with Correct Index
+      ✓ should create tab next to active tab
+      ✓ should create tab with #tab hash
+    Pop-In from Standalone to Tab
+      ✓ should send APP_TAB_OPEN when popping in from standalone (12 ms)
+      ✓ should transfer session when popping in from standalone to tab (2 ms)
+    Tab Mode Close Behavior
+      ✓ should close tab when clicking pop-in button in tab mode (1 ms)
+      ✓ should save state before closing tab (2 ms)
+    Button State Updates
+      ✓ should show "Open as tab" tooltip in popup mode (2 ms)
+      ✓ should show "Close tab" tooltip in tab mode (5 ms)
+      ✓ should show "Pop in (open as tab)" tooltip in standalone mode (1 ms)
+      ✓ should show pop-in icon in tab mode
+    Session and State Transfer
+      ✓ should store session with instance URL key for tab (1 ms)
+      ✓ should store builder state alongside session (1 ms)
+    Error Handling
+      ✓ should handle chrome.runtime.lastError on APP_TAB_OPEN (1 ms)
+      ✓ should fallback to window.close() if tab query fails (1 ms)
+      ✓ should re-enable button on APP_TAB_OPEN failure
+    Integration Flow Tests
+      ✓ complete flow: popup -> tab open -> tab close (1 ms)
+      ✓ complete flow: popup -> window pop-out -> pop-in to tab
+
+PASS tests/background_org.test.js
+  GET_ORG_ID Message Handler
+    ✓ should return org ID from successful API call (1 ms)
+    ✓ should handle missing session cookie
+    ✓ should handle API error response
+    ✓ should handle network error
+  Session Detection
+    ✓ should find sid cookie from Salesforce domain (1 ms)
+    ✓ should rank cookies by domain priority (1 ms)
+  API Version Handling
+    ✓ should return stored API version
+    ✓ should normalize version format (1 ms)
+  Salesforce URL Detection
+    ✓ should detect valid Salesforce URLs (25 ms)
+    ✓ should reject non-HTTPS URLs
+    ✓ should reject non-Salesforce URLs
+  SOQL Query Building
+    ✓ should build Organization query (1 ms)
+    ✓ should URL encode special characters (1 ms)
+  Instance URL Normalization
+    ✓ should normalize lightning URLs
+    ✓ should normalize visualforce URLs
+    ✓ should normalize setup URLs
+    ✓ should handle invalid URLs
+  Error Response Handling
+    ✓ should parse Salesforce error response
+    ✓ should handle empty error response
+  Retry Logic
+    ✓ should identify retryable errors
+    ✓ should calculate exponential backoff
+  GET_ORG_ID Edge Cases
+    ✓ should handle missing tab ID in sender
+    ✓ should handle missing URL in sender
+    ✓ should extract hostname from URL safely (1 ms)
+    ✓ should construct correct API URL for org query
+  Cookie Handling for Session
+    ✓ should find sid cookie by name
+    ✓ should handle no sid cookie found
+    ✓ should use sid value as Bearer token
+  Message Response Handling
+    ✓ should return success with orgId on successful query
+    ✓ should return error response on API failure (1 ms)
+    ✓ should return error response on exception
+  Tab URL Validation
+    ✓ should validate Salesforce URLs before making API calls
+  Async Message Handler Pattern
+    ✓ should return true to keep message channel open for async response
+    ✓ should handle IIFE async pattern in message listener (12 ms)
+
+PASS tests/content_script_loading.test.js
+  Content Script Loading Tests
+    Manifest Content Scripts Configuration
+      ✓ content_scripts should include *.salesforce.com/*
+      ✓ content_scripts should include *.force.com/*
+      ✓ content_scripts should include *.salesforce-setup.com/*
+      ✓ content_scripts should include *.visualforce.com/* (1 ms)
+      ✓ content_scripts should include *.lightning.force.com/*
+      ✓ content_scripts should have at least 5 URL patterns
+      ✓ content_scripts should run content.js
+      ✓ content_scripts should run in all frames
+    Salesforce Host Detection
+      ✓ should detect my.salesforce.com as Salesforce
+      ✓ should detect lightning.force.com as Salesforce
+      ✓ should detect salesforce-setup.com as Salesforce
+      ✓ should detect visualforce.com as Salesforce (1 ms)
+      ✓ should NOT detect google.com as Salesforce
+      ✓ should NOT detect fakesalesforce.com as Salesforce
+      ✓ should NOT detect salesforce.com.fake.com as Salesforce (1 ms)
+      ✓ should handle case-insensitive matching
+    Content Script URL Pattern Matching
+      ✓ URL https://myorg.my.salesforce.com/lightning/o/Accoun... should match (salesforce.com) (4 ms)
+      ✓ URL https://myorg.lightning.force.com/lightning/o/Acco... should match (force.com)
+      ✓ URL https://myorg.my.salesforce.com/001xxx... should match (salesforce.com) (1 ms)
+      ✓ URL https://myorg.salesforce-setup.com/lightning/setup... should match (salesforce-setup.com)
+      ✓ URL https://myorg--c.vf.force.com/apex/MyPage... should match (force.com)
+      ✓ URL https://myorg.na123.visual.force.com/apex/MyPage... should match (force.com)
+      ✓ URL https://www.google.com/... should NOT match (google.com) (1 ms)
+      ✓ URL https://salesforce-phishing.com/... should NOT match (phishing)
+    Session Info Retrieval
+      ✓ should have getSessionInfo action handler
+      ✓ session info response should have expected structure
+      ✓ session info should indicate not connected when no session
+    Error Handling
+      ✓ should handle extension context invalidation
+      ✓ should return appropriate error when not on Salesforce page
+
+PASS tests/audit_export.test.js
+  AuditHelper export
+    ✓ Display and Delegate User fields flow into state and CSV (9 ms)
+
+PASS tests/background_publish.test.js
+  background PUBLISH_PLATFORM_EVENT handler
+    ✓ returns success when publishPlatformEvent is invoked (2 ms)
+
+PASS tests/version_consistency.test.js
+  Version Consistency
+    ✓ manifest.json should have a valid version (1 ms)
+    ✓ popup.html About section version should match manifest.json version (1 ms)
+    ✓ popup.html should contain the about-version element (1 ms)
+    ✓ manifest.json version should be 1.1.2 or higher
+    ✓ current version should be 1.1.12 (1 ms)
+    ✓ build output filename should match manifest version
+  Manifest.json Validation
+    ✓ should have manifest_version 3 (1 ms)
+    ✓ should have required host_permissions for Salesforce domains
+    ✓ should have content_scripts matching Salesforce domains
+    ✓ should have name TrackForcePro
+  Help Links Validation
+    ✓ should link to GitHub Pages help.html
+    ✓ should link to GitHub Pages QUICK_START_GUIDE.html
+    ✓ should link to GitHub Pages privacy-policy.html (1 ms)
+    ✓ should link to GitHub issues for bug reports
+    ✓ should NOT contain direct GitHub MD file links for USER_GUIDE (1 ms)
+    ✓ should NOT contain direct GitHub MD file links for DEVELOPER_GUIDE
+    ✓ should NOT contain direct GitHub MD file links for QUICK_REFERENCE
+    ✓ should NOT contain placeholder GitHub user links
+  Docs HTML Files Version
+    ✓ docs/index.html should have correct version
+    ✓ docs/help.html should have correct version (1 ms)
+    ✓ docs/QUICK_START_GUIDE.html should have correct version
+  docs/help.html Structure
+    ✓ help.html file should exist (1 ms)
+    ✓ should have Documentation section
+    ✓ should have Features Overview section
+    ✓ should have FAQ section
+    ✓ should have Support section
+    ✓ should have Troubleshooting section
+    ✓ should have navigation links to other pages
+    ✓ should only link to GitHub issues (not repo directly)
+  Build Zip File
+    ✓ TrackForcePro-v1.1.2.zip should exist
+
+PASS tests/soql_helper.spectest.js
+  SOQL helper object dropdown
+    ✓ renders only REST objects when Tooling API is unchecked; toggling shows Tooling objects and back (85 ms)
+
+PASS tests/settings_helper.test.js
+  Settings Helper - Tab Reordering
+    ✓ ensureSettingsTabExists creates settings tab and pane (105 ms)
+    ✓ ensureSettingsTabExists creates accordion container (77 ms)
+    ✓ Settings pane has correct card structure (11 ms)
+    ✓ Settings pane has tab order section with puzzle icon (59 ms)
+  Settings Helper - Accordion Items
+    ✓ buildSettingsPanel creates accordion items for each tab (29 ms)
+    ✓ Accordion items have draggable attribute (53 ms)
+    ✓ Accordion items contain drag handle, icon, label, and toggle (14 ms)
+    ✓ Accordion items have correct data-tab attribute (53 ms)
+    ✓ Accordion item adds dragging class on dragstart (17 ms)
+    ✓ Accordion item removes dragging class on dragend (28 ms)
+  Settings Helper - SOQL Sub-Settings
+    ✓ SOQL accordion item has expand button (36 ms)
+    ✓ SOQL accordion item has sub-settings container (22 ms)
+    ✓ SOQL sub-settings contain Object selector checkbox (34 ms)
+    ✓ SOQL sub-settings contain Enable Builder checkbox (12 ms)
+    ✓ Clicking expand button toggles expanded class (10 ms)
+  Settings Helper - GraphQL Sub-Settings
+    ✓ GraphQL accordion item has expand button (12 ms)
+    ✓ GraphQL sub-settings contain Object selector checkbox (14 ms)
+    ✓ GraphQL sub-settings contain Auto-format checkbox (15 ms)
+  Settings Helper - Visibility Toggles
+    ✓ Hidden tabs are marked with hidden-tab class (14 ms)
+    ✓ Visibility checkbox reflects visibility state (13 ms)
+    ✓ Changing visibility checkbox triggers onVisibilityChanged callback (78 ms)
+  Settings Helper - Tab Icons
+    ✓ Accordion items display appropriate icons for known tabs (49 ms)
+  Settings Helper - applyTabVisibilityFromStorage
+    ✓ applyTabVisibilityFromStorage hides buttons for hidden tabs (5 ms)
+    ✓ applyTabVisibilityFromStorage sets aria-hidden attribute (4 ms)
+    ✓ applyTabVisibilityFromStorage returns visibility object (4 ms)
+  Settings Helper - firstVisibleTabName
+    ✓ firstVisibleTabName returns first non-hidden tab (6 ms)
+    ✓ firstVisibleTabName returns about if all other tabs are hidden (4 ms)
+  Settings Helper - CSS Injection
+    ✓ injectFlexCss adds style element (13 ms)
+    ✓ injectFlexCss does not duplicate style element (3 ms)
+  Settings Helper - Tabs without sub-settings
+    ✓ Non-editor tabs do not have expand button (11 ms)
+    ✓ Non-editor tabs do not have sub-settings (8 ms)
+  Settings Helper - Existing Placeholder Pane
+    ✓ ensureSettingsTabExists replaces placeholder content with accordion (9 ms)
+    ✓ ensureSettingsTabExists adds settings-pane class to existing pane (5 ms)
+    ✓ buildSettingsPanel creates accordion items in existing pane (7 ms)
+    ✓ All accordion items are visible in the settings pane (14 ms)
+    ✓ SOQL and GraphQL items have expandable sub-settings (64 ms)
+    ✓ Settings pane structure includes all required containers (9 ms)
+    ✓ Does not duplicate settings tab button if one already exists (11 ms)
+  Settings Helper - Platform Events Sub-Settings
+    ✓ Platform Events accordion item has expand button (10 ms)
+    ✓ Platform Events accordion item has sub-settings container (17 ms)
+    ✓ Platform Events sub-settings contain Show Publish button checkbox (13 ms)
+    ✓ Platform Events sub-settings contain Auto-subscribe checkbox (15 ms)
+    ✓ Platform Events Show Publish button checkbox reflects storage value (48 ms)
+    ✓ Platform Events Auto-subscribe checkbox reflects storage value when true (36 ms)
+    ✓ Changing Platform Show Publish saves to storage (21 ms)
+    ✓ Changing Platform Auto-subscribe saves to storage (28 ms)
+    ✓ Changing Platform settings dispatches platform-settings-changed event (63 ms)
+    ✓ Clicking Platform expand button toggles expanded class (16 ms)
+  Settings Helper - LMS Sub-Settings
+    ✓ LMS accordion item has expand button (13 ms)
+    ✓ LMS accordion item has sub-settings container (8 ms)
+    ✓ LMS sub-settings contain Show Publish button checkbox (7 ms)
+    ✓ LMS sub-settings contain Auto-load channels checkbox (7 ms)
+    ✓ LMS Show Publish button checkbox reflects storage value (7 ms)
+    ✓ LMS Auto-load channels checkbox reflects storage value when true (6 ms)
+    ✓ Changing LMS Show Publish saves to storage (9 ms)
+    ✓ Changing LMS Auto-load channels saves to storage (8 ms)
+    ✓ Changing LMS settings dispatches lms-settings-changed event (10 ms)
+    ✓ Clicking LMS expand button toggles expanded class (5 ms)
+  Settings Helper - Getter Functions
+    ✓ getPlatformShowPublishButton returns correct value when true (3 ms)
+    ✓ getPlatformShowPublishButton returns correct value when false (2 ms)
+    ✓ getPlatformShowPublishButton defaults to true when not set (2 ms)
+    ✓ getPlatformAutoSubscribe returns correct value when true (3 ms)
+    ✓ getPlatformAutoSubscribe returns correct value when false (2 ms)
+    ✓ getPlatformAutoSubscribe defaults to false when not set (2 ms)
+    ✓ getLmsShowPublishButton returns correct value when true (2 ms)
+    ✓ getLmsShowPublishButton returns correct value when false (2 ms)
+    ✓ getLmsShowPublishButton defaults to true when not set (2 ms)
+    ✓ getLmsAutoLoadChannels returns correct value when true (3 ms)
+    ✓ getLmsAutoLoadChannels returns correct value when false (2 ms)
+    ✓ getLmsAutoLoadChannels defaults to false when not set (5 ms)
+  Settings Helper - All Tabs with Sub-Settings
+    ✓ SOQL, GraphQL, Platform, and LMS all have expand buttons (15 ms)
+    ✓ SF, Data, and Help tabs do NOT have expand buttons (11 ms)
+    ✓ All tabs with sub-settings have accordion-sub-settings container (6 ms)
+    ✓ Platform and LMS settings each have 2 checkboxes (6 ms)
+  Settings Helper - About Tab Always Visible
+    ✓ About tab is NOT included in settings panel accordion (5 ms)
+    ✓ Settings tab is NOT included in settings panel accordion (4 ms)
+    ✓ ALWAYS_VISIBLE_TABS contains settings and about (2 ms)
+    ✓ DEFAULT_TAB is set to about (1 ms)
+    ✓ About tab visibility is always true regardless of storage (2 ms)
+    ✓ Settings tab visibility is always true regardless of storage (3 ms)
+    ✓ Other tabs can be hidden via settings (2 ms)
+
+Test Suites: 29 passed, 29 total
+Tests:       2 skipped, 1377 passed, 1379 total
+Snapshots:   0 total
+Time:        3.417 s
+Ran all test suites.

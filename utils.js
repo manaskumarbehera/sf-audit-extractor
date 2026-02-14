@@ -57,6 +57,27 @@
 
   async function findSalesforceTab(){
     try {
+      // CRITICAL FIX: First try to get the CURRENTLY ACTIVE tab in the current window
+      // This is the tab the user was on when they clicked the extension icon
+      try {
+        const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTabs && activeTabs.length > 0) {
+          const activeTab = activeTabs[0];
+          // Check if the active tab is a Salesforce tab
+          if (activeTab.url && (
+            activeTab.url.includes('.salesforce.com') ||
+            activeTab.url.includes('.force.com') ||
+            activeTab.url.includes('.salesforce-setup.com')
+          ) && !activeTab.url.startsWith('chrome-extension://')) {
+            console.log('[findSalesforceTab] Found active SF tab:', activeTab.url);
+            return activeTab;
+          }
+        }
+      } catch (e) {
+        console.warn('[findSalesforceTab] Error getting active tab:', e);
+      }
+
+      // Fallback: Query all Salesforce tabs
       const matches = await chrome.tabs.query({ url: ['https://*.salesforce.com/*', 'https://*.force.com/*', 'https://*.salesforce-setup.com/*'] });
       if (!Array.isArray(matches) || matches.length === 0) return null;
 
@@ -70,9 +91,18 @@
       if (currentWindowId != null) {
         const currentWindowTabs = matches.filter(t => t.windowId === currentWindowId);
         if (currentWindowTabs.length > 0) {
-          // Prefer active tab in current window
+          // Prefer active tab in current window (note: might not be "active" after popup opened)
           const activeInCurrent = currentWindowTabs.find(t => t.active);
-          return activeInCurrent || currentWindowTabs[0];
+          if (activeInCurrent) return activeInCurrent;
+
+          // IMPROVEMENT: Prefer the most recently accessed tab (by lastAccessed timestamp if available)
+          // Note: lastAccessed is available in some browsers
+          const sortedByAccess = [...currentWindowTabs].sort((a, b) => {
+            const aTime = a.lastAccessed || 0;
+            const bTime = b.lastAccessed || 0;
+            return bTime - aTime; // Most recent first
+          });
+          return sortedByAccess[0];
         }
       }
 
@@ -89,14 +119,52 @@
     try {
       const tab = await findSalesforceTab();
       if (!tab?.id) return null;
-      return await new Promise((resolve) => {
+
+      // First try to send message to content script
+      const contentResponse = await new Promise((resolve) => {
         try {
           chrome.tabs.sendMessage(tab.id, message, (resp) => {
-            if (chrome.runtime.lastError) { resolve(null); return; }
+            if (chrome.runtime.lastError) {
+              console.log('[sendMessageToSalesforceTab] Content script not ready:', chrome.runtime.lastError.message);
+              resolve(null);
+              return;
+            }
             resolve(resp || null);
           });
         } catch { resolve(null); }
       });
+
+      // If content script responded successfully, return that
+      if (contentResponse && contentResponse.success) {
+        return contentResponse;
+      }
+
+      // CRITICAL FIX: If content script failed and this is a getSessionInfo request,
+      // fallback to asking background.js directly with the tab's URL
+      // This handles the case where content script hasn't loaded yet on a new tab
+      if (message.action === 'getSessionInfo' && tab.url) {
+        console.log('[sendMessageToSalesforceTab] Falling back to background script for URL:', tab.url);
+        try {
+          const backgroundResponse = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              { action: 'GET_SESSION_INFO', url: tab.url },
+              (resp) => {
+                if (chrome.runtime.lastError) { resolve(null); return; }
+                resolve(resp || null);
+              }
+            );
+          });
+
+          if (backgroundResponse && backgroundResponse.isLoggedIn) {
+            console.log('[sendMessageToSalesforceTab] Got session from background for:', backgroundResponse.instanceUrl);
+            return backgroundResponse;
+          }
+        } catch (e) {
+          console.warn('[sendMessageToSalesforceTab] Background fallback failed:', e);
+        }
+      }
+
+      return contentResponse;
     } catch { return null; }
   }
 
@@ -165,13 +233,11 @@
            }
            return instanceUrlCache.value;
          }
-      } else {
-        // Foreground responded but not logged in or error-like: clear cache to force background detection
-        if (instanceUrlCache.value) setInstanceUrlCache(null);
       }
+      // NOTE: Don't clear cache here - foreground might have failed but we might still have valid cookies
+      // Let the background fallback handle it
     } catch {
-      // Foreground messaging failed: clear stale cache to force fallback
-      if (instanceUrlCache.value) setInstanceUrlCache(null);
+      // Foreground messaging failed - don't clear cache, try background fallback
     }
 
     // Fallback: ask background (cookie-based)

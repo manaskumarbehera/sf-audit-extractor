@@ -173,7 +173,9 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             platformAutoSubscribe: false,
             platformShowPublishButton: true,
             lmsShowPublishButton: true,
-            lmsAutoLoadChannels: false
+            lmsAutoLoadChannels: false,
+            auditOrgColumnWidth: 120,
+            auditFaviconColumnWidth: 40
         }) || {};
 
         accordion.innerHTML = '';
@@ -189,11 +191,42 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             item.draggable = true;
 
             // Check if this tab has sub-settings
-            const hasSubSettings = (n === 'soql' || n === 'graphql' || n === 'platform' || n === 'lms');
+            const hasSubSettings = (n === 'soql' || n === 'graphql' || n === 'platform' || n === 'lms' || n === 'data');
 
             // Build sub-settings HTML for SOQL
             let subSettingsHtml = '';
-            if (n === 'soql') {
+            if (n === 'data') {
+                subSettingsHtml = `
+                    <div class="accordion-sub-settings">
+                        <div style="padding: 12px; background: #f8f9fa; border-radius: 6px; margin-bottom: 8px;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #495057;">
+                                <span>Org Column Width (px)</span>
+                                <span style="background: rgba(1, 118, 211, 0.1); color: #0176d3; padding: 3px 8px; border-radius: 12px; font-weight: 700;" id="org-width-value">${editorSettings.auditOrgColumnWidth || 120}</span>
+                            </label>
+                            <input type="range" id="setting-org-column-width" min="20" max="300" value="${editorSettings.auditOrgColumnWidth || 120}" step="10" style="width: 100%; cursor: pointer;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #868e96; margin-top: 4px;">
+                                <span>20</span><span>160</span><span>300</span>
+                            </div>
+                        </div>
+                        <div style="padding: 12px; background: #f8f9fa; border-radius: 6px; margin-bottom: 8px;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #495057;">
+                                <span>Favicon Column Width (px)</span>
+                                <span style="background: rgba(1, 118, 211, 0.1); color: #0176d3; padding: 3px 8px; border-radius: 12px; font-weight: 700;" id="favicon-width-value">${editorSettings.auditFaviconColumnWidth || 40}</span>
+                            </label>
+                            <input type="range" id="setting-favicon-column-width" min="20" max="100" value="${editorSettings.auditFaviconColumnWidth || 40}" step="5" style="width: 100%; cursor: pointer;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #868e96; margin-top: 4px;">
+                                <span>20</span><span>60</span><span>100</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                            <button type="button" class="preset-btn-data" data-preset="compact" style="padding: 8px 12px; background: white; border: 1px solid #dee2e6; border-radius: 4px; font-size: 11px; font-weight: 600; color: #495057; cursor: pointer; flex: 1;">Compact</button>
+                            <button type="button" class="preset-btn-data" data-preset="balanced" style="padding: 8px 12px; background: white; border: 1px solid #dee2e6; border-radius: 4px; font-size: 11px; font-weight: 600; color: #495057; cursor: pointer; flex: 1;">Balanced</button>
+                            <button type="button" class="preset-btn-data" data-preset="spacious" style="padding: 8px 12px; background: white; border: 1px solid #dee2e6; border-radius: 4px; font-size: 11px; font-weight: 600; color: #495057; cursor: pointer; flex: 1;">Spacious</button>
+                        </div>
+                        <button type="button" id="setting-reset-display" style="width: 100%; padding: 8px 16px; background: white; border: 1px solid #dee2e6; border-radius: 4px; font-size: 12px; font-weight: 600; color: #868e96; cursor: pointer;">Reset to Defaults</button>
+                    </div>
+                `;
+            } else if (n === 'soql') {
                 subSettingsHtml = `
                     <div class="accordion-sub-settings">
                         <label class="sub-setting-item">
@@ -279,7 +312,93 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
             }
 
             // Wire up sub-settings if present
-            if (n === 'soql') {
+            if (n === 'data') {
+                const orgWidthSlider = item.querySelector('#setting-org-column-width');
+                const faviconWidthSlider = item.querySelector('#setting-favicon-column-width');
+                const orgWidthValue = item.querySelector('#org-width-value');
+                const faviconWidthValue = item.querySelector('#favicon-width-value');
+                const presetButtons = item.querySelectorAll('.preset-btn-data');
+                const resetBtn = item.querySelector('#setting-reset-display');
+
+                // Org width slider
+                if (orgWidthSlider) {
+                    orgWidthSlider.addEventListener('input', (e) => {
+                        if (orgWidthValue) orgWidthValue.textContent = e.target.value;
+                    });
+                    orgWidthSlider.addEventListener('change', async (e) => {
+                        try { await chrome.storage?.local?.set?.({ auditOrgColumnWidth: parseInt(e.target.value) || 120 }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('audit-display-settings-changed')); } catch {}
+                    });
+                }
+
+                // Favicon width slider
+                if (faviconWidthSlider) {
+                    faviconWidthSlider.addEventListener('input', (e) => {
+                        if (faviconWidthValue) faviconWidthValue.textContent = e.target.value;
+                    });
+                    faviconWidthSlider.addEventListener('change', async (e) => {
+                        try { await chrome.storage?.local?.set?.({ auditFaviconColumnWidth: parseInt(e.target.value) || 40 }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('audit-display-settings-changed')); } catch {}
+                    });
+                }
+
+                // Preset buttons
+                presetButtons.forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const preset = btn.getAttribute('data-preset');
+                        let orgWidth, faviconWidth;
+
+                        switch (preset) {
+                            case 'compact':
+                                orgWidth = 80;
+                                faviconWidth = 30;
+                                break;
+                            case 'balanced':
+                                orgWidth = 120;
+                                faviconWidth = 40;
+                                break;
+                            case 'spacious':
+                                orgWidth = 180;
+                                faviconWidth = 60;
+                                break;
+                            default:
+                                return;
+                        }
+
+                        if (orgWidthSlider) {
+                            orgWidthSlider.value = orgWidth;
+                            if (orgWidthValue) orgWidthValue.textContent = orgWidth;
+                        }
+                        if (faviconWidthSlider) {
+                            faviconWidthSlider.value = faviconWidth;
+                            if (faviconWidthValue) faviconWidthValue.textContent = faviconWidth;
+                        }
+
+                        try { await chrome.storage?.local?.set?.({ auditOrgColumnWidth: orgWidth, auditFaviconColumnWidth: faviconWidth }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('audit-display-settings-changed')); } catch {}
+                    });
+                });
+
+                // Reset button
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', async () => {
+                        const defaultOrgWidth = 120;
+                        const defaultFaviconWidth = 40;
+
+                        if (orgWidthSlider) {
+                            orgWidthSlider.value = defaultOrgWidth;
+                            if (orgWidthValue) orgWidthValue.textContent = defaultOrgWidth;
+                        }
+                        if (faviconWidthSlider) {
+                            faviconWidthSlider.value = defaultFaviconWidth;
+                            if (faviconWidthValue) faviconWidthValue.textContent = defaultFaviconWidth;
+                        }
+
+                        try { await chrome.storage?.local?.set?.({ auditOrgColumnWidth: defaultOrgWidth, auditFaviconColumnWidth: defaultFaviconWidth }); } catch {}
+                        try { document.dispatchEvent(new CustomEvent('audit-display-settings-changed')); } catch {}
+                    });
+                }
+            } else if (n === 'soql') {
                 const objSelector = item.querySelector('#setting-soql-object-selector');
                 const builderToggle = item.querySelector('#setting-soql-enable-builder');
                 if (objSelector) {
@@ -528,6 +647,20 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         } catch { return false; }
     }
 
+    async function getAuditOrgColumnWidth() {
+        try {
+            const { auditOrgColumnWidth = 120 } = await chrome.storage?.local?.get?.({ auditOrgColumnWidth: 120 }) || {};
+            return parseInt(auditOrgColumnWidth) || 120;
+        } catch { return 120; }
+    }
+
+    async function getAuditFaviconColumnWidth() {
+        try {
+            const { auditFaviconColumnWidth = 40 } = await chrome.storage?.local?.get?.({ auditFaviconColumnWidth: 40 }) || {};
+            return parseInt(auditFaviconColumnWidth) || 40;
+        } catch { return 40; }
+    }
+
     window.SettingsHelper = {
         injectFlexCss,
         ensureSettingsTabExists,
@@ -545,5 +678,7 @@ body { margin: 0; display: flex; flex-direction: column; min-height: 0; }
         getPlatformAutoSubscribe,
         getLmsShowPublishButton,
         getLmsAutoLoadChannels,
+        getAuditOrgColumnWidth,
+        getAuditFaviconColumnWidth,
     };
 })();

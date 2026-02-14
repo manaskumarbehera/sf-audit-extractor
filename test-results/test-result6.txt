@@ -1,0 +1,107 @@
+  console.log
+    [TrackForcePro] declarativeContent API not available, using fallback
+
+      at log (background.js:37:21)
+
+  console.log
+    [TrackForcePro] declarativeContent setup failed (Edge browser): declarativeContent is not available
+
+      at log (background.js:54:17)
+
+  console.warn
+    [TrackForcePro] Failed to update badge: Error: Badge update failed
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/tests/edge_browser_compatibility.test.js:396:23)
+        at /Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-mock/build/index.js:397:39
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-mock/build/index.js:404:13)
+        at Object.mockConstructor [as setBadgeText] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-mock/build/index.js:148:19)
+        at setBadgeText (/Users/manas/IdeaProjects/sf-audit-extractor/background.js:96:23)
+        at onUpdatedHandler (/Users/manas/IdeaProjects/sf-audit-extractor/tests/edge_browser_compatibility.test.js:403:17)
+        at Object.<anonymous> (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/expect/build/toThrowMatchers.js:74:11)
+        at Object.throwingMatcher [as toThrow] (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/expect/build/index.js:320:21)
+        at Object.toThrow (/Users/manas/IdeaProjects/sf-audit-extractor/tests/edge_browser_compatibility.test.js:407:20)
+        at Promise.then.completed (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:298:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/utils.js:231:10)
+        at _callCircusTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:316:40)
+        at _runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:252:3)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:126:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at _runTestsForDescribeBlock (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:121:9)
+        at run (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/run.js:71:3)
+        at runAndTransformResultsToJestFormat (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+        at jestAdapter (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+        at runTestInternal (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:367:16)
+        at runTest (/Users/manas/IdeaProjects/sf-audit-extractor/node_modules/jest-runner/build/runTest.js:444:34)
+
+      101 |         }
+      102 |     } catch (err) {
+    > 103 |         console.warn('[TrackForcePro] Failed to update badge:', err);
+          |                 ^
+      104 |     }
+      105 | });
+      106 |
+
+      at warn (background.js:103:17)
+      at onUpdatedHandler (tests/edge_browser_compatibility.test.js:403:17)
+      at Object.<anonymous> (node_modules/expect/build/toThrowMatchers.js:74:11)
+      at Object.throwingMatcher [as toThrow] (node_modules/expect/build/index.js:320:21)
+      at Object.toThrow (tests/edge_browser_compatibility.test.js:407:20)
+
+  console.log
+    [TrackForcePro] declarativeContent API not available, using fallback
+
+      at log (background.js:37:21)
+
+PASS tests/edge_browser_compatibility.test.js
+  Edge Browser Compatibility
+    Test Case 1: Extension Icon Visibility
+      ✓ should handle missing declarativeContent API gracefully (20 ms)
+      ✓ should show badge when navigating to Salesforce page (1 ms)
+      ✓ should clear badge when navigating away from Salesforce (1 ms)
+    Test Case 2: Tab Activation Icon Update
+      ✓ should update icon when switching to Salesforce tab
+      ✓ should disable icon when switching to non-Salesforce tab (1 ms)
+      ✓ should handle chrome.runtime.lastError gracefully
+    Test Case 3: Background Service Worker
+      ✓ should initialize without errors
+      ✓ should have message handlers registered (1 ms)
+      ✓ should survive storage.local errors
+    Test Case 4: Content Script Communication
+      ✓ should handle CONTENT_READY message (101 ms)
+      ✓ should handle GET_SESSION_INFO message (51 ms)
+      ✓ should handle LMS_CHECK_AVAILABILITY message (51 ms)
+    Test Case 5: Storage API Compatibility
+      ✓ should persist settings using chrome.storage.local
+      ✓ should retrieve settings using chrome.storage.local.get (1 ms)
+      ✓ should handle storage quota exceeded
+    Test Case 6: API Version Management
+      ✓ should fetch API version from storage
+      ✓ should handle missing API version with default
+      ✓ should normalize API version format (1 ms)
+    Test Case 7: Error Handling
+      ✓ should catch declarativeContent errors (1 ms)
+      ✓ should handle badge update failures (37 ms)
+      ✓ should handle tab.get errors gracefully (1 ms)
+      ✓ should log warnings for badge failures
+    Test Case 8: Multi-Domain Support
+      ✓ should recognize .my.salesforce.com domain
+      ✓ should recognize .force.com domain
+      ✓ should recognize .lightning.force.com domain (1 ms)
+      ✓ should recognize .salesforce-setup.com domain
+    Test Case 9: Icon Enable/Disable
+      ✓ should enable icon on Salesforce pages
+      ✓ should not disable icon when navigating to non-SF page via onUpdated
+      ✓ should disable icon on non-SF pages via onActivated
+    Test Case 10: Edge-Specific Fallbacks
+      ✓ should work when declarativeContent is completely unavailable (1 ms)
+      ✓ should log when using fallback mode
+      ✓ should provide fallback via onUpdated and onActivated
+  Edge Browser Performance
+    ✓ should not cause excessive API calls
+    ✓ should not leak memory with repeated badge updates
+
+Test Suites: 1 passed, 1 total
+Tests:       34 passed, 34 total
+Snapshots:   0 total
+Time:        0.84 s, estimated 2 s
+Ran all test suites matching /tests\/edge_browser_compatibility.test.js/i.

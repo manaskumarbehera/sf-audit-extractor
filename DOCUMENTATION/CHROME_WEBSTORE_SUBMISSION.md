@@ -77,8 +77,7 @@ TrackForcePro is the ultimate productivity toolkit for Salesforce Administrators
 
 ✨ ADDITIONAL FEATURES
 
-• Open as Tab: Single-click pop button to open in browser tab (adjacent to current tab)
-• Pop-out Window: Shift+click to open extension in a standalone window
+• Pop-out Window: Open extension in a standalone window
 • API Version Selector: Choose your preferred Salesforce API version
 • Customizable Interface: Show/hide tabs based on your needs
 • Real-time Connection Status: See when you're connected to Salesforce

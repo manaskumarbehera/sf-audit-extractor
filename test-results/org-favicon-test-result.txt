@@ -1,0 +1,105 @@
+FAIL tests/org_favicon_v2.test.js
+  Org & Favicon V2 - 3 Column Layout
+    Multi-Org Save and Retrieval
+      ✓ should save multiple orgs independently (25 ms)
+      ✓ should maintain separate icon configs for each org (12 ms)
+      ✓ should delete org without affecting others (7 ms)
+      ✓ should handle search filtering across multiple orgs (6 ms)
+    Draft vs Applied State Management
+      ✓ should show "Up to date" when draft equals applied (3 ms)
+      ✓ should show "Unsaved Changes" when draft differs from applied (4 ms)
+      ✓ should detect color change as unsaved (3 ms)
+      ✓ should detect label change as unsaved (4 ms)
+      ✓ should detect shape change as unsaved (4 ms)
+      ✓ should reset draft to applied on reset button (4 ms)
+    Save Button State Management
+      ✓ should disable save button when no changes (3 ms)
+      ✓ should enable save button when changes detected (3 ms)
+      ✓ should show "Save Org + Icon" for unsaved org (2 ms)
+      ✓ should show "Save Changes" for existing org (3 ms)
+    State Persistence (Pop-in/Pop-out)
+      ✓ should persist selectedOrgId to storage (3 ms)
+      ✓ should persist draftIconConfig on change (3 ms)
+      ✓ should restore selectedOrgId on loadSavedOrgs (5 ms)
+      ✓ should restore draftIconConfig on loadSavedOrgs (2 ms)
+      ✓ should clear draftIconConfig after successful save (2 ms)
+    Preset Selection and Application
+      ✓ should update form values when preset selected (2 ms)
+      ✓ should mark selected preset as active (2 ms)
+      ✓ should deactivate other presets when new one selected (2 ms)
+      ✓ should trigger unsaved changes when preset applied (2 ms)
+      ✓ should apply all 7 presets correctly (6 ms)
+    Color Swatch Selection
+      ✓ should update color input when swatch clicked (2 ms)
+      ✓ should trigger config change on swatch selection (2 ms)
+    Legacy Favicon Migration
+      ✓ should migrate orgFavicons to orgRecords format (2 ms)
+      ✓ should trigger migration when orgRecords empty but orgFavicons exists (2 ms)
+    CSP Compliance (No Inline Handlers)
+      ✓ should wire org list items without inline onclick (2 ms)
+      ✓ should wire delete buttons without inline onclick (3 ms)
+      ✓ org list item click should call selectOrg via addEventListener (3 ms)
+    Error Handling
+      ✓ should show error when adding org with no current org (2 ms)
+      ✓ should show error when saving with no org selected (2 ms)
+      ✓ should handle storage errors gracefully (21 ms)
+    UI State Management
+      ✓ should hide editor panel when no org selected (3 ms)
+      ✓ should show editor panel when org selected (2 ms)
+      ✓ should update editing org name when org selected (2 ms)
+      ✓ should show saved status badge when org is saved (1 ms)
+      ✓ should show not-saved status badge when org is not saved (2 ms)
+    Edge Cases
+      ✓ should handle org with missing iconConfig (2 ms)
+      ✓ should handle empty search query (2 ms)
+      ✓ should handle special characters in search (3 ms)
+      ✓ should handle very long org names (2 ms)
+      ✓ should clear preset selection on reset (3 ms)
+    Integration Tests
+      ✓ full workflow: add org, customize, save, switch org, verify (4 ms)
+      ✓ workflow with preset, modify, save (3 ms)
+    Unsaved Changes Banner
+      ✓ should show banner when draft differs from applied (2 ms)
+      ✓ should hide banner when draft equals applied (2 ms)
+      ✓ banner save button should trigger saveOrgAndIcon (4 ms)
+      ✓ banner should have correct structure (2 ms)
+    Applied Summary Display
+      ✓ should display applied icon label (2 ms)
+      ✓ should display applied icon color (2 ms)
+      ✓ should show dash when no label applied (2 ms)
+      ✓ should show "No icon applied" when no config exists (2 ms)
+      ✓ applied summary section should be visible when org selected (1 ms)
+    Linear Flow UI (Applied → Draft → Save)
+      ✓ should have applied summary section before editing section (3 ms)
+      ✓ applied summary should show "Live in browser" badge (2 ms)
+      ✓ editing section should be primary/larger than applied summary (2 ms)
+      ✓ save action should update both draft badge and banner (2 ms)
+    Connection Error Early Exit
+      ✓ should stop SOQL attempts when not connected (2 ms)
+      ✕ should return friendly error message for connection issues (2 ms)
+
+  ● Org & Favicon V2 - 3 Column Layout › Connection Error Early Exit › should return friendly error message for connection issues
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      1733 |             const result = await mockDataExplorer.fetchRecordViaSoql('001000000000000');
+      1734 |
+    > 1735 |             expect(result._error).toBeDefined();
+           |                                   ^
+      1736 |             expect(result._error.toLowerCase()).toContain('salesforce');
+      1737 |         });
+      1738 |     });
+
+      at toBeDefined (tests/org_favicon_v2.test.js:1735:35)
+      at Generator.call (tests/org_favicon_v2.test.js:2:1)
+      at Generator._invoke [as next] (tests/org_favicon_v2.test.js:2:1)
+      at asyncGeneratorStep (tests/org_favicon_v2.test.js:2:1)
+      at asyncGeneratorStep (tests/org_favicon_v2.test.js:2:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 60 passed, 61 total
+Snapshots:   0 total
+Time:        1.445 s, estimated 2 s
+Ran all test suites matching /tests\/org_favicon_v2.test.js/i.

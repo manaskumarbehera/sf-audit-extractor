@@ -51,6 +51,37 @@
 
         // Handle favicon update
         if (req && req.action === 'updateFavicon') {
+            // CRITICAL: Verify this favicon update is for the current page's org
+            // This prevents cross-org contamination when multiple orgs are open
+            if (req.orgId) {
+                // Helper to normalize org ID to 15 chars
+                const normalizeId = (id) => id ? id.substring(0, 15) : null;
+
+                // Get current org ID to compare
+                getOrgIdFromPageFresh().then((currentOrgId) => {
+                    // Use normalized comparison (15-char) to handle 15 vs 18 char IDs
+                    const normalizedReq = normalizeId(req.orgId);
+                    const normalizedCurrent = normalizeId(currentOrgId);
+
+                    if (normalizedCurrent && normalizedReq && normalizedReq !== normalizedCurrent) {
+                        // This update is for a different org - ignore it
+                        console.log(`[TrackForcePro] Ignoring favicon update for different org: requested=${req.orgId}, current=${currentOrgId}`);
+                        sendResponse({ success: false, reason: 'org_mismatch' });
+                        return;
+                    }
+                    // Org matches or no current org detected - apply the favicon
+                    console.log(`[TrackForcePro] Applying favicon update for org: ${req.orgId}`);
+                    updateFavicon(req.color, req.label, req.shape);
+                    sendResponse({ success: true });
+                }).catch(() => {
+                    // Could not detect current org - apply anyway for backwards compatibility
+                    console.log(`[TrackForcePro] Could not detect org, applying favicon anyway`);
+                    updateFavicon(req.color, req.label, req.shape);
+                    sendResponse({ success: true });
+                });
+                return true; // async response
+            }
+            // No orgId in request - apply for backwards compatibility
             updateFavicon(req.color, req.label, req.shape);
             sendResponse({ success: true });
             return false;
@@ -696,13 +727,37 @@
             console.warn('[TrackForcePro] Error detecting org ID:', e.message);
         }
 
-        // Strategy 1: Direct org ID match
-        if (currentOrgId && orgFavicons[currentOrgId]) {
-            const { color, label, shape } = orgFavicons[currentOrgId];
-            if (color || label) {
-                console.log('[TrackForcePro] Strategy 1: Org ID match found for:', currentOrgId);
-                updateFavicon(color, label, shape);
-                return true;
+        // Helper: Normalize org ID to 15 chars for comparison
+        const normalizeOrgId = (id) => {
+            if (!id) return null;
+            // Convert 18-char ID to 15-char ID for comparison
+            return id.substring(0, 15);
+        };
+
+        // Strategy 1: Direct org ID match (handle both 15 and 18 char IDs)
+        if (currentOrgId) {
+            const normalizedCurrentId = normalizeOrgId(currentOrgId);
+
+            // First try exact match
+            if (orgFavicons[currentOrgId]) {
+                const { color, label, shape } = orgFavicons[currentOrgId];
+                if (color || label) {
+                    console.log('[TrackForcePro] Strategy 1a: Exact org ID match found for:', currentOrgId);
+                    updateFavicon(color, label, shape);
+                    return true;
+                }
+            }
+
+            // Try normalized match (15 vs 18 char)
+            for (const [savedOrgId, settings] of Object.entries(orgFavicons)) {
+                if (normalizeOrgId(savedOrgId) === normalizedCurrentId) {
+                    const { color, label, shape } = settings;
+                    if (color || label) {
+                        console.log('[TrackForcePro] Strategy 1b: Normalized org ID match found:', savedOrgId, '===', currentOrgId);
+                        updateFavicon(color, label, shape);
+                        return true;
+                    }
+                }
             }
         }
 
@@ -979,8 +1034,12 @@
         return new Promise((resolve, reject) => {
             try {
                 const script = document.createElement('script');
-                script.src = chrome.runtime.getURL('scripts/lms_injected.js');
+                const scriptUrl = chrome.runtime.getURL('scripts/lms_injected.js');
+                console.log('[TrackForcePro] Attempting to inject LMS bridge from:', scriptUrl);
+
+                script.src = scriptUrl;
                 script.onload = () => {
+                    console.log('[TrackForcePro] LMS bridge script loaded successfully');
                     lmsBridgeInjected = true;
                     // Wait a moment for the bridge to initialize
                     setTimeout(() => {
@@ -989,10 +1048,18 @@
                     }, 100);
                 };
                 script.onerror = (e) => {
-                    reject(new Error('Failed to load LMS bridge script'));
+                    const errorMsg = `Failed to load LMS bridge script from ${scriptUrl}. This may be due to: 1) Script not included in web_accessible_resources in manifest.json, 2) Network error, 3) Script syntax error. Check browser console for details.`;
+                    console.error('[TrackForcePro]', errorMsg, e);
+                    reject(new Error(errorMsg));
+                };
+                script.onabort = () => {
+                    const errorMsg = `LMS bridge script load was aborted for ${scriptUrl}`;
+                    console.warn('[TrackForcePro]', errorMsg);
+                    reject(new Error(errorMsg));
                 };
                 (document.head || document.documentElement).appendChild(script);
             } catch (e) {
+                console.error('[TrackForcePro] Exception while injecting LMS bridge:', e);
                 reject(e);
             }
         });

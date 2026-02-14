@@ -121,7 +121,7 @@ describe('Popup Title Logic', () => {
 
         // 6. Assertions
         expect(global.fetch).toHaveBeenCalled();
-        expect(document.title).toBe('AcmeCorp - TrackForcePro');
+        expect(document.title).toBe('⚡ AcmeCorp - TrackForcePro');
     });
 
     test('does NOT update title if not in standalone mode', async () => {
