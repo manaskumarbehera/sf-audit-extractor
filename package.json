@@ -9,7 +9,9 @@
     "start": "echo 'This is a Chrome extension project — load via chrome://extensions'",
     "build": "esbuild popup.js --bundle --minify --sourcemap --outfile=dist/popup.bundle.js --platform=browser",
     "package": "./build.sh",
-    "zip": "./build.sh"
+    "zip": "./build.sh",
+    "update-docs": "node scripts/update-docs-version.js",
+    "update-docs:changelog": "node scripts/update-docs-version.js --changelog"
   },
   "keywords": [
     "salesforce",

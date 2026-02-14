@@ -46,16 +46,17 @@ describe('Version Consistency', () => {
         expect(popupHtmlContent).toContain('Version ');
     });
 
-    test('manifest.json version should be 1.1.2 or higher', () => {
+    test('manifest.json version should be 1.1.14 or higher', () => {
         const [major, minor, patch] = manifestVersion.split('.').map(Number);
         const versionNumber = major * 10000 + minor * 100 + patch;
 
-        // 1.1.2 = 10102
-        expect(versionNumber).toBeGreaterThanOrEqual(10102);
+        // 1.1.14 = 10114
+        expect(versionNumber).toBeGreaterThanOrEqual(10114);
     });
 
-    test('current version should be 1.1.14', () => {
-        expect(manifestVersion).toBe('1.1.14');
+    test('current version should match manifest.json', () => {
+        // This test ensures the version is a valid format
+        expect(manifestVersion).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
     test('build output filename should match manifest version', () => {
@@ -120,8 +121,12 @@ describe('Help Links Validation', () => {
         expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}help.html`);
     });
 
-    test('should link to GitHub Pages QUICK_START_GUIDE.html', () => {
-        expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}QUICK_START_GUIDE.html`);
+    test('should link to GitHub Pages quick-start-guide.html', () => {
+        expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}quick-start-guide.html`);
+    });
+
+    test('should link to GitHub Pages documentation.html', () => {
+        expect(popupHtmlContent).toContain(`${GITHUB_PAGES_BASE}documentation.html`);
     });
 
     test('should link to GitHub Pages privacy-policy.html', () => {
@@ -130,6 +135,10 @@ describe('Help Links Validation', () => {
 
     test('should link to GitHub issues for bug reports', () => {
         expect(popupHtmlContent).toContain(GITHUB_ISSUES_URL);
+    });
+
+    test('should NOT use uppercase QUICK_START_GUIDE.html', () => {
+        expect(popupHtmlContent).not.toContain('QUICK_START_GUIDE.html');
     });
 
     test('should NOT contain direct GitHub MD file links for USER_GUIDE', () => {
@@ -150,25 +159,38 @@ describe('Help Links Validation', () => {
 });
 
 describe('Docs HTML Files Version', () => {
-    const EXPECTED_VERSION = '1.1.2';
+    let manifestVersion;
+
+    beforeAll(() => {
+        const manifestPath = path.join(__dirname, '..', 'manifest.json');
+        const manifestContent = fs.readFileSync(manifestPath, 'utf8');
+        const manifest = JSON.parse(manifestContent);
+        manifestVersion = manifest.version;
+    });
 
     test('docs/index.html should have correct version', () => {
         const filePath = path.join(__dirname, '..', 'docs', 'index.html');
         const content = fs.readFileSync(filePath, 'utf8');
         // Check for version in dropdown or version badge
-        expect(content).toContain(`v${EXPECTED_VERSION}`);
+        expect(content).toContain(`v${manifestVersion}`);
     });
 
     test('docs/help.html should have correct version', () => {
         const filePath = path.join(__dirname, '..', 'docs', 'help.html');
         const content = fs.readFileSync(filePath, 'utf8');
-        expect(content).toContain(`Version ${EXPECTED_VERSION}`);
+        expect(content).toContain(`Version ${manifestVersion}`);
     });
 
-    test('docs/QUICK_START_GUIDE.html should have correct version', () => {
-        const filePath = path.join(__dirname, '..', 'docs', 'QUICK_START_GUIDE.html');
+    test('docs/quick-start-guide.html should have correct version', () => {
+        const filePath = path.join(__dirname, '..', 'docs', 'quick-start-guide.html');
         const content = fs.readFileSync(filePath, 'utf8');
-        expect(content).toContain(`Version ${EXPECTED_VERSION}`);
+        expect(content).toContain(`Version ${manifestVersion}`);
+    });
+
+    test('docs/documentation.html should have correct version', () => {
+        const filePath = path.join(__dirname, '..', 'docs', 'documentation.html');
+        const content = fs.readFileSync(filePath, 'utf8');
+        expect(content).toContain(`v${manifestVersion}`);
     });
 });
 
@@ -209,6 +231,11 @@ describe('docs/help.html Structure', () => {
         expect(helpContent).toContain('href="index.html"');
         expect(helpContent).toContain('href="quick-start-guide.html"');
         expect(helpContent).toContain('href="privacy-policy.html"');
+        expect(helpContent).toContain('href="documentation.html"');
+    });
+
+    test('should NOT use uppercase QUICK_START_GUIDE.html', () => {
+        expect(helpContent).not.toContain('QUICK_START_GUIDE.html');
     });
 
     test('should only link to GitHub issues (not repo directly)', () => {
@@ -224,8 +251,10 @@ describe('docs/help.html Structure', () => {
 });
 
 describe('Build Zip File', () => {
-    test('TrackForcePro-v1.1.2.zip should exist', () => {
-        const zipPath = path.join(__dirname, '..', 'TrackForcePro-v1.1.2.zip');
+    test('TrackForcePro zip file should exist for current version', () => {
+        const manifestPath = path.join(__dirname, '..', 'manifest.json');
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        const zipPath = path.join(__dirname, '..', `TrackForcePro-v${manifest.version}.zip`);
         expect(fs.existsSync(zipPath)).toBe(true);
     });
 });

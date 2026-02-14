@@ -14,6 +14,14 @@ ZIP_NAME="TrackForcePro-v${VERSION}.zip"
 
 echo "🔧 Building TrackForcePro v${VERSION}..."
 
+# Update documentation versions automatically
+echo "📝 Updating documentation versions..."
+if [ -f "scripts/update-docs-version.js" ]; then
+    node scripts/update-docs-version.js
+else
+    echo "⚠️  Documentation update script not found, skipping..."
+fi
+
 # Clean previous build
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
