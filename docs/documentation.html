@@ -415,10 +415,12 @@
         <div class="version-selector">
             <label for="version-select">Version:</label>
             <select id="version-select" onchange="switchVersion(this.value)">
-                <option value="1.1.2" selected>v1.1.2 (Latest)</option>
+                <option value="1.1.14" selected>v1.1.14 (Latest)</option>
+                <option value="1.1.13">v1.1.13</option>
+                <option value="1.1.12">v1.1.12</option>
+                <option value="1.1.2">v1.1.2</option>
                 <option value="1.1.1">v1.1.1</option>
                 <option value="1.1.0">v1.1.0</option>
-                <option value="1.0.9">v1.0.9</option>
             </select>
         </div>
     </header>
@@ -439,11 +441,12 @@
                     <li><a href="#audit-extractor">Audit Extractor</a></li>
                     <li><a href="#soql-builder">SOQL Builder</a></li>
                     <li><a href="#graphql-builder">GraphQL Builder</a></li>
-                    <li><a href="#record-scanner">Record Scanner <span class="badge new">New</span></a></li>
+                    <li><a href="#record-scanner">Record Scanner</a></li>
                     <li><a href="#user-manager">User Manager</a></li>
                     <li><a href="#favicon-manager">Favicon Manager</a></li>
                     <li><a href="#platform-events">Platform Events</a></li>
-                    <li><a href="#page-blinker">Page Blinker <span class="badge new">New</span></a></li>
+                    <li><a href="#page-blinker">Page Blinker</a></li>
+                    <li><a href="#cache-manager">Cache Manager <span class="badge new">New</span></a></li>
                 </ul>
             </div>
             <div class="sidebar-section">
@@ -457,12 +460,12 @@
         </aside>
 
         <main class="content">
-            <!-- Version 1.1.2 Content -->
-            <div id="content-1.1.2" class="version-content active">
+            <!-- Version 1.1.14 Content -->
+            <div id="content-1.1.14" class="version-content active">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.2</span>
-                    <div class="date">Last updated: February 9, 2026</div>
+                    <span class="version-badge">v1.1.14</span>
+                    <div class="date">Last updated: February 14, 2026</div>
                 </div>
 
                 <section id="overview" class="doc-section">
@@ -486,12 +489,41 @@
                             <h5>🔬 Record Scanner</h5>
                             <p>Scan records, view field history, explore relationships</p>
                         </div>
+                        <div class="feature-card">
+                            <h5>💾 Cache Manager</h5>
+                            <p>Intelligent caching for improved performance</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>✨ Page Blinker</h5>
+                            <p>Quick access indicator on Salesforce pages</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="cache-manager" class="doc-section">
+                    <h3><span class="icon">💾</span> Cache Manager <span class="version-badge" style="font-size:11px;">New in v1.1.14</span></h3>
+                    <p>The Cache Manager provides intelligent caching of metadata and frequently used data to improve extension performance.</p>
+
+                    <h4>Features</h4>
+                    <ul>
+                        <li><strong>Automatic Caching</strong> - Object and field metadata is automatically cached</li>
+                        <li><strong>Smart Invalidation</strong> - Cache is intelligently refreshed when needed</li>
+                        <li><strong>Performance Boost</strong> - Faster load times for objects and fields</li>
+                        <li><strong>Storage Management</strong> - Efficient use of browser storage</li>
+                    </ul>
+
+                    <div class="alert alert-info">
+                        <span class="icon">💡</span>
+                        <div class="alert-content">
+                            <strong>Tip: Clear Cache</strong>
+                            If you notice stale data, you can clear the cache from Settings → Clear Cache.
+                        </div>
                     </div>
                 </section>
 
                 <section id="record-scanner" class="doc-section">
-                    <h3><span class="icon">🔬</span> Record Scanner <span class="version-badge" style="font-size:11px;">New in v1.1.2</span></h3>
-                    <p>The Record Scanner (formerly Record Lookup) is a comprehensive tool for exploring Salesforce records.</p>
+                    <h3><span class="icon">🔬</span> Record Scanner</h3>
+                    <p>The Record Scanner is a comprehensive tool for exploring Salesforce records.</p>
 
                     <h4>Features</h4>
                     <ul>
@@ -510,18 +542,10 @@
                         <li>Record details, field history, and related records load automatically</li>
                         <li>Or enter any 15/18 character ID to scan a different record</li>
                     </ol>
-
-                    <div class="alert alert-info">
-                        <span class="icon">💡</span>
-                        <div class="alert-content">
-                            <strong>Tip: Field History Requirements</strong>
-                            Field history tracking must be enabled in Salesforce Setup for the object. Go to Setup → Object Manager → [Object] → Fields & Relationships → Set History Tracking.
-                        </div>
-                    </div>
                 </section>
 
                 <section id="page-blinker" class="doc-section">
-                    <h3><span class="icon">✨</span> Page Blinker <span class="version-badge" style="font-size:11px;">New in v1.1.2</span></h3>
+                    <h3><span class="icon">✨</span> Page Blinker</h3>
                     <p>A convenient floating indicator that appears on Salesforce pages for quick access to the extension.</p>
 
                     <h4>Features</h4>
@@ -530,34 +554,37 @@
                         <li><strong>Double-click</strong> - Minimizes to icon only (toggle)</li>
                         <li><strong>Close (×)</strong> - Hides the blinker for current session</li>
                     </ul>
-
-                    <h4>Appearance</h4>
-                    <p>The blinker appears in the top-right corner with:</p>
-                    <ul>
-                        <li>Salesforce blue gradient background</li>
-                        <li>"TF" icon with pulsing animation</li>
-                        <li>"TrackForcePro" label</li>
-                    </ul>
-
-                    <div class="alert alert-warning">
-                        <span class="icon">⚠️</span>
-                        <div class="alert-content">
-                            <strong>Note</strong>
-                            The blinker reappears after page reload. To permanently disable, use browser extension settings.
-                        </div>
-                    </div>
                 </section>
 
                 <section id="changelog" class="doc-section">
                     <h3><span class="icon">📝</span> Changelog</h3>
+
+                    <h4>v1.1.14 - February 14, 2026</h4>
+                    <ul>
+                        <li><strong>Enhanced:</strong> Improved Cache Manager for better performance</li>
+                        <li><strong>Enhanced:</strong> Updated favicon initialization system</li>
+                        <li><strong>Enhanced:</strong> Better layout settings management</li>
+                        <li><strong>Fixed:</strong> Various bug fixes and stability improvements</li>
+                    </ul>
+
+                    <h4>v1.1.13 - February 12, 2026</h4>
+                    <ul>
+                        <li><strong>New:</strong> Cache Manager with intelligent caching</li>
+                        <li><strong>Improved:</strong> Better error handling across all features</li>
+                        <li><strong>Fixed:</strong> Session detection improvements</li>
+                    </ul>
+
+                    <h4>v1.1.12 - February 10, 2026</h4>
+                    <ul>
+                        <li><strong>Improved:</strong> Record Scanner performance optimizations</li>
+                        <li><strong>Fixed:</strong> Field history loading for certain objects</li>
+                    </ul>
 
                     <h4>v1.1.2 - February 9, 2026</h4>
                     <ul>
                         <li><strong>New:</strong> Record Scanner with Field History and Related Records</li>
                         <li><strong>New:</strong> Page Blinker indicator on Salesforce pages</li>
                         <li><strong>Fixed:</strong> Content script loading on *.salesforce.com domains</li>
-                        <li><strong>Fixed:</strong> Related records query errors for non-queryable objects</li>
-                        <li><strong>Fixed:</strong> Field history parent ID field detection</li>
                     </ul>
 
                     <h4>v1.1.1 - February 8, 2026</h4>
@@ -612,6 +639,85 @@
                         <li>Check that you have permission to view the history object</li>
                         <li>Some objects (User, Profile) don't support field history</li>
                     </ul>
+
+                    <h4>Cache issues</h4>
+                    <ul>
+                        <li>Go to Settings → Clear Cache to refresh cached data</li>
+                        <li>Reload the Salesforce page after clearing cache</li>
+                    </ul>
+                </section>
+            </div>
+
+            <!-- Version 1.1.13 Content -->
+            <div id="content-1.1.13" class="version-content">
+                <div class="content-header">
+                    <h2>TrackForcePro Documentation</h2>
+                    <span class="version-badge">v1.1.13</span>
+                    <div class="date">Released: February 12, 2026</div>
+                </div>
+
+                <section class="doc-section">
+                    <h3><span class="icon">📖</span> Overview (v1.1.13)</h3>
+                    <p>This version introduced the Cache Manager for improved performance.</p>
+
+                    <h4>Key Features in v1.1.13</h4>
+                    <ul>
+                        <li>Cache Manager - Intelligent caching of metadata</li>
+                        <li>Better error handling across all features</li>
+                        <li>Session detection improvements</li>
+                    </ul>
+                </section>
+            </div>
+
+            <!-- Version 1.1.12 Content -->
+            <div id="content-1.1.12" class="version-content">
+                <div class="content-header">
+                    <h2>TrackForcePro Documentation</h2>
+                    <span class="version-badge">v1.1.12</span>
+                    <div class="date">Released: February 10, 2026</div>
+                </div>
+
+                <section class="doc-section">
+                    <h3><span class="icon">📖</span> Overview (v1.1.12)</h3>
+                    <p>Performance optimizations and bug fixes.</p>
+
+                    <h4>Key Features in v1.1.12</h4>
+                    <ul>
+                        <li>Record Scanner performance optimizations</li>
+                        <li>Field history loading improvements</li>
+                    </ul>
+                </section>
+            </div>
+
+            <!-- Version 1.1.2 Content -->
+            <div id="content-1.1.2" class="version-content">
+                <div class="content-header">
+                    <h2>TrackForcePro Documentation</h2>
+                    <span class="version-badge">v1.1.2</span>
+                    <div class="date">Released: February 9, 2026</div>
+                </div>
+
+                <section class="doc-section">
+                    <h3><span class="icon">📖</span> Overview (v1.1.2)</h3>
+                    <p>This version introduced Record Scanner and Page Blinker features.</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h5>🔬 Record Scanner</h5>
+                            <p>Scan records, view field history, explore relationships</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>✨ Page Blinker</h5>
+                            <p>Quick access indicator on Salesforce pages</p>
+                        </div>
+                    </div>
+
+                    <h4>Key Features in v1.1.2</h4>
+                    <ul>
+                        <li>Record Scanner with Field History and Related Records</li>
+                        <li>Page Blinker indicator on Salesforce pages</li>
+                        <li>Content script loading improvements</li>
+                    </ul>
                 </section>
             </div>
 
@@ -665,32 +771,12 @@
                 </section>
             </div>
 
-            <!-- Version 1.0.9 Content -->
-            <div id="content-1.0.9" class="version-content">
-                <div class="content-header">
-                    <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.0.9</span>
-                    <div class="date">Released: February 6, 2026</div>
-                </div>
-
-                <section class="doc-section">
-                    <h3><span class="icon">📖</span> Overview (v1.0.9)</h3>
-                    <p>Enhanced SOQL and GraphQL builders.</p>
-
-                    <h4>Key Features in v1.0.9</h4>
-                    <ul>
-                        <li>SOQL Builder - Smart field suggestions, filters, ordering</li>
-                        <li>GraphQL Builder - Visual query composition</li>
-                        <li>Query history</li>
-                    </ul>
-                </section>
-            </div>
-        </main>
+            </main>
     </div>
 
     <footer class="footer">
-        <p>TrackForcePro v1.1.2 | <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">Chrome Web Store</a> | <a href="https://github.com/manaskumarbehera/sf-audit-extractor">GitHub</a> | <a href="privacy-policy.html">Privacy Policy</a></p>
-        <p style="margin-top: 8px; font-size: 12px; opacity: 0.7;">© 2026 TrackForcePro. All rights reserved.</p>
+        <p>TrackForcePro v1.1.14 | <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">Chrome Web Store</a> | <a href="https://github.com/manaskumarbehera/sf-audit-extractor">GitHub</a> | <a href="privacy-policy.html">Privacy Policy</a></p>
+        <p style="margin-top: 8px; font-size: 12px; opacity: 0.7;">© 2026 TrackForcePro. All rights reserved. | Last updated: February 14, 2026</p>
     </footer>
 
     <script>

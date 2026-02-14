@@ -207,7 +207,7 @@ describe('docs/help.html Structure', () => {
 
     test('should have navigation links to other pages', () => {
         expect(helpContent).toContain('href="index.html"');
-        expect(helpContent).toContain('href="QUICK_START_GUIDE.html"');
+        expect(helpContent).toContain('href="quick-start-guide.html"');
         expect(helpContent).toContain('href="privacy-policy.html"');
     });
 
