@@ -1999,6 +1999,9 @@ const DataExplorerHelper = {
         filteredOrgs.forEach(org => {
             const iconEl = document.getElementById(`org-icon-${org.orgId}`);
             if (iconEl) {
+                // Clear existing canvas before adding new one
+                iconEl.innerHTML = '';
+
                 const canvas = document.createElement('canvas');
                 const isV4Icon = iconEl.classList.contains('org-item-icon');
                 const isV3Icon = iconEl.classList.contains('org-list-icon-v3');
@@ -2006,13 +2009,15 @@ const DataExplorerHelper = {
 
                 // High-DPI support: render at higher resolution for crisp icons
                 const dpr = window.devicePixelRatio || 1;
-                canvas.width = displaySize * dpr;
-                canvas.height = displaySize * dpr;
+                // Use minimum 2x for crisp rendering on all displays
+                const effectiveDpr = Math.max(dpr, 2);
+                canvas.width = displaySize * effectiveDpr;
+                canvas.height = displaySize * effectiveDpr;
                 canvas.style.width = displaySize + 'px';
                 canvas.style.height = displaySize + 'px';
 
                 const ctx = canvas.getContext('2d');
-                ctx.scale(dpr, dpr); // Scale context to match DPR
+                ctx.scale(effectiveDpr, effectiveDpr); // Scale context to match DPR
 
                 const iconConfig = org.appliedIconConfig || org.iconConfig || {};
                 this.drawFaviconShape(ctx, iconConfig.color || '#ccc', iconConfig.label || '', iconConfig.shape || 'circle', displaySize);

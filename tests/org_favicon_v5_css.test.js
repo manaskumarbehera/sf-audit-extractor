@@ -30,15 +30,18 @@ describe('Org & Favicon v5 - CSS Styling Verification', () => {
         });
 
         test('should have preview-live-v5 with light green tint', () => {
-            expect(cssContent).toMatch(/\.preview-live-v5\s*\{[^}]*background:\s*#f0fdf4/);
+            // Softer green tint for reduced visual weight
+            expect(cssContent).toMatch(/\.preview-live-v5\s*\{[^}]*background:\s*#f7fdf9/);
         });
 
         test('should have preview-edit-v5 with light blue tint', () => {
-            expect(cssContent).toMatch(/\.preview-edit-v5\s*\{[^}]*background:\s*#f0f7ff/);
+            // Softer blue tint for reduced visual weight
+            expect(cssContent).toMatch(/\.preview-edit-v5\s*\{[^}]*background:\s*#f7faff/);
         });
 
         test('should have has-changes state with light orange tint', () => {
-            expect(cssContent).toMatch(/\.preview-edit-v5\.has-changes\s*\{[^}]*background:\s*#fff8e6/);
+            // Softer orange tint for reduced visual weight
+            expect(cssContent).toMatch(/\.preview-edit-v5\.has-changes\s*\{[^}]*background:\s*#fffbf0/);
         });
     });
 
@@ -54,8 +57,9 @@ describe('Org & Favicon v5 - CSS Styling Verification', () => {
             expect(cssContent).toMatch(/\.env-segmented-control-v5\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*1fr\)/);
         });
 
-        test('should have env button with minimum height of 36px', () => {
-            expect(cssContent).toMatch(/\.env-btn-v5\s*\{[^}]*min-height:\s*36px/);
+        test('should have env button with minimum height (compact design)', () => {
+            // Compact design uses 28px min-height instead of 36px
+            expect(cssContent).toMatch(/\.env-btn-v5\s*\{[^}]*min-height:\s*28px/);
         });
 
         test('should have active state with solid background', () => {

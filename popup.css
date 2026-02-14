@@ -6885,8 +6885,8 @@ textarea.valid:focus {
 .editor-panel-v5 {
     display: flex;
     flex-direction: column;
-    padding: 8px 12px; /* Reduced: anchor content to top */
-    gap: 8px; /* Consistent 8px rhythm */
+    padding: 6px 12px 8px 12px; /* Reduced top padding: anchor content to top */
+    gap: 8px; /* Test requires 8px gap */
     overflow: visible; /* Remove nested scroll */
     flex: 1;
 }
@@ -6897,6 +6897,7 @@ textarea.valid:focus {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    margin-top: 0; /* Remove extra top margin */
 }
 
 .editor-panel-v5[hidden] {
@@ -6904,13 +6905,21 @@ textarea.valid:focus {
 }
 
 /* Preview Section - Balanced Layout */
+.preview-section-v5 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px; /* Tight gap between preview and org name */
+    margin-bottom: 4px; /* Reduced gap before Environment Type */
+}
+
 .preview-row-v5 {
     display: flex;
     align-items: stretch;
     justify-content: center;
     gap: 12px;
     padding: 0;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
 /* IDENTICAL DIMENSIONS for both cards */
@@ -6918,10 +6927,10 @@ textarea.valid:focus {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center; /* Vertically center content */
-    width: 68px; /* Fixed identical width */
-    height: 72px; /* Fixed identical height - reduced 15% */
-    padding: 4px 6px; /* Identical tight padding */
+    justify-content: center;
+    width: 72px; /* Fixed identical width */
+    height: 68px; /* Fixed identical height - compact */
+    padding: 6px 8px; /* Identical tight padding */
     background: #f8f9fa; /* Neutral base */
     border: 1px solid #e9ecef; /* Identical thin border */
     border-radius: 6px; /* Identical radius */
@@ -6931,18 +6940,18 @@ textarea.valid:focus {
 
 /* Both use ONLY subtle tinted backgrounds - no thick borders */
 .preview-live-v5 {
-    background: #f0fdf4; /* Light green tint */
-    border-color: #d3f9d8; /* Very subtle green */
+    background: #f7fdf9; /* Very light green tint */
+    border-color: #e8f5e9; /* Very subtle green */
 }
 
 .preview-edit-v5 {
-    background: #f0f7ff; /* Light blue tint */
-    border-color: #d0ebff; /* Very subtle blue */
+    background: #f7faff; /* Very light blue tint */
+    border-color: #e3f2fd; /* Very subtle blue */
 }
 
 .preview-edit-v5.has-changes {
-    background: #fff8e6; /* Light orange tint */
-    border-color: #ffe3b3; /* Very subtle orange */
+    background: #fffbf0; /* Very light orange tint */
+    border-color: #fff3e0; /* Very subtle orange */
 }
 
 /* Identical inner container */
@@ -7051,12 +7060,21 @@ textarea.valid:focus {
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
 }
 
-/* Color & Shape Blocks - Compact with consistent alignment */
-.color-section-v5, .shape-section-v5, .bg-section-inline-v5 {
+/* Color & Shape Blocks - Compact with consistent LEFT alignment */
+.color-section-v5, .shape-section-v5, .bg-section-inline-v5, .label-section-v5 {
     display: flex;
-    align-items: center; /* Left-aligned row layout */
+    align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    justify-content: flex-start; /* Left align all controls */
+}
+
+.section-label-v5 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c757d;
+    min-width: 70px; /* Consistent label width for grid alignment */
+    flex-shrink: 0;
 }
 
 .swatches-v5, .shapes-v5 {
@@ -7293,7 +7311,7 @@ textarea.valid:focus {
 .preview-bg-controls { display: none; }
 .org-details-card-v5 { height: 100%; display: flex; flex-direction: column; }
 .org-card-footer-v5 { padding: 12px 16px; border-top: 1px solid #f1f3f5; margin-top: auto; }
-.user-manager-grid-new { display: none; } /* Hide for now as we focus on Org Favicon */
+/* User Manager is now visible - removed display:none */
 .org-list-col-v5 .org-item img {
     border-radius: 4px;
 }
@@ -7373,29 +7391,29 @@ textarea.valid:focus {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 0;
-    background: #e9ecef;
-    border-radius: 8px;
-    padding: 3px;
+    background: #f1f3f5; /* Lighter background */
+    border-radius: 6px;
+    padding: 2px;
     overflow: hidden;
 }
 
 .env-btn-v5 {
-    padding: 8px 6px;
-    min-height: 36px;
+    padding: 5px 4px; /* Reduced height */
+    min-height: 28px; /* Smaller min height */
     border: none;
     background: transparent;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: #495057;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 4px;
     transition: all 0.15s ease;
     text-transform: uppercase;
     letter-spacing: 0.3px;
 }
 
 .env-btn-v5:hover {
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.8);
 }
 
 .env-btn-v5.active {
