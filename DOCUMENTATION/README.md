@@ -1,6 +1,6 @@
 # TrackForcePro - Documentation
 
-**Current Version: 1.1.2** | **Release Date: February 9, 2026**
+**Current Version: 1.1.14** | **Release Date: February 15, 2026**
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-green?logo=google-chrome)](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)
 
@@ -14,16 +14,18 @@ Welcome to the documentation for the TrackForcePro Chrome Extension. This librar
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [v1.1.14](CHANGELOG.md#v1114---february-15-2026) | Feb 15, 2026 | Enhanced Cache Manager, Favicon initialization, Layout settings |
+| [v1.1.13](CHANGELOG.md#v1113---february-12-2026) | Feb 12, 2026 | Record Scanner, Page Blinker, Stability improvements |
+| [v1.1.12](CHANGELOG.md#v1112---february-11-2026) | Feb 11, 2026 | Bug fixes and performance improvements |
 | [v1.1.2](CHANGELOG.md#v112---february-9-2026) | Feb 9, 2026 | Record Scanner, Field History, Related Records, Page Blinker |
 | [v1.1.1](CHANGELOG.md#v111---february-8-2026) | Feb 8, 2026 | Unified Record Lookup, Dev Tools Panel |
 | [v1.1.0](CHANGELOG.md#v110---february-7-2026) | Feb 7, 2026 | Popout Window, User Manager, Favicon Manager |
-| [v1.0.9](CHANGELOG.md#v109---february-6-2026) | Feb 6, 2026 | Enhanced SOQL/GraphQL Builders |
 
 👉 **[View Full Changelog](CHANGELOG.md)**
 
 ## ⚡ Quick Start
 
-**New to TrackForcePro?** Open the **[Quick Start Guide (HTML)](html/QUICK_START_GUIDE.html)** for a visual walkthrough with screenshot placeholders.
+**New to TrackForcePro?** Open the **[Quick Start Guide (HTML)](html/quick-start-guide.html)** for a visual walkthrough with screenshot placeholders.
 
 ## 📂 Documentation Structure
 
@@ -61,13 +63,13 @@ Historical implementation records and summaries.
 
 ### 🌐 [HTML Pages](html/)
 Standalone HTML documentation and legal pages.
-- **[Quick Start Guide](html/QUICK_START_GUIDE.html)**: Visual walkthrough with screenshot placeholders for getting started.
+- **[Quick Start Guide](html/quick-start-guide.html)**: Visual walkthrough with screenshot placeholders for getting started.
 - **[Privacy Policy](html/privacy-policy.html)**: Privacy policy for Chrome Web Store submission.
 
 ### 🔗 Public URLs (GitHub Pages)
 Once GitHub Pages is enabled and changes are pushed, the documentation will be available at:
 - **Documentation Home**: https://manaskumarbehera.github.io/sf-audit-extractor/
-- **Quick Start Guide**: https://manaskumarbehera.github.io/sf-audit-extractor/QUICK_START_GUIDE.html
+- **Quick Start Guide**: https://manaskumarbehera.github.io/sf-audit-extractor/quick-start-guide.html
 - **Privacy Policy**: https://manaskumarbehera.github.io/sf-audit-extractor/privacy-policy.html
 
 **To deploy to GitHub Pages:**

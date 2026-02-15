@@ -329,6 +329,47 @@ describe('Documentation Version Update Automation', () => {
             expect(result).toBe(input);
         });
     });
+
+    describe('README.md Version Updates', () => {
+        const testVersion = '1.2.0';
+        const testDate = 'February 15, 2026';
+
+        test('should update README.md version header', () => {
+            const input = '**Current Version: 1.1.14** | **Release Date: February 14, 2026**';
+            const expected = `**Current Version: ${testVersion}** | **Release Date: ${testDate}**`;
+
+            const result = input.replace(
+                /(\*\*Current Version: )\d+\.\d+\.\d+(\*\* \| \*\*Release Date: )[A-Za-z]+ \d+, \d{4}(\*\*)/g,
+                `$1${testVersion}$2${testDate}$3`
+            );
+
+            expect(result).toBe(expected);
+        });
+
+        test('should not affect unrelated markdown content', () => {
+            const input = 'Some other content with version 1.0.0 mentioned';
+
+            const result = input.replace(
+                /(\*\*Current Version: )\d+\.\d+\.\d+(\*\* \| \*\*Release Date: )[A-Za-z]+ \d+, \d{4}(\*\*)/g,
+                `$1${testVersion}$2${testDate}$3`
+            );
+
+            expect(result).toBe(input);
+        });
+
+        test('DOCUMENTATION/README.md should have version header', () => {
+            const readmePath = path.join(__dirname, '..', 'DOCUMENTATION', 'README.md');
+            const content = fs.readFileSync(readmePath, 'utf8');
+            expect(content).toMatch(/\*\*Current Version: \d+\.\d+\.\d+\*\*/);
+        });
+
+        test('DOCUMENTATION/README.md should reference quick-start-guide.html (lowercase)', () => {
+            const readmePath = path.join(__dirname, '..', 'DOCUMENTATION', 'README.md');
+            const content = fs.readFileSync(readmePath, 'utf8');
+            expect(content).toContain('quick-start-guide.html');
+            expect(content).not.toContain('QUICK_START_GUIDE.html');
+        });
+    });
 });
 
 describe('Documentation Files Integrity', () => {

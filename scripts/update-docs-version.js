@@ -16,14 +16,20 @@
  *   - docs/privacy-policy.html
  *   - popup.html
  *   - build/popup.html
+ *   - DOCUMENTATION/html/*.html
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration
 const ROOT_DIR = path.join(__dirname, '..');
 const DOCS_DIR = path.join(ROOT_DIR, 'docs');
+const DOCUMENTATION_HTML_DIR = path.join(ROOT_DIR, 'DOCUMENTATION', 'html');
 
 // Get current date formatted (e.g., "February 14, 2026")
 function getFormattedDate() {
@@ -136,6 +142,17 @@ function fixFileNamingConventions(content) {
     return updated;
 }
 
+// Update README.md version header
+function updateReadmeVersion(content, version, formattedDate) {
+    let updated = content;
+    // Update "**Current Version: X.X.X** | **Release Date: Month Day, Year**"
+    updated = updated.replace(
+        /(\*\*Current Version: )\d+\.\d+\.\d+(\*\* \| \*\*Release Date: )[A-Za-z]+ \d+, \d{4}(\*\*)/g,
+        `$1${version}$2${formattedDate}$3`
+    );
+    return updated;
+}
+
 // Update Recent Changes section in index.html
 function updateRecentChanges(content, version, formattedDate, changelog) {
     if (!changelog || changelog.length === 0) return content;
@@ -164,22 +181,29 @@ function updateFile(filePath, version, formattedDate, shortDate, changelog, prev
     let content = fs.readFileSync(filePath, 'utf8');
     const originalContent = content;
 
-    // Apply all updates
-    content = updateVersionBadge(content, version);
-    content = updateLastUpdatedDate(content, formattedDate);
-    content = updateFooterVersion(content, version, shortDate);
-    content = updateFeaturesTitle(content, version);
-    content = fixFileNamingConventions(content);
-
     const fileName = path.basename(filePath);
+    const ext = path.extname(filePath).toLowerCase();
 
-    // Special updates for specific files
-    if (fileName === 'index.html' || fileName === 'documentation.html') {
-        content = updateVersionSelector(content, version, previousVersions);
-    }
+    // Handle Markdown files differently
+    if (ext === '.md') {
+        content = updateReadmeVersion(content, version, formattedDate);
+        content = fixFileNamingConventions(content);
+    } else {
+        // Apply HTML updates
+        content = updateVersionBadge(content, version);
+        content = updateLastUpdatedDate(content, formattedDate);
+        content = updateFooterVersion(content, version, shortDate);
+        content = updateFeaturesTitle(content, version);
+        content = fixFileNamingConventions(content);
 
-    if (fileName === 'index.html' && changelog) {
-        content = updateRecentChanges(content, version, formattedDate, changelog);
+        // Special updates for specific files
+        if (fileName === 'index.html' || fileName === 'documentation.html') {
+            content = updateVersionSelector(content, version, previousVersions);
+        }
+
+        if (fileName === 'index.html' && changelog) {
+            content = updateRecentChanges(content, version, formattedDate, changelog);
+        }
     }
 
     // Only write if content changed
@@ -251,6 +275,13 @@ function main() {
         path.join(DOCS_DIR, 'privacy-policy.html'),
         path.join(ROOT_DIR, 'popup.html'),
         path.join(ROOT_DIR, 'build', 'popup.html'),
+        // DOCUMENTATION/html folder
+        path.join(DOCUMENTATION_HTML_DIR, 'index.html'),
+        path.join(DOCUMENTATION_HTML_DIR, 'quick-start-guide.html'),
+        path.join(DOCUMENTATION_HTML_DIR, 'privacy-policy.html'),
+        // README.md files
+        path.join(ROOT_DIR, 'DOCUMENTATION', 'README.md'),
+        path.join(ROOT_DIR, 'DOCUMENTATION', 'README_MAIN.md'),
     ];
 
     let updatedCount = 0;
