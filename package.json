@@ -11,7 +11,9 @@
     "package": "./build.sh",
     "zip": "./build.sh",
     "update-docs": "node scripts/update-docs-version.js",
-    "update-docs:changelog": "node scripts/update-docs-version.js --changelog"
+    "update-docs:changelog": "node scripts/update-docs-version.js --changelog",
+    "install-sf-cli": "npm install --global @salesforce/cli",
+    "sf-version": "sf --version"
   },
   "keywords": [
     "salesforce",

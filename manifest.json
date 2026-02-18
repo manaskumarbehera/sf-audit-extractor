@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TrackForcePro",
-  "version": "1.1.14",
+  "description": "Salesforce toolkit: Audit extractor, SOQL/GraphQL builders, record scanner, org favicon manager, platform events & LMS.",
+  "version": "1.1.15",
   "action": {
     "default_title": "TrackForcePro",
     "default_popup": "popup.html",

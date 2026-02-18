@@ -1,6 +1,6 @@
 # TrackForcePro - Documentation
 
-**Current Version: 1.1.14** | **Release Date: February 15, 2026**
+**Current Version: 1.1.15** | **Release Date: February 16, 2026**
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-green?logo=google-chrome)](https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk)
 

@@ -415,12 +415,12 @@
         <div class="version-selector">
             <label for="version-select">Version:</label>
             <select id="version-select" onchange="switchVersion(this.value)">
-                <option value="1.1.14" selected>v1.1.14 (Latest)</option>
+                <option value="1.1.15" selected>v1.1.15 (Latest)</option>
+                <option value="1.1.14">v1.1.14</option>
                 <option value="1.1.13">v1.1.13</option>
                 <option value="1.1.12">v1.1.12</option>
                 <option value="1.1.2">v1.1.2</option>
                 <option value="1.1.1">v1.1.1</option>
-                <option value="1.1.0">v1.1.0</option>
             </select>
         </div>
     </header>
@@ -460,12 +460,71 @@
         </aside>
 
         <main class="content">
-            <!-- Version 1.1.14 Content -->
-            <div id="content-1.1.14" class="version-content active">
+            <!-- Version 1.1.15 Content -->
+            <div id="content-1.1.15" class="version-content active">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.14</span>
-                    <div class="date">Last updated: February 15, 2026</div>
+                    <span class="version-badge">v1.1.15</span>
+                    <div class="date">Last updated: February 16, 2026</div>
+                </div>
+
+                <section id="overview" class="doc-section">
+                    <h3><span class="icon">📖</span> Overview</h3>
+                    <p>TrackForcePro is a comprehensive Salesforce developer toolkit. It provides tools for auditing, querying, record scanning, org management, platform events monitoring, and Lightning Message Service debugging.</p>
+
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h5>🔍 Audit Trails</h5>
+                            <p>Extract and export setup audit trails with filtering and search</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>📊 SOQL Builder</h5>
+                            <p>Visual query builder with smart field suggestions</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>🔗 GraphQL Builder</h5>
+                            <p>Compose UI API GraphQL queries with schema browser</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>🔬 Record Scanner</h5>
+                            <p>Scan records, view field history, explore relationships</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>🎨 Org & Favicon</h5>
+                            <p>Visual org identification with custom favicons per environment</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>📡 Platform Events</h5>
+                            <p>Subscribe to and publish platform events in real-time</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>📢 LMS Tools</h5>
+                            <p>Debug and monitor Lightning Message Service channels</p>
+                        </div>
+                        <div class="feature-card">
+                            <h5>👤 User Manager</h5>
+                            <p>Quick user search and profile navigation</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="whats-new" class="doc-section">
+                    <h3><span class="icon">🆕</span> What's New in v1.1.15</h3>
+                    <ul>
+                        <li><strong>Added Extension Description</strong> - Proper manifest description for Chrome Web Store</li>
+                        <li><strong>Documentation Improvements</strong> - Enhanced automated version updates across all docs</li>
+                        <li><strong>File Naming Convention Fix</strong> - Renamed quick-start-guide.html to lowercase</li>
+                        <li><strong>Enhanced Automation</strong> - update-docs-version.js now updates README.md files</li>
+                    </ul>
+                </section>
+            </div>
+
+            <!-- Version 1.1.14 Content -->
+            <div id="content-1.1.14" class="version-content">
+                <div class="content-header">
+                    <h2>TrackForcePro Documentation</h2>
+                    <span class="version-badge">v1.1.15</span>
+                    <div class="date">Last updated: February 16, 2026</div>
                 </div>
 
                 <section id="overview" class="doc-section">
@@ -652,7 +711,7 @@
             <div id="content-1.1.13" class="version-content">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.14</span>
+                    <span class="version-badge">v1.1.15</span>
                     <div class="date">Released: February 12, 2026</div>
                 </div>
 
@@ -673,7 +732,7 @@
             <div id="content-1.1.12" class="version-content">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.14</span>
+                    <span class="version-badge">v1.1.15</span>
                     <div class="date">Released: February 10, 2026</div>
                 </div>
 
@@ -693,7 +752,7 @@
             <div id="content-1.1.2" class="version-content">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.14</span>
+                    <span class="version-badge">v1.1.15</span>
                     <div class="date">Released: February 9, 2026</div>
                 </div>
 
@@ -725,7 +784,7 @@
             <div id="content-1.1.1" class="version-content">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.14</span>
+                    <span class="version-badge">v1.1.15</span>
                     <div class="date">Released: February 8, 2026</div>
                 </div>
 
@@ -754,7 +813,7 @@
             <div id="content-1.1.0" class="version-content">
                 <div class="content-header">
                     <h2>TrackForcePro Documentation</h2>
-                    <span class="version-badge">v1.1.14</span>
+                    <span class="version-badge">v1.1.15</span>
                     <div class="date">Released: February 7, 2026</div>
                 </div>
 
@@ -775,8 +834,8 @@
     </div>
 
     <footer class="footer">
-        <p>TrackForcePro v1.1.14 | <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">Chrome Web Store</a> | <a href="https://github.com/manaskumarbehera/sf-audit-extractor">GitHub</a> | <a href="privacy-policy.html">Privacy Policy</a></p>
-        <p style="margin-top: 8px; font-size: 12px; opacity: 0.7;">© 2026 TrackForcePro. All rights reserved. | Last updated: February 15, 2026</p>
+        <p>TrackForcePro v1.1.15 | <a href="https://chromewebstore.google.com/detail/trackforcepro/eombeiphccjbnndbabnkimdlkpaooipk" target="_blank">Chrome Web Store</a> | <a href="https://github.com/manaskumarbehera/sf-audit-extractor">GitHub</a> | <a href="privacy-policy.html">Privacy Policy</a></p>
+        <p style="margin-top: 8px; font-size: 12px; opacity: 0.7;">© 2026 TrackForcePro. All rights reserved. | Last updated: February 16, 2026</p>
     </footer>
 
     <script>

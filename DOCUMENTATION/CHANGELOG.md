@@ -2,10 +2,67 @@
 
 ## Version Selection
 Select a version to view its documentation:
-- [v1.1.2 (Current)](#v112---february-9-2026)
+- [v1.1.15 (Current)](#v1115---february-15-2026)
+- [v1.1.14](#v1114---february-14-2026)
+- [v1.1.13](#v1113---february-12-2026)
+- [v1.1.12](#v1112---february-11-2026)
+- [v1.1.2](#v112---february-9-2026)
 - [v1.1.1](#v111---february-8-2026)
 - [v1.1.0](#v110---february-7-2026)
-- [v1.0.9](#v109---february-6-2026)
+
+---
+
+## v1.1.15 - February 15, 2026
+
+### 🚀 Improvements
+
+#### Extension Description
+- **Added proper manifest description** for Chrome Web Store listing
+- Description: "Salesforce developer toolkit with audit trail extraction, SOQL/GraphQL query builders, record scanner, org favicon manager, platform events monitor, and LMS tools."
+
+#### Documentation Improvements
+- **Automated version updates** - Enhanced update-docs-version.js script
+- **README.md updates** - Script now updates DOCUMENTATION/README.md automatically
+- **File naming convention fix** - Renamed QUICK_START_GUIDE.html to lowercase quick-start-guide.html
+- **ES modules conversion** - Converted update script from CommonJS to ES modules
+
+#### Test Suite
+- **New test cases** - Added 4 new tests for README.md version update functionality
+- **Total tests** - 1652 passing tests
+
+---
+
+## v1.1.14 - February 14, 2026
+
+### 🚀 New Features
+
+#### Cache Manager
+- **Intelligent caching** - Automatic caching of object and field metadata
+- **Smart invalidation** - Cache refreshes when data changes
+- **Performance boost** - Faster load times for repeated operations
+- **Storage management** - Efficient browser storage usage
+
+### 📝 Documentation
+- Added comprehensive documentation HTML pages
+- Updated GitHub Pages site with new features
+- Enhanced Quick Start Guide
+
+---
+
+## v1.1.13 - February 12, 2026
+
+### 🚀 Improvements
+- Stability improvements
+- Bug fixes for Record Scanner
+- Enhanced Page Blinker functionality
+
+---
+
+## v1.1.12 - February 11, 2026
+
+### 🐛 Bug Fixes
+- Performance improvements
+- Minor bug fixes
 
 ---
 

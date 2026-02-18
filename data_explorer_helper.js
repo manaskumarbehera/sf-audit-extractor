@@ -170,6 +170,11 @@ const DataExplorerHelper = {
             userUpdateBtn.addEventListener('click', () => this.updateSelectedUser());
         }
 
+        const userResetPasswordBtn = document.getElementById('user-reset-password-btn');
+        if (userResetPasswordBtn) {
+            userResetPasswordBtn.addEventListener('click', () => this.resetUserPassword());
+        }
+
         const userClearBtn = document.getElementById('user-clear-selection');
         if (userClearBtn) {
             userClearBtn.addEventListener('click', () => this.clearUserSelection());
@@ -4156,12 +4161,14 @@ const DataExplorerHelper = {
         const roleSelect = document.getElementById('user-role-select');
         const languageSelect = document.getElementById('user-language-select');
         const updateBtn = document.getElementById('user-update-btn');
+        const resetPasswordBtn = document.getElementById('user-reset-password-btn');
         const clearBtn = document.getElementById('user-clear-selection');
 
         if (profileSelect) profileSelect.disabled = false;
         if (roleSelect) roleSelect.disabled = false;
         if (languageSelect) languageSelect.disabled = false;
         if (updateBtn) updateBtn.disabled = false;
+        if (resetPasswordBtn) resetPasswordBtn.disabled = false;
         if (clearBtn) clearBtn.disabled = false;
 
         // Load current values for the selected user
@@ -4196,12 +4203,14 @@ const DataExplorerHelper = {
         const roleSelect = document.getElementById('user-role-select');
         const languageSelect = document.getElementById('user-language-select');
         const updateBtn = document.getElementById('user-update-btn');
+        const resetPasswordBtn = document.getElementById('user-reset-password-btn');
         const clearBtn = document.getElementById('user-clear-selection');
 
         if (profileSelect) { profileSelect.value = ''; profileSelect.disabled = true; }
         if (roleSelect) { roleSelect.value = ''; roleSelect.disabled = true; }
         if (languageSelect) { languageSelect.value = ''; languageSelect.disabled = true; }
         if (updateBtn) updateBtn.disabled = true;
+        if (resetPasswordBtn) resetPasswordBtn.disabled = true;
         if (clearBtn) clearBtn.disabled = true;
 
         document.querySelectorAll('.user-result-item').forEach(item => {
@@ -4254,6 +4263,39 @@ const DataExplorerHelper = {
             }
         } catch (error) {
             console.error('Error updating user:', error);
+            this.showUpdateStatus(`Error: ${error.message}`, 'error');
+        }
+    },
+
+    resetUserPassword: async function() {
+        if (!this._selectedUserId) {
+            this.showUpdateStatus('No user selected', 'error');
+            return;
+        }
+
+        const userName = document.getElementById('selected-user-display')?.value || 'this user';
+
+        // Confirm action with user
+        if (!confirm(`Are you sure you want to reset the password for ${userName}?\n\nA password reset email will be sent to the user.`)) {
+            return;
+        }
+
+        try {
+            const apiSel = document.getElementById('api-version');
+            const v = (apiSel && apiSel.value) ? apiSel.value : '63.0';
+
+            // Salesforce REST API: DELETE to /services/data/vXX.X/sobjects/User/{userId}/password
+            // This triggers a password reset email to the user
+            await PlatformHelper.fetchFromSalesforce(
+                `/services/data/v${v}/sobjects/User/${this._selectedUserId}/password`,
+                {
+                    method: 'DELETE'
+                }
+            );
+
+            this.showUpdateStatus('Password reset email sent successfully!', 'success');
+        } catch (error) {
+            console.error('Error resetting password:', error);
             this.showUpdateStatus(`Error: ${error.message}`, 'error');
         }
     },
