@@ -3461,87 +3461,87 @@ const DataExplorerHelper = {
             ctx.clearRect(0, 0, 32, 32);
             ctx.fillStyle = color;
 
-        // Draw the shape based on the shape parameter
-        switch (shape) {
-            case 'circle':
-                ctx.beginPath();
-                ctx.arc(16, 16, 14, 0, Math.PI * 2);
-                ctx.fill();
-                break;
+            // Draw the shape based on the shape parameter
+            switch (shape) {
+                case 'circle':
+                    ctx.beginPath();
+                    ctx.arc(16, 16, 14, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
 
-            case 'square':
-                ctx.fillRect(2, 2, 28, 28);
-                break;
+                case 'square':
+                    ctx.fillRect(2, 2, 28, 28);
+                    break;
 
-            case 'rounded':
-                ctx.beginPath();
-                ctx.moveTo(8, 2);
-                ctx.lineTo(24, 2);
-                ctx.quadraticCurveTo(30, 2, 30, 8);
-                ctx.lineTo(30, 24);
-                ctx.quadraticCurveTo(30, 30, 24, 30);
-                ctx.lineTo(8, 30);
-                ctx.quadraticCurveTo(2, 30, 2, 24);
-                ctx.lineTo(2, 8);
-                ctx.quadraticCurveTo(2, 2, 8, 2);
-                ctx.closePath();
-                ctx.fill();
-                break;
+                case 'rounded':
+                    ctx.beginPath();
+                    ctx.moveTo(8, 2);
+                    ctx.lineTo(24, 2);
+                    ctx.quadraticCurveTo(30, 2, 30, 8);
+                    ctx.lineTo(30, 24);
+                    ctx.quadraticCurveTo(30, 30, 24, 30);
+                    ctx.lineTo(8, 30);
+                    ctx.quadraticCurveTo(2, 30, 2, 24);
+                    ctx.lineTo(2, 8);
+                    ctx.quadraticCurveTo(2, 2, 8, 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
 
-            case 'diamond':
-                ctx.beginPath();
-                ctx.moveTo(16, 1);
-                ctx.lineTo(30, 16);
-                ctx.lineTo(16, 31);
-                ctx.lineTo(2, 16);
-                ctx.closePath();
-                ctx.fill();
-                break;
+                case 'diamond':
+                    ctx.beginPath();
+                    ctx.moveTo(16, 1);
+                    ctx.lineTo(30, 16);
+                    ctx.lineTo(16, 31);
+                    ctx.lineTo(2, 16);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
 
-            case 'hexagon':
-                ctx.beginPath();
-                for (let i = 0; i < 6; i++) {
-                    const angle = (Math.PI / 3) * i - Math.PI / 2;
-                    const x = 16 + 14 * Math.cos(angle);
-                    const y = 16 + 14 * Math.sin(angle);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                ctx.fill();
-                break;
+                case 'hexagon':
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (Math.PI / 3) * i - Math.PI / 2;
+                        const x = 16 + 14 * Math.cos(angle);
+                        const y = 16 + 14 * Math.sin(angle);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
 
-            case 'cloud':
-            default:
-                // Draw Salesforce cloud with color
-                ctx.beginPath();
-                ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
-                ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
-                ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
-                ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
-                ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
-                ctx.closePath();
-                ctx.fill();
-                break;
-        }
+                case 'cloud':
+                default:
+                    // Draw Salesforce cloud with color
+                    ctx.beginPath();
+                    ctx.arc(16, 18, 10, Math.PI * 0.5, Math.PI * 1.5);
+                    ctx.arc(10, 12, 6, Math.PI, Math.PI * 1.5);
+                    ctx.arc(16, 8, 7, Math.PI * 1.2, Math.PI * 1.8);
+                    ctx.arc(22, 10, 6, Math.PI * 1.5, Math.PI * 0.3);
+                    ctx.arc(24, 18, 6, Math.PI * 1.5, Math.PI * 0.5);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+            }
 
-        if (label) {
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px Arial, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(label.substring(0, 3).toUpperCase(), 16, 16);
-        }
+            if (label) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Arial, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label.substring(0, 3).toUpperCase(), 16, 16);
+            }
 
-        // Remove existing favicons
-        document.querySelectorAll('link[rel*="icon"]').forEach(l => l.remove());
+            // Remove existing favicons
+            document.querySelectorAll('link[rel*="icon"]').forEach(l => l.remove());
 
-        // Add new favicon
-        const link = document.createElement('link');
-        link.rel = 'icon';
-        link.type = 'image/png';
-        link.href = canvas.toDataURL('image/png');
-        document.head.appendChild(link);
+            // Add new favicon
+            const link = document.createElement('link');
+            link.rel = 'icon';
+            link.type = 'image/png';
+            link.href = canvas.toDataURL('image/png');
+            document.head.appendChild(link);
         } catch (e) {
             console.error('[TrackForcePro] Error in injectFaviconUpdate:', e);
         }
